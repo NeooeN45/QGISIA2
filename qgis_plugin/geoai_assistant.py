@@ -41,7 +41,7 @@ except ImportError:
 
 import processing
 import qgis.PyQt
-from qgis.PyQt.QtCore import QObject, Qt, QUrl, QVariant, pyqtSignal, pyqtSlot, QMetaObject
+from qgis.PyQt.QtCore import QObject, Qt, QUrl, QVariant, pyqtSignal, pyqtSlot
 from qgis.PyQt.QtGui import QDesktopServices, QColor, QFont, QGuiApplication, QIcon
 from qgis.PyQt.QtWidgets import (
     QAction,
@@ -1554,8 +1554,8 @@ class MainThreadExecutor(QObject):
 
     def __init__(self):
         super().__init__()
-        # Qt6: utiliser la valeur numérique pour QueuedConnection
-        self.execute_requested.connect(self._execute, 2)
+        # Qt6: utiliser Qt.ConnectionType.QueuedConnection
+        self.execute_requested.connect(self._execute, Qt.ConnectionType.QueuedConnection)
 
     @pyqtSlot(object)
     def _execute(self, request):
