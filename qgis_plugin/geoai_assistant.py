@@ -2287,17 +2287,24 @@ class GeoAIAssistant:
         self._debug("initGui:end")
 
     def run(self):
-        """Lance directement le navigateur avec l'interface GeoSylva AI"""
+        """Lance l'interface GeoSylva AI dans le navigateur externe"""
         self._debug("run:start")
 
         try:
+            # Priorité 1: servir les assets buildés depuis le plugin (bridge QGIS intégré)
+            if self._open_external_ui():
+                self._debug("run:external_ui_opened")
+                return
+
+            # Priorité 2: fallback sur Vite dev server si les assets ne sont pas buildés
+            self._debug("run:fallback_vite")
             import webbrowser
             import subprocess
             import time
             server_url = "http://localhost:5173"
             project_path = r"c:\Users\camil\Documents\Projet\GeoSylva_AI_QGIS_OpenRouter"
 
-            # Vérifier si le serveur est déjà en cours
+            # Vérifier si le serveur Vite est déjà en cours
             server_running = False
             try:
                 import urllib.request
@@ -2314,14 +2321,12 @@ class GeoAIAssistant:
                     3
                 )
                 try:
-                    # shell=True permet à Windows de trouver npm via le PATH système
                     subprocess.Popen(
                         "npm run dev",
                         cwd=project_path,
                         shell=True,
                         creationflags=subprocess.CREATE_NEW_CONSOLE
                     )
-                    # Attendre que le serveur soit prêt (max 30s) sans bloquer l'UI
                     from qgis.PyQt.QtWidgets import QApplication
                     for i in range(30):
                         time.sleep(1)
@@ -2335,12 +2340,11 @@ class GeoAIAssistant:
                 except Exception as e:
                     self.iface.messageBar().pushMessage(
                         "GeoSylva AI",
-                        f"Serveur non démarré: {str(e)} — démarrez manuellement: npm run dev",
+                        f"Serveur non démarré: {str(e)} — lancez 'npm run dev' manuellement",
                         Qgis.MessageLevel.Warning,
                         8
                     )
 
-            # Ouvrir le navigateur
             webbrowser.open(server_url)
             self.iface.messageBar().pushMessage(
                 "GeoSylva AI",
