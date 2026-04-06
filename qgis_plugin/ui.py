@@ -3,7 +3,7 @@
 Interface utilisateur améliorée pour le plugin GeoAI Assistant
 Utilise le navigateur externe par défaut
 """
-from qgis.PyQt.QtCore import Qt, QUrl, pyqtSignal, pyqtSlot, QTimer
+from qgis.PyQt.QtCore import Qt, QUrl, pyqtSignal, pyqtSlot, QTimer, QProcess
 from qgis.PyQt.QtGui import QIcon, QDesktopServices
 from qgis.PyQt.QtWidgets import (
     QDockWidget,
@@ -19,6 +19,11 @@ from qgis.PyQt.QtWidgets import (
     QMessageBox,
 )
 import webbrowser
+import subprocess
+import sys
+import os
+import time
+import requests
 from qgis.core import Qgis
 
 from .config import PLUGIN_CONFIG
@@ -104,9 +109,115 @@ class GeoSylvaLaunchDialog(QWidget):
         super().__init__(parent)
         self.iface = iface
         self.server_url = server_url
+        self.project_path = self._find_project_path()
+        self.server_process = None
+        self.server_ready = False
         self.setWindowTitle("GeoSylva AI - Assistant SIG")
         self.setMinimumSize(500, 400)
         self._setup_ui()
+
+    def _find_project_path(self):
+        """Trouve le chemin du projet GeoSylva AI"""
+        # Chemins possibles du projet
+        possible_paths = [
+            r"c:\Users\camil\Documents\Projet\GeoSylva_AI_QGIS_OpenRouter",
+            os.path.expanduser(r"~\Documents\Projet\GeoSylva_AI_QGIS_OpenRouter"),
+            os.path.expanduser(r"~\GeoSylva_AI_QGIS_OpenRouter"),
+        ]
+
+        for path in possible_paths:
+            if os.path.exists(path) and os.path.exists(os.path.join(path, "package.json")):
+                return path
+
+        return None
+
+    def _check_server_running(self):
+        """Vérifie si le serveur est déjà en cours d'exécution"""
+        try:
+            response = requests.get(self.server_url, timeout=2)
+            return response.status_code == 200
+        except:
+            return False
+
+    def _start_server(self):
+        """Démarre le serveur de développement"""
+        if not self.project_path:
+            self.status_label.setText("❌ Projet non trouvé")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #ef4444;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+            """)
+            return False
+
+        try:
+            self.status_label.setText("🔄 Démarrage du serveur...")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #f59e0b;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+            """)
+
+            # Lancer npm run dev en arrière-plan
+            if sys.platform == "win32":
+                # Windows: utiliser start /B pour lancer en arrière-plan
+                self.server_process = subprocess.Popen(
+                    ["npm", "run", "dev"],
+                    cwd=self.project_path,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            else:
+                # Linux/Mac
+                self.server_process = subprocess.Popen(
+                    ["npm", "run", "dev"],
+                    cwd=self.project_path,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+
+            # Attendre que le serveur soit prêt (max 30 secondes)
+            self.status_label.setText("⏳ Attente du serveur...")
+            for i in range(30):
+                time.sleep(1)
+                if self._check_server_running():
+                    self.server_ready = True
+                    self.status_label.setText("✅ Serveur prêt!")
+                    self.status_label.setStyleSheet("""
+                        QLabel {
+                            color: #10b981;
+                            font-size: 12px;
+                            font-weight: 600;
+                        }
+                    """)
+                    return True
+
+            # Timeout
+            self.status_label.setText("⏱️ Timeout - serveur non démarré")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #f59e0b;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+            """)
+            return False
+
+        except Exception as e:
+            self.status_label.setText(f"❌ Erreur: {str(e)}")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #ef4444;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+            """)
+            return False
 
     def _setup_ui(self):
         """Configure l'interface utilisateur"""
@@ -229,6 +340,22 @@ class GeoSylvaLaunchDialog(QWidget):
         footer_layout = QVBoxLayout(footer)
         footer_layout.setSpacing(8)
 
+        # Chemin du projet
+        if self.project_path:
+            path_label = f"📁 Projet: {self.project_path}"
+            path_label.setStyleSheet("""
+                QLabel {
+                    color: #6b7280;
+                    font-size: 10px;
+                    font-family: monospace;
+                    background: rgba(107, 114, 128, 0.1);
+                    padding: 6px 10px;
+                    border-radius: 4px;
+                }
+            """)
+            path_label.setWordWrap(True)
+            footer_layout.addWidget(path_label)
+
         url_label = QLabel(f"🌐 Serveur: {self.server_url}")
         url_label.setStyleSheet("""
             QLabel {
@@ -243,7 +370,7 @@ class GeoSylvaLaunchDialog(QWidget):
         url_label.setAlignment(Qt.AlignCenter)
         footer_layout.addWidget(url_label)
 
-        hint_label = QLabel("💡 Le navigateur s'ouvrira automatiquement. Assurez-vous que le serveur est démarré.")
+        hint_label = QLabel("💡 Le serveur démarrera automatiquement. Le navigateur s'ouvrira une fois le serveur prêt.")
         hint_label.setStyleSheet("""
             QLabel {
                 color: #6b7280;
@@ -260,29 +387,66 @@ class GeoSylvaLaunchDialog(QWidget):
     def _launch_browser(self):
         """Lance le navigateur externe avec l'interface GeoSylva AI"""
         try:
-            self.status_label.setText("🚀 Ouverture du navigateur...")
-            self.status_label.setStyleSheet("""
-                QLabel {
-                    color: #10b981;
-                    font-size: 12px;
-                    font-weight: 600;
-                }
-            """)
+            # Vérifier si le serveur est déjà en cours d'exécution
+            if self._check_server_running():
+                self.status_label.setText("✅ Serveur déjà en cours d'exécution")
+                self.status_label.setStyleSheet("""
+                    QLabel {
+                        color: #10b981;
+                        font-size: 12px;
+                        font-weight: 600;
+                    }
+                """)
+                self.server_ready = True
+            else:
+                # Démarrer le serveur
+                if not self._start_server():
+                    # Échec du démarrage
+                    QMessageBox.warning(
+                        self,
+                        "Serveur non démarré",
+                        f"Le serveur n'a pas pu être démarré automatiquement.\n\n"
+                        f"Chemin du projet: {self.project_path or 'Non trouvé'}\n\n"
+                        f"Veuillez démarrer manuellement:\n"
+                        f"cd {self.project_path}\n"
+                        f"npm run dev"
+                    )
+                    return
 
-            # Lancer le navigateur
-            webbrowser.open(self.server_url)
+            # Si le serveur est prêt, ouvrir le navigateur
+            if self.server_ready:
+                self.status_label.setText("🚀 Ouverture du navigateur...")
+                self.status_label.setStyleSheet("""
+                    QLabel {
+                        color: #10b981;
+                        font-size: 12px;
+                        font-weight: 600;
+                    }
+                """)
 
-            # Message de succès
-            self.status_label.setText("✅ Navigateur ouvert avec succès!")
-            self.iface.messageBar().pushMessage(
-                "GeoSylva AI",
-                "Navigateur ouvert. Connectez-vous à l'interface.",
-                Qgis.MessageLevel.Success,
-                5
-            )
+                # Lancer le navigateur
+                webbrowser.open(self.server_url)
 
-            # Fermer le dialogue après un délai
-            QTimer.singleShot(2000, self.close)
+                # Message de succès
+                self.status_label.setText("✅ Navigateur ouvert avec succès!")
+                self.iface.messageBar().pushMessage(
+                    "GeoSylva AI",
+                    "Navigateur ouvert. Connectez-vous à l'interface.",
+                    Qgis.MessageLevel.Success,
+                    5
+                )
+
+                # Fermer le dialogue après un délai
+                QTimer.singleShot(2000, self.close)
+            else:
+                # Serveur non prêt
+                QMessageBox.warning(
+                    self,
+                    "Serveur non prêt",
+                    f"Le serveur n'est pas prêt. Veuillez réessayer ou démarrer manuellement:\n\n"
+                    f"cd {self.project_path}\n"
+                    f"npm run dev"
+                )
 
         except Exception as e:
             self.status_label.setText("❌ Erreur lors de l'ouverture")
