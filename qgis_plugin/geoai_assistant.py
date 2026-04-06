@@ -1849,7 +1849,6 @@ class GeoAIAssistant:
         self.bridge = None
         self.channel = None
         self.dock = None
-        self.launch_dock = None
         self.view = None
         self.external_ui_url = None
         self.main_thread_executor = MainThreadExecutor()
@@ -2187,14 +2186,17 @@ class GeoAIAssistant:
     def initGui(self):
         self._debug("initGui:start")
         icon_path = os.path.join(self.plugin_dir, "icon.png")
-        
+
         # Action principale avec configuration
         action_name = ICON_CONFIG.get("name", "GeoSylva AI")
         action_tooltip = ICON_CONFIG.get("tooltip", "Ouvrir l'assistant IA GeoSylva")
         action_status_tip = ICON_CONFIG.get("status_tip", "Assistant IA pour QGIS")
         action_whats_this = ICON_CONFIG.get("whats_this", "")
         action_shortcut = ICON_CONFIG.get("shortcut", "Ctrl+Shift+G")
-        
+        action_text = ICON_CONFIG.get("text", "GeoSylva AI")
+        show_text = ICON_CONFIG.get("show_text", True)
+        icon_size = ICON_CONFIG.get("icon_size", 24)
+
         self.action = QAction(QIcon(icon_path), action_name, self.iface.mainWindow())
         self.action.setObjectName("GeoAIAssistantAction")
         self.action.setToolTip(action_tooltip)
@@ -2202,7 +2204,7 @@ class GeoAIAssistant:
         if action_whats_this:
             self.action.setWhatsThis(action_whats_this)
         self.action.triggered.connect(self.run)
-        
+
         # Raccourci clavier
         if action_shortcut:
             self.action.setShortcut(action_shortcut)
@@ -2285,35 +2287,26 @@ class GeoAIAssistant:
         self._debug("initGui:end")
 
     def run(self):
-        """Lance le dock widget de lancement qui ouvre le navigateur externe"""
+        """Lance directement le navigateur avec l'interface GeoSylva AI"""
         self._debug("run:start")
 
         try:
-            from .ui import GeoSylvaLaunchDock
-            # URL du serveur par défaut
+            import webbrowser
             server_url = "http://localhost:5173"
 
-            # Créer le dock widget
-            if self.launch_dock is None:
-                self.launch_dock = GeoSylvaLaunchDock(self.iface, server_url, self.iface.mainWindow())
-                self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.launch_dock)
+            # Ouvrir directement le navigateur
+            webbrowser.open(server_url)
 
-            # Afficher le dock
-            self.launch_dock.show()
-            self.launch_dock.raise_()
-
-            self._debug("run:dock_shown")
-        except ImportError as e:
-            self._debug(f"run:import_error {e}")
-            # Fallback: ouvrir directement le navigateur
-            import webbrowser
-            webbrowser.open("http://localhost:5173")
+            # Message de succès
             self.iface.messageBar().pushMessage(
                 "GeoSylva AI",
-                "Navigateur ouvert. Connectez-vous à l'interface.",
+                "Interface ouverte dans votre navigateur.",
                 Qgis.MessageLevel.Success,
-                5
+                3
             )
+
+            self._debug("run:browser_opened")
+
         except Exception as e:
             self._debug(f"run:error {e}")
             self.iface.messageBar().pushMessage(
@@ -2429,10 +2422,5 @@ class GeoAIAssistant:
             self.help_action.deleteLater()
         if hasattr(self, 'about_action'):
             self.about_action.deleteLater()
-
-        # Supprimer le dock de lancement
-        if self.launch_dock is not None:
-            self.iface.removeDockWidget(self.launch_dock)
-            self.launch_dock = None
 
         self._debug("unload:end")

@@ -20,6 +20,9 @@ ICON_CONFIG = {
     ),
     "shortcut": "Ctrl+Shift+G",
     "shortcut_context": "window",  # window, application
+    "text": "GeoSylva AI",  # Texte à afficher sur le bouton
+    "show_text": True,  # Afficher le texte sur le bouton
+    "icon_size": 32,  # Taille de l'icône en pixels
 }
 
 # Configuration de la disposition dans la barre d'outils
