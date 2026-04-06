@@ -2121,7 +2121,7 @@ class GeoAIAssistant:
         self._debug("create_dock:start")
         self.dock = QDockWidget("GeoSylva AI", self.iface.mainWindow())
         self._debug("create_dock:dock_created")
-        self.dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
         self.dock.setMinimumWidth(420)
         self.dock.setWindowIcon(QIcon(os.path.join(self.plugin_dir, "icon.png")))
 
@@ -2140,7 +2140,7 @@ class GeoAIAssistant:
                 )
             )
             self.dock.setWidget(container)
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
             self._debug("create_dock:web_runtime_unavailable")
             return
 
@@ -2180,7 +2180,7 @@ class GeoAIAssistant:
         self._debug("create_dock:view_added")
         self.dock.setWidget(container)
         self._debug("create_dock:widget_set")
-        self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+        self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
         self._debug("create_dock:dock_added")
 
     def initGui(self):
