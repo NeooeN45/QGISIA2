@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Interface utilisateur améliorée pour le plugin GeoAI Assistant
+Utilise le navigateur externe par défaut
 """
 from qgis.PyQt.QtCore import Qt, QUrl, pyqtSignal, pyqtSlot, QTimer
-from qgis.PyQt.QtGui import QIcon, QMovie
+from qgis.PyQt.QtGui import QIcon, QDesktopServices
 from qgis.PyQt.QtWidgets import (
     QDockWidget,
     QWidget,
@@ -15,10 +16,289 @@ from qgis.PyQt.QtWidgets import (
     QScrollArea,
     QGridLayout,
     QProgressBar,
+    QMessageBox,
 )
+import webbrowser
 from qgis.core import Qgis
 
 from .config import PLUGIN_CONFIG
+
+
+class LaunchButton(QPushButton):
+    """Bouton de lancement principal avec design moderne"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setText("🚀 Lancer GeoSylva AI")
+        self.setMinimumHeight(60)
+        self.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #10b981, stop:1 #059669);
+                border: none;
+                border-radius: 12px;
+                color: white;
+                font-size: 16px;
+                font-weight: 600;
+                padding: 16px 24px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #059669, stop:1 #047857);
+                transform: translateY(-2px);
+            }
+            QPushButton:pressed {
+                background: #047857;
+                transform: translateY(0px);
+            }
+        """)
+
+
+class InfoCard(QFrame):
+    """Carte d'information avec style moderne"""
+
+    def __init__(self, title, content, icon="ℹ️", parent=None):
+        super().__init__(parent)
+        self.setFrameStyle(QFrame.StyledPanel)
+        self.setStyleSheet("""
+            QFrame {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 12px;
+                padding: 16px;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
+
+        # Header
+        header = QLabel(f"{icon} {title}")
+        header.setStyleSheet("""
+            QLabel {
+                color: #e3e3e3;
+                font-size: 14px;
+                font-weight: 600;
+            }
+        """)
+        layout.addWidget(header)
+
+        # Content
+        content_label = QLabel(content)
+        content_label.setStyleSheet("""
+            QLabel {
+                color: #9ca3af;
+                font-size: 12px;
+                line-height: 1.5;
+            }
+        """)
+        content_label.setWordWrap(True)
+        layout.addWidget(content_label)
+
+
+class GeoSylvaLaunchDialog(QWidget):
+    """Dialogue de lancement superbe pour GeoSylva AI"""
+
+    def __init__(self, iface, server_url="http://localhost:5173", parent=None):
+        super().__init__(parent)
+        self.iface = iface
+        self.server_url = server_url
+        self.setWindowTitle("GeoSylva AI - Assistant SIG")
+        self.setMinimumSize(500, 400)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """Configure l'interface utilisateur"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setSpacing(24)
+
+        # Header
+        header = self._create_header()
+        layout.addWidget(header)
+
+        # Cartes d'information
+        info_cards = self._create_info_cards()
+        layout.addWidget(info_cards)
+
+        # Bouton de lancement
+        launch_btn = LaunchButton()
+        launch_btn.clicked.connect(self._launch_browser)
+        layout.addWidget(launch_btn)
+
+        # Zone de status
+        self.status_label = QLabel("Prêt à lancer")
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: #6b7280;
+                font-size: 12px;
+                text-align: center;
+            }
+        """)
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+
+        # Footer
+        footer = self._create_footer()
+        layout.addWidget(footer)
+
+        # Style global
+        self.setStyleSheet("""
+            QWidget {
+                background: #131314;
+                color: #e3e3e3;
+            }
+        """)
+
+    def _create_header(self):
+        """Crée le header avec logo et titre"""
+        header = QWidget()
+        header_layout = QVBoxLayout(header)
+        header_layout.setSpacing(8)
+
+        # Logo et titre
+        title_row = QWidget()
+        title_row_layout = QHBoxLayout(title_row)
+        title_row_layout.setContentsMargins(0, 0, 0, 0)
+
+        logo_label = QLabel("🌲")
+        logo_label.setStyleSheet("font-size: 48px;")
+        title_row_layout.addWidget(logo_label)
+
+        title_column = QWidget()
+        title_column_layout = QVBoxLayout(title_column)
+        title_column_layout.setContentsMargins(0, 0, 0, 0)
+        title_column_layout.setSpacing(4)
+
+        title = QLabel("GeoSylva AI")
+        title.setStyleSheet("""
+            QLabel {
+                color: #e3e3e3;
+                font-size: 24px;
+                font-weight: 700;
+            }
+        """)
+
+        subtitle = QLabel("Assistant SIG intelligent pour QGIS")
+        subtitle.setStyleSheet("""
+            QLabel {
+                color: #9ca3af;
+                font-size: 14px;
+            }
+        """)
+
+        title_column_layout.addWidget(title)
+        title_column_layout.addWidget(subtitle)
+        title_row_layout.addWidget(title_column, 1)
+
+        header_layout.addWidget(title_row)
+
+        return header
+
+    def _create_info_cards(self):
+        """Crée les cartes d'information"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setSpacing(12)
+
+        cards = [
+            {
+                "title": "🤖 Assistant Conversationnel",
+                "content": "Discutez avec votre projet QGIS en langage naturel. L'IA comprend vos demandes et exécute les actions appropriées."
+            },
+            {
+                "title": "🗺️ Sources Officielles",
+                "content": "Accédez directement aux données IGN, API Carto, geo.api.gouv.fr, Copernicus et plus encore."
+            },
+            {
+                "title": "⚡ Automatisation PyQGIS",
+                "content": "Générez et exécutez automatiquement des scripts PyQGIS pour vos tâches SIG complexes."
+            }
+        ]
+
+        for card in cards:
+            info_card = InfoCard(card["title"], card["content"])
+            layout.addWidget(info_card)
+
+        return container
+
+    def _create_footer(self):
+        """Crée le footer avec informations de connexion"""
+        footer = QWidget()
+        footer_layout = QVBoxLayout(footer)
+        footer_layout.setSpacing(8)
+
+        url_label = QLabel(f"🌐 Serveur: {self.server_url}")
+        url_label.setStyleSheet("""
+            QLabel {
+                color: #10b981;
+                font-size: 12px;
+                font-family: monospace;
+                background: rgba(16, 185, 129, 0.1);
+                padding: 8px 12px;
+                border-radius: 6px;
+            }
+        """)
+        url_label.setAlignment(Qt.AlignCenter)
+        footer_layout.addWidget(url_label)
+
+        hint_label = QLabel("💡 Le navigateur s'ouvrira automatiquement. Assurez-vous que le serveur est démarré.")
+        hint_label.setStyleSheet("""
+            QLabel {
+                color: #6b7280;
+                font-size: 11px;
+                font-style: italic;
+            }
+        """)
+        hint_label.setAlignment(Qt.AlignCenter)
+        hint_label.setWordWrap(True)
+        footer_layout.addWidget(hint_label)
+
+        return footer
+
+    def _launch_browser(self):
+        """Lance le navigateur externe avec l'interface GeoSylva AI"""
+        try:
+            self.status_label.setText("🚀 Ouverture du navigateur...")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #10b981;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+            """)
+
+            # Lancer le navigateur
+            webbrowser.open(self.server_url)
+
+            # Message de succès
+            self.status_label.setText("✅ Navigateur ouvert avec succès!")
+            self.iface.messageBar().pushMessage(
+                "GeoSylva AI",
+                "Navigateur ouvert. Connectez-vous à l'interface.",
+                Qgis.MessageLevel.Success,
+                5
+            )
+
+            # Fermer le dialogue après un délai
+            QTimer.singleShot(2000, self.close)
+
+        except Exception as e:
+            self.status_label.setText("❌ Erreur lors de l'ouverture")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #ef4444;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+            """)
+
+            QMessageBox.critical(
+                self,
+                "Erreur",
+                f"Impossible d'ouvrir le navigateur:\n{str(e)}\n\nVeuillez ouvrir manuellement: {self.server_url}"
+            )
 
 
 class QuickActionButton(QPushButton):

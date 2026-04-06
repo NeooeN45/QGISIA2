@@ -2283,13 +2283,39 @@ class GeoAIAssistant:
         self._debug("initGui:end")
 
     def run(self):
+        """Lance le dialogue de lancement qui ouvre le navigateur externe"""
         self._debug("run:start")
-        if self.dock is None:
-            self._create_dock()
 
-        self.dock.show()
-        self._debug("run:dock_shown")
-        self.dock.raise_()
+        try:
+            from .ui import GeoSylvaLaunchDialog
+            # URL du serveur par défaut
+            server_url = "http://localhost:5173"
+            
+            # Créer et afficher le dialogue
+            dialog = GeoSylvaLaunchDialog(self.iface, server_url, self.iface.mainWindow())
+            dialog.show()
+            
+            self._debug("run:dialog_shown")
+        except ImportError as e:
+            self._debug(f"run:import_error {e}")
+            # Fallback: ouvrir directement le navigateur
+            import webbrowser
+            webbrowser.open("http://localhost:5173")
+            self.iface.messageBar().pushMessage(
+                "GeoSylva AI",
+                "Navigateur ouvert. Connectez-vous à l'interface.",
+                Qgis.MessageLevel.Success,
+                5
+            )
+        except Exception as e:
+            self._debug(f"run:error {e}")
+            self.iface.messageBar().pushMessage(
+                "GeoSylva AI",
+                f"Erreur: {str(e)}",
+                Qgis.MessageLevel.Critical,
+                5
+            )
+        
         self._debug("run:end")
     
     def _open_settings(self):
