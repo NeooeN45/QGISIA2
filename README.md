@@ -1,121 +1,53 @@
 # GeoSylva AI for QGIS
 
-Projet hybride :
-- interface web `React + Vite + TypeScript`
-- plugin QGIS `PyQGIS`
+Assistant IA pour QGIS — interface web React servie directement par le plugin, avec bridge QGIS integre.
 
-## Fonctionnalités clés
+## Installation rapide (v2.0)
 
-- historique de conversations persisté localement
-- contexte de discussion par couche avec portée `couche` ou `sélection active`
-- barre latérale rétractable pour naviguer entre sessions et couches
-- mode `plan d'exécution` pour préparer un traitement avant action
-- diagnostic automatique des couches avec alertes qualité
-- gestion directe des couches : visibilité, opacité, zoom et filtres
+### Methode ZIP (recommandee)
+1. Telechargez `geoai_assistant.zip` depuis le depot GitHub
+2. Dans QGIS : **Extensions > Installer/Gerer les extensions > Installer depuis un ZIP**
+3. Selectionnez le ZIP et cliquez **Installer**
+4. Activez **GeoSylva AI** dans la liste des extensions
+
+> **Aucun serveur externe requis.** Cliquez sur le bouton GeoSylva AI dans la barre d'outils, l'interface s'ouvre automatiquement dans votre navigateur avec le bridge QGIS actif.
+
+## Providers IA supportes
+
+| Provider | Modele par defaut |
+|---|---|
+| **Local / Ollama** (defaut) | `qwen3:4b` via `localhost:11434` |
+| **Google Gemini** | `gemini-2.5-flash` |
+| **OpenRouter** | Multi-agent configurable |
+
+## Fonctionnalites cles
+
+- historique de conversations persiste localement
+- contexte de discussion par couche avec portee `couche` ou `selection active`
+- barre laterale retractable pour naviguer entre sessions et couches
+- mode `plan d'execution` pour preparer un traitement avant action
+- diagnostic automatique des couches avec alertes qualite
+- gestion directe des couches : visibilite, opacite, zoom et filtres
 - appels QGIS depuis l'agent et depuis l'interface
 - provider `OpenRouter` avec orchestration multi-agent
-- rôles configurables `planner`, `planner deep`, `reviewer`, `retriever`, `executor`
-- reranking embeddings OpenRouter pour prioriser le bon contexte avant réponse
+- roles configurables `planner`, `planner deep`, `reviewer`, `retriever`, `executor`
+- reranking embeddings OpenRouter pour prioriser le bon contexte avant reponse
 - mode `tools` OpenRouter pour appeler directement les outils QGIS
-- catalogue de services et APIs officiels pour IGN/cartes.gouv.fr, geo.api.gouv.fr, Overpass, NASA et Copernicus
-- recherche officielle cadastre/communes/OSM directement depuis l’onglet `Services`
-- stylage parcellaire, étiquetage et découpe de parcelles sélectionnées
+- catalogue de services et APIs officiels pour IGN, geo.api.gouv.fr, Overpass, NASA et Copernicus
+- recherche officielle cadastre/communes/OSM directement depuis l'onglet `Services`
+- stylage parcellaire, etiquetage et decoupe de parcelles selectionnees
 - fusion multi-bandes de rasters pour construire des composites bi-annuels NDVI / CRswir
-- création de grilles d’inventaire et génération automatique des centroïdes
-
-## Développement web
-
-Prérequis : Node.js 20+
-
-1. `npm install`
-2. Optionnel : créez un fichier `.env.local` avec `VITE_GEMINI_API_KEY=...` et/ou `VITE_OPENROUTER_API_KEY=...`
-3. Lancez `npm run dev`
-
-L'application web peut fonctionner seule. Depuis QGIS, le plugin utilise :
-- `QWebChannel` si le runtime web Python de QGIS est disponible
-- sinon un bridge HTTP local et l'ouverture automatique de l'interface dans le navigateur
-
-Par défaut, l'interface démarre maintenant en mode **local** avec Ollama sur `qwen3:4b-instruct-2507-q4_K_M`.
+- creation de grilles d'inventaire et generation automatique des centroides
 
 ## OpenRouter multi-agent
 
-Le menu **Paramètres IA** permet maintenant de configurer une pile OpenRouter complète :
+Profils integres : **gratuit**, **valeur** (recommande), **qualite**
 
-- `planner` rapide
-- `planner deep`
-- `reviewer`
-- `retriever` embeddings
-- `executor`
-
-Le mode OpenRouter expose aussi :
-
-- choix `single agent` ou `multi-agent`
-- mode `draft` ou `tools` pour autoriser les appels QGIS
-- clé API locale ou `VITE_OPENROUTER_API_KEY`
-- endpoint, nom d'application et `HTTP-Referer`
-
-## Workflow TP télédétection
-
-Le plugin sait maintenant couvrir directement les étapes opérationnelles visibles dans le TP :
-
-- charger les couches de contexte et les flux officiels utiles
-- fusionner des rasters d’indices `NDVI` ou `CRswir` en images bi-annuelles
-- créer un dispositif d’inventaire sur une emprise polygonale
-- générer automatiquement les centroïdes des mailles
-
-Depuis l’interface :
-
-- onglet `Services` > section `Fusion bi-annuelle`
-- onglet `Services` > section `Dispositif d'inventaire`
-
-En langage naturel, les formulations suivantes sont maintenant prises en charge proprement en mode local :
-
-- `fusionne les rasters NDVI 2023 et 2024 en image bi-annuelle`
-- `crée un dispositif d'inventaire 250 x 250 avec les centroïdes`
-- `ajoute la commune de Poitiers en cadastre et centre dessus`
-
-Validation réelle QGIS disponible dans :
-
-- `tests/qgis_tp_desktop_smoke.py`
-- `C:\Users\camil\Documents\Projet\_qgis_geoai_test\logs\tp_desktop_smoke.json`
-- ordre des providers et politique `data_collection`
-- mode `Zero Data Retention (ZDR)`
-- `response-healing` pour fiabiliser les sorties JSON structurées
-- lecture de l'état de la clé OpenRouter via `/api/v1/key`
-- affichage optionnel de la trace multi-agent dans la réponse
-- profils prêts à l'emploi `gratuit`, `valeur`, `qualité`
-
-Profils intégrés :
-
-- `gratuit`
-  - planner : `qwen/qwen3-next-80b-a3b-instruct:free`
-  - planner deep : `z-ai/glm-4.5-air:free`
-  - reviewer : `openai/gpt-oss-120b:free`
-  - retriever : `nvidia/llama-nemotron-embed-vl-1b-v2:free`
-  - executor : `qwen/qwen3-coder:free`
-- `valeur` (recommandé)
-  - planner : `qwen/qwen3-next-80b-a3b-instruct`
-  - planner deep : `openai/gpt-oss-120b`
-  - reviewer : `openai/gpt-oss-120b`
-  - retriever : `nvidia/llama-nemotron-embed-vl-1b-v2:free`
-  - executor : `qwen/qwen3-coder-next`
-- `qualité`
-  - planner : `qwen/qwen3-next-80b-a3b-instruct`
-  - planner deep : `openai/gpt-oss-120b`
-  - reviewer : `openai/gpt-oss-120b`
-  - retriever : `nvidia/llama-nemotron-embed-vl-1b-v2:free`
-  - executor : `qwen/qwen3-coder`
-
-Attention : les variantes `:free` ne sont pas adaptées aux données sensibles et restent limitées en quota.
-
-Le projet conserve **Local/Ollama** comme provider global par défaut, mais le preset OpenRouter par défaut est maintenant **Valeur** pour un usage SIG quotidien.
-
-Le planner et le reviewer OpenRouter utilisent maintenant des **structured outputs** JSON pour stabiliser les plans et validations internes avant de reformater la réponse pour l'utilisateur.
+Le menu **Parametres IA** permet de configurer la pile complete : planner, planner deep, reviewer, retriever embeddings, executor.
 
 ## Sources officielles et services
 
-L’onglet **Services** expose maintenant un point d’entrée concret vers des sources officielles et utilisables :
-
+L'onglet **Services** expose :
 - `IGN / cartes.gouv.fr / Geoplateforme`
 - `API Carto Cadastre`
 - `geo.api.gouv.fr`
@@ -123,45 +55,42 @@ L’onglet **Services** expose maintenant un point d’entrée concret vers des 
 - `Copernicus Data Space`
 - `NASA Earthdata / CMR STAC`
 
-Le LLM peut appeler ces connecteurs pour rechercher des parcelles, des communes, des objets OSM, des produits Copernicus ou des scènes NASA, puis exploiter les résultats dans QGIS quand le flux s’y prête.
+## Developpement (rebuilder le frontend)
 
-## LLM local
+Prerequis : Node.js 20+
 
-Le projet supporte Ollama via `http://localhost:11434/api/generate`.
+```bash
+npm install
+npm run build   # genere qgis_plugin/web/
+```
 
-Lancement rapide :
-1. `.\start-local-llm.ps1`
-2. Ouvrez ensuite GeoAI avec le preset local :
-   `http://127.0.0.1:<port>/index.html?bridge=http&provider=local&model=qwen3:4b-instruct-2507-q4_K_M&endpoint=http://localhost:11434/api/generate`
+Optionnel - fichier `.env.local` :
+```
+VITE_GEMINI_API_KEY=...
+VITE_OPENROUTER_API_KEY=...
+```
 
-Le script démarre Ollama si besoin, vérifie la présence du modèle `qwen3:4b-instruct-2507-q4_K_M`, puis envoie une requête de chauffe.
+Pour le developpement live (Vite dev server) :
+```bash
+npm run dev   # http://localhost:5173
+```
 
-## Build du plugin
+## Ce que le plugin expose a l'IA
 
-1. `npm run build`
-2. Vérifiez que le build a été généré dans `qgis_plugin/web`
-3. Copiez le dossier `qgis_plugin` dans votre répertoire de plugins QGIS
-4. Activez **GeoSylva AI** dans le gestionnaire d'extensions QGIS
-
-## Ce que le plugin expose
-
-- liste des couches du projet
-- catalogue détaillé des couches du projet
-- lecture des champs attributaires
-- diagnostic détaillé d'une couche
-- application de filtres
-- visibilité, opacité et zoom sur couche
-- statistiques sur un champ numérique
+- liste et catalogue des couches du projet
+- lecture des champs attributaires et diagnostic detaille
+- application de filtres, visibilite, opacite et zoom
+- statistiques sur un champ numerique
 - reprojection d'une couche vecteur
 - ajout de GeoJSON distants dans la carte
-- style parcellaire et étiquetage automatique
-- découpe des entités sélectionnées par ligne
-- chargement de services WMS/WFS/XYZ et services personnalisés
+- style parcellaire et etiquetage automatique
+- decoupe des entites selectionnees par ligne
+- chargement de services WMS/WFS/XYZ
 - calcul raster et calcul de MNH
-- exécution confirmée de scripts PyQGIS
+- execution confirmee de scripts PyQGIS
 
-## Remarques
+## Compatibilite
 
-- Le plugin charge le front localement depuis `qgis_plugin/web/index.html`
-- Sur certaines installations Windows de QGIS, `PyQt5.QtWebEngineWidgets` n'est pas fourni. Le plugin bascule alors automatiquement vers le navigateur système avec un bridge local `http://127.0.0.1:*`
-- Les scripts PyQGIS générés par l'IA demandent une confirmation avant exécution
+- QGIS 3.16+ et QGIS 4.0 (Qt6/PyQt6)
+- Windows, Linux, macOS
+- Python 3.9+
