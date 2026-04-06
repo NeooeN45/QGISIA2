@@ -2019,15 +2019,15 @@ class GeoAIAssistant:
         icon_label = QLabel()
         icon_label.setFixedSize(164, 58)
         icon_label.setPixmap(QIcon(os.path.join(self.plugin_dir, "logo.png")).pixmap(164, 58))
-        hero_layout.addWidget(icon_label, 0, Qt.AlignTop)
+        hero_layout.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
 
         hero_text_layout = QVBoxLayout()
         hero_text_layout.setSpacing(6)
 
         badge = QLabel("Mode navigateur")
         badge.setObjectName("geoaiBadge")
-        badge.setAlignment(Qt.AlignCenter)
-        hero_text_layout.addWidget(badge, 0, Qt.AlignLeft)
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_text_layout.addWidget(badge, 0, Qt.AlignmentFlag.AlignLeft)
 
         title = QLabel("GeoSylva AI fonctionne, mais via le navigateur externe")
         title.setWordWrap(True)

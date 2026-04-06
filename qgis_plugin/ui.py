@@ -249,7 +249,7 @@ class GeoSylvaLaunchDialog(QWidget):
                 text-align: center;
             }
         """)
-        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.status_label)
 
         # Footer
@@ -369,7 +369,7 @@ class GeoSylvaLaunchDialog(QWidget):
                 border-radius: 6px;
             }
         """)
-        url_label.setAlignment(Qt.AlignCenter)
+        url_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer_layout.addWidget(url_label)
 
         hint_label = QLabel("💡 Le serveur démarrera automatiquement. Le navigateur s'ouvrira une fois le serveur prêt.")
@@ -380,7 +380,7 @@ class GeoSylvaLaunchDialog(QWidget):
                 font-style: italic;
             }
         """)
-        hint_label.setAlignment(Qt.AlignCenter)
+        hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint_label.setWordWrap(True)
         footer_layout.addWidget(hint_label)
 
@@ -568,7 +568,7 @@ class LoadingOverlay(QWidget):
                 font-weight: 500;
             }
         """)
-        self.message_label.setAlignment(Qt.AlignCenter)
+        self.message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(self.message_label)
 
         # Indicateur de progression animé
@@ -580,10 +580,10 @@ class LoadingOverlay(QWidget):
                 letter-spacing: 4px;
             }
         """)
-        self.progress_label.setAlignment(Qt.AlignCenter)
+        self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(self.progress_label)
 
-        layout.addWidget(container, 0, Qt.AlignCenter)
+        layout.addWidget(container, 0, Qt.AlignmentFlag.AlignCenter)
 
     def set_message(self, message):
         """Définit le message de chargement"""
