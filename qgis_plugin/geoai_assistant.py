@@ -2292,9 +2292,62 @@ class GeoAIAssistant:
 
         try:
             import webbrowser
+            import subprocess
+            import sys
+            import time
             server_url = "http://localhost:5173"
 
-            # Ouvrir directement le navigateur
+            # Chemin du projet
+            project_path = r"c:\Users\camil\Documents\Projet\GeoSylva_AI_QGIS_OpenRouter"
+
+            # Vérifier si le serveur est déjà en cours
+            try:
+                import requests
+                requests.get(server_url, timeout=2)
+                server_running = True
+            except:
+                server_running = False
+
+            if not server_running:
+                # Démarrer le serveur
+                self.iface.messageBar().pushMessage(
+                    "GeoSylva AI",
+                    "Démarrage du serveur...",
+                    Qgis.MessageLevel.Info,
+                    2
+                )
+
+                try:
+                    if sys.platform == "win32":
+                        subprocess.Popen(
+                            ["npm", "run", "dev"],
+                            cwd=project_path,
+                            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                        )
+                    else:
+                        subprocess.Popen(
+                            ["npm", "run", "dev"],
+                            cwd=project_path
+                        )
+
+                    # Attendre que le serveur soit prêt
+                    for i in range(30):
+                        time.sleep(1)
+                        try:
+                            requests.get(server_url, timeout=2)
+                            break
+                        except:
+                            continue
+
+                except Exception as e:
+                    self.iface.messageBar().pushMessage(
+                        "GeoSylva AI",
+                        f"Erreur démarrage serveur: {str(e)}",
+                        Qgis.MessageLevel.Warning,
+                        5
+                    )
+
+            # Ouvrir le navigateur
             webbrowser.open(server_url)
 
             # Message de succès
