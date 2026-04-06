@@ -25,24 +25,23 @@
 
 ## Utilisation
 
-1. **Lancez le serveur de développement**:
-   ```bash
-   cd c:\Users\camil\Documents\Projet\GeoSylva_AI_QGIS_OpenRouter
-   npm run dev
-   ```
+1. **Dans QGIS**, cliquez sur **Plugins > GeoSylva AI > Ouvrir**
 
-2. **Dans QGIS**, cliquez sur **Plugins > GeoSylva AI > Ouvrir**
-
-3. **Une fenêtre de lancement superbe s'affichera** avec:
+2. **Une fenêtre de lancement superbe s'affichera** avec:
    - Logo et titre du plugin
    - Cartes d'information sur les fonctionnalités
    - Bouton de lancement avec design moderne
+   - Chemin du projet détecté automatiquement
    - URL du serveur
    - Instructions
 
-4. **Cliquez sur "🚀 Lancer GeoSylva AI"**
+3. **Cliquez sur "🚀 Lancer GeoSylva AI"**
+   - Le serveur de développement démarrera automatiquement (si pas déjà lancé)
+   - Le plugin attendra que le serveur soit prêt (max 30 secondes)
    - Le navigateur externe s'ouvrira automatiquement
    - L'interface web sera accessible sur http://localhost:5173
+
+**Note**: Le serveur démarre automatiquement! Vous n'avez plus besoin de lancer `npm run dev` manuellement.
 
 ## Fonctionnalités
 
