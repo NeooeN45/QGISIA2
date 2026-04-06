@@ -3,6 +3,12 @@
 Interface utilisateur améliorée pour le plugin GeoAI Assistant
 Utilise le navigateur externe par défaut
 """
+import os
+import sys
+import subprocess
+import webbrowser
+
+import qgis.PyQt
 from qgis.PyQt.QtCore import Qt, QUrl, pyqtSignal, pyqtSlot, QTimer, QProcess
 from qgis.PyQt.QtGui import QIcon, QDesktopServices
 from qgis.PyQt.QtWidgets import (
@@ -194,44 +200,25 @@ class GeoSylvaLaunchDock(QDockWidget):
                     [npm_path, "run", "dev"],
                     cwd=self.project_path,
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
                 )
             else:
                 # Linux/Mac
                 self.server_process = subprocess.Popen(
                     [npm_path, "run", "dev"],
                     cwd=self.project_path,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
                 )
 
-            # Attendre que le serveur soit prêt (max 30 secondes)
-            self.status_label.setText("⏳ Attente du serveur...")
-            for i in range(30):
-                time.sleep(1)
-                if self._check_server_running():
-                    self.server_ready = True
-                    self.status_label.setText("✅ Serveur prêt!")
-                    self.status_label.setStyleSheet("""
-                        QLabel {
-                            color: #10b981;
-                            font-size: 12px;
-                            font-weight: 600;
-                        }
-                    """)
-                    return True
+            # Utiliser QTimer pour vérifier périodiquement sans bloquer l'UI
+            self.server_check_count = 0
+            self.server_check_timer = QTimer()
+            self.server_check_timer.timeout.connect(self._check_server_ready)
+            self.server_check_timer.start(500)  # Vérifier toutes les 500ms
 
-            # Timeout
-            self.status_label.setText("⏱️ Timeout - serveur non démarré")
-            self.status_label.setStyleSheet("""
-                QLabel {
-                    color: #f59e0b;
-                    font-size: 12px;
-                    font-weight: 600;
-                }
-            """)
-            return False
+            return True
 
         except Exception as e:
             self.status_label.setText(f"❌ Erreur: {str(e)}")
@@ -243,6 +230,55 @@ class GeoSylvaLaunchDock(QDockWidget):
                 }
             """)
             return False
+
+    def _check_server_ready(self):
+        """Vérifie si le serveur est prêt (appelé par QTimer)"""
+        self.server_check_count += 1
+
+        if self._check_server_running():
+            # Serveur prêt
+            self.server_ready = True
+            self.server_check_timer.stop()
+            self.status_label.setText("✅ Serveur prêt!")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #10b981;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+            """)
+            # Lancer le navigateur automatiquement
+            self._open_browser()
+        elif self.server_check_count >= 60:  # 60 * 500ms = 30 secondes
+            # Timeout
+            self.server_check_timer.stop()
+            self.status_label.setText("⏱️ Timeout - serveur non démarré")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #f59e0b;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+            """)
+        else:
+            # Continuer à attendre
+            self.status_label.setText(f"⏳ Attente du serveur... ({self.server_check_count}/60)")
+
+    def _open_browser(self):
+        """Ouvre le navigateur"""
+        try:
+            webbrowser.open(self.server_url)
+            self.status_label.setText("✅ Navigateur ouvert!")
+            self.iface.messageBar().pushMessage(
+                "GeoSylva AI",
+                "Navigateur ouvert. Connectez-vous à l'interface.",
+                Qgis.MessageLevel.Success,
+                5
+            )
+            # Fermer le dock après un délai
+            QTimer.singleShot(2000, self.close)
+        except Exception as e:
+            self.status_label.setText(f"❌ Erreur navigateur: {str(e)}")
 
     def _find_npm(self):
         """Trouve le chemin vers npm"""
@@ -477,8 +513,10 @@ class GeoSylvaLaunchDock(QDockWidget):
                     }
                 """)
                 self.server_ready = True
+                # Ouvrir le navigateur immédiatement
+                self._open_browser()
             else:
-                # Démarrer le serveur
+                # Démarrer le serveur (le QTimer gérera l'ouverture du navigateur)
                 if not self._start_server():
                     # Échec du démarrage
                     QMessageBox.warning(
@@ -492,43 +530,8 @@ class GeoSylvaLaunchDock(QDockWidget):
                     )
                     return
 
-            # Si le serveur est prêt, ouvrir le navigateur
-            if self.server_ready:
-                self.status_label.setText("🚀 Ouverture du navigateur...")
-                self.status_label.setStyleSheet("""
-                    QLabel {
-                        color: #10b981;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-                """)
-
-                # Lancer le navigateur
-                webbrowser.open(self.server_url)
-
-                # Message de succès
-                self.status_label.setText("✅ Navigateur ouvert avec succès!")
-                self.iface.messageBar().pushMessage(
-                    "GeoSylva AI",
-                    "Navigateur ouvert. Connectez-vous à l'interface.",
-                    Qgis.MessageLevel.Success,
-                    5
-                )
-
-                # Fermer le dock après un délai
-                QTimer.singleShot(2000, self.close)
-            else:
-                # Serveur non prêt
-                QMessageBox.warning(
-                    self,
-                    "Serveur non prêt",
-                    f"Le serveur n'est pas prêt. Veuillez réessayer ou démarrer manuellement:\n\n"
-                    f"cd {self.project_path}\n"
-                    f"npm run dev"
-                )
-
         except Exception as e:
-            self.status_label.setText("❌ Erreur lors de l'ouverture")
+            self.status_label.setText(f"❌ Erreur: {str(e)}")
             self.status_label.setStyleSheet("""
                 QLabel {
                     color: #ef4444;
@@ -536,12 +539,6 @@ class GeoSylvaLaunchDock(QDockWidget):
                     font-weight: 600;
                 }
             """)
-
-            QMessageBox.critical(
-                self,
-                "Erreur",
-                f"Impossible d'ouvrir le navigateur:\n{str(e)}\n\nVeuillez ouvrir manuellement: {self.server_url}"
-            )
 
 
 class QuickActionButton(QPushButton):
