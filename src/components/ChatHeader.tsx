@@ -108,7 +108,7 @@ export default function ChatHeader({
               <h1 className="truncate text-sm font-bold tracking-tight text-gray-900 dark:text-white">
                 {conversationTitle || "Nouvelle discussion"}
               </h1>
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/8 bg-gray-100 dark:bg-white/5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-white/40">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
                 <span
                   className={cn(
                     "h-1.5 w-1.5 rounded-full",
@@ -119,18 +119,18 @@ export default function ChatHeader({
               </span>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-200/80">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-200/80">
                 <TreePine size={10} />
                 53 sources officielles
               </span>
-              <div className="inline-flex rounded-full border border-white/8 bg-white/[0.03] p-0.5">
+              <div className="inline-flex rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] p-0.5">
                 <button
                   onClick={() => onUpdateConversationMode("chat")}
                   className={cn(
                     "rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-all",
                     conversationMode === "chat"
                       ? "bg-blue-500 text-white shadow-sm shadow-blue-500/30"
-                      : "text-white/40 hover:text-white/70",
+                      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
                   )}
                   title="Mode Discussion : posez des questions et obtenez des réponses avec exécution directe des scripts"
                 >
@@ -142,7 +142,7 @@ export default function ChatHeader({
                     "rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-all",
                     conversationMode === "plan"
                       ? "bg-emerald-400 text-[#131314] shadow-sm shadow-emerald-500/30"
-                      : "text-white/40 hover:text-white/70",
+                      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]",
                   )}
                   title="Mode Plan : obtenez des plans d'action détaillés avant exécution"
                 >
@@ -150,14 +150,14 @@ export default function ChatHeader({
                 </button>
               </div>
               <button
-                className="rounded-full border border-white/8 bg-white/[0.03] p-1.5 text-white/30 hover:text-white/60 transition-all"
+                className="rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] p-1.5 text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-all"
                 title={`Mode ${conversationMode === "chat" ? "Discussion" : "Plan"} : ${conversationMode === "chat" ? "Posez des questions et obtenez des réponses avec exécution directe des scripts PyQGIS" : "Obtenez des plans d'action détaillés avec validation avant exécution"}`}
               >
                 <Info size={12} />
               </button>
             </div>
             {selectedLayers.length > 0 && (
-              <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-200/80">
+              <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-200/80">
                 {selectedLayers.length} couche(s)
               </span>
             )}
@@ -180,7 +180,7 @@ export default function ChatHeader({
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="flex items-center gap-2 rounded-2xl border border-transparent p-2.5 text-[#c4c7c5] transition-all hover:border-[#444746] hover:bg-[#333537] hover:text-blue-400"
+              className="flex items-center gap-2 rounded-2xl border border-transparent p-2.5 text-[var(--text-secondary)] transition-all hover:border-[var(--card-border)] hover:bg-[var(--card-bg)] hover:text-blue-400"
               title="Actions supplémentaires"
               aria-label="Actions supplémentaires"
               aria-expanded={showDropdown}
@@ -190,7 +190,7 @@ export default function ChatHeader({
             </button>
             {showDropdown && (
               <div
-                className="absolute right-0 top-full z-50 mt-2 w-48 rounded-2xl border border-white/10 bg-[#17181a] p-2 shadow-2xl"
+                className="absolute right-0 top-full z-50 mt-2 w-48 rounded-2xl border border-[var(--card-border)] bg-[var(--background)] p-2 shadow-2xl"
                 role="menu"
                 aria-label="Menu des actions"
               >
@@ -199,7 +199,7 @@ export default function ChatHeader({
                     setShowDropdown(false);
                     setShowPluginSetup(true);
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-white/70 hover:bg-white/8 hover:text-white transition-all"
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--card-bg)] hover:text-[var(--foreground)] transition-all"
                   role="menuitem"
                   aria-label="Installation du plugin QGIS"
                 >
@@ -211,7 +211,7 @@ export default function ChatHeader({
                     setShowDropdown(false);
                     handleQgisAction("layers");
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-white/70 hover:bg-white/8 hover:text-white transition-all"
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--card-bg)] hover:text-[var(--foreground)] transition-all"
                   role="menuitem"
                   aria-label="Ouvrir le panneau des couches QGIS"
                 >
@@ -226,7 +226,7 @@ export default function ChatHeader({
                         setShowDropdown(false);
                         handleExportMarkdown();
                       }}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-white/70 hover:bg-white/8 hover:text-purple-400 transition-all"
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--card-bg)] hover:text-purple-500 dark:hover:text-purple-400 transition-all"
                       role="menuitem"
                       aria-label="Exporter la conversation en Markdown"
                     >
@@ -238,7 +238,7 @@ export default function ChatHeader({
                         setShowDropdown(false);
                         handleExportJson();
                       }}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-white/70 hover:bg-white/8 hover:text-orange-400 transition-all"
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--card-bg)] hover:text-orange-500 dark:hover:text-orange-400 transition-all"
                       role="menuitem"
                       aria-label="Exporter la conversation en JSON"
                     >
@@ -252,7 +252,7 @@ export default function ChatHeader({
           </div>
           <button
             onClick={() => void onCreateConversation()}
-            className="rounded-2xl border border-transparent p-2.5 text-[#c4c7c5] transition-all hover:border-[#444746] hover:bg-[#333537] hover:text-emerald-400"
+            className="rounded-2xl border border-transparent p-2.5 text-[var(--text-secondary)] transition-all hover:border-[var(--card-border)] hover:bg-[var(--card-bg)] hover:text-emerald-500 dark:hover:text-emerald-400"
             title="Nouvelle discussion"
             aria-label="Créer une nouvelle discussion"
           >
@@ -262,16 +262,16 @@ export default function ChatHeader({
       </div>
 
       {selectedLayers.length > 0 && (
-        <div className="border-b border-white/5 px-4 py-3 md:px-6">
+        <div className="border-b border-[var(--card-border)] px-4 py-3 md:px-6">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
               Contexte actif
             </span>
             {selectedLayers.map((layer) => (
               <button
                 key={layer.id}
                 onClick={() => onToggleLayerSelection(layer.id)}
-                className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-100 transition-all hover:bg-emerald-500/16"
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-800 dark:text-emerald-100 transition-all hover:bg-emerald-500/16"
                 title="Retirer cette couche du contexte"
               >
                 <span>{layer.name}</span>

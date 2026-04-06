@@ -33,7 +33,7 @@ export default function ThemeToggle() {
     <button
       onClick={toggleTheme}
       title={settings.theme === "dark" ? "Mode clair" : "Mode sombre"}
-      className="rounded-xl border border-white/10 bg-white/5 p-2 text-white/50 hover:bg-white/10 hover:text-white transition-all"
+      className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2 text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-all"
     >
       {settings.theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
     </button>

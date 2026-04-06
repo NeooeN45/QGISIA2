@@ -270,6 +270,7 @@ export function getRecommendedModelDownload(): {
   model: string;
   reason: string;
   command: string;
+  size: string;
 } {
   const specs = {
     ram: (navigator as any).deviceMemory || 8,
@@ -277,25 +278,125 @@ export function getRecommendedModelDownload(): {
     gpu: detectGPU(),
   };
 
-  if (specs.ram < 8) {
+  if (specs.ram < 6) {
     return {
       model: "qwen2.5:3b",
-      reason: "Modèle léger adapté aux PC avec moins de 8GB RAM",
+      reason: "Modèle ultra-léger adapté aux PC avec moins de 6GB RAM",
       command: "ollama pull qwen2.5:3b",
+      size: "~2 GB",
     };
   }
 
-  if (specs.ram < 16 || specs.cores < 8) {
+  if (specs.ram < 12 || specs.cores < 6) {
     return {
       model: "qwen2.5:7b",
-      reason: "Modèle équilibré pour les PC standards (8-16GB RAM)",
+      reason: "Modèle équilibré pour les PC standards (8-12GB RAM)",
       command: "ollama pull qwen2.5:7b",
+      size: "~4.7 GB",
+    };
+  }
+
+  if (specs.ram < 24) {
+    return {
+      model: "qwen2.5:14b",
+      reason: "Modèle performant pour les PC avec 16GB+ RAM",
+      command: "ollama pull qwen2.5:14b",
+      size: "~9 GB",
     };
   }
 
   return {
-    model: "qwen2.5:14b",
-    reason: "Modèle performant pour les PC puissants (16GB+ RAM)",
-    command: "ollama pull qwen2.5:14b",
+    model: "qwen2.5:32b",
+    reason: "Modèle haute qualité pour les workstations puissantes (32GB+ RAM)",
+    command: "ollama pull qwen2.5:32b",
+    size: "~20 GB",
   };
+}
+
+export interface PullProgress {
+  status: string;
+  digest?: string;
+  total?: number;
+  completed?: number;
+  percent?: number;
+}
+
+export async function pullOllamaModel(
+  modelName: string,
+  onProgress: (progress: PullProgress) => void,
+  signal?: AbortSignal
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch("http://localhost:11434/api/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: modelName, stream: true }),
+      signal,
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}: ${response.statusText}` };
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return { success: false, error: "No response body" };
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const data = JSON.parse(line);
+          const progress: PullProgress = { status: data.status || "" };
+          if (data.total && data.completed) {
+            progress.total = data.total;
+            progress.completed = data.completed;
+            progress.percent = Math.round((data.completed / data.total) * 100);
+          }
+          if (data.digest) progress.digest = data.digest;
+          onProgress(progress);
+
+          if (data.status === "success") {
+            return { success: true };
+          }
+        } catch {
+          // skip malformed JSON lines
+        }
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      return { success: false, error: "Téléchargement annulé" };
+    }
+    return { success: false, error: error?.message || "Erreur inconnue" };
+  }
+}
+
+export function isSystemCompatibleWithLLM(): { compatible: boolean; reason: string; level: "high" | "medium" | "low" } {
+  const ram = (navigator as any).deviceMemory || 8;
+  const cores = navigator.hardwareConcurrency || 4;
+
+  if (ram >= 16 && cores >= 8) {
+    return { compatible: true, reason: `${ram}GB RAM, ${cores} cœurs — Excellent`, level: "high" };
+  }
+  if (ram >= 8 && cores >= 4) {
+    return { compatible: true, reason: `${ram}GB RAM, ${cores} cœurs — Compatible`, level: "medium" };
+  }
+  if (ram >= 4) {
+    return { compatible: true, reason: `${ram}GB RAM, ${cores} cœurs — Utilisation limitée aux petits modèles`, level: "low" };
+  }
+  return { compatible: false, reason: `${ram}GB RAM insuffisant (minimum 4GB requis)`, level: "low" };
 }

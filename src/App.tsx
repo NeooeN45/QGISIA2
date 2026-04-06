@@ -33,7 +33,6 @@ import { useSettingsStore } from "./stores/useSettingsStore";
 import { useConversationStore } from "./stores/useConversationStore";
 import { useLayerStore } from "./stores/useLayerStore";
 import { useUIStore } from "./stores/useUIStore";
-import { detectOllama } from "./lib/ollama-auto-detect";
 
 type ResetMode = "welcome" | "reset";
 
@@ -833,27 +832,27 @@ export default function App() {
   const [showOllamaWizard, setShowOllamaWizard] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showIntroAnimation, setShowIntroAnimation] = useState(true);
+  // Flag: trigger Ollama scan once intro is done
+  const [pendingOllamaScan, setPendingOllamaScan] = useState(false);
 
   const setShowSettings = useUIStore((s) => s.setShowSettings);
   const setShowPluginSetup = useUIStore((s) => s.setShowPluginSetup);
 
-  // Auto-détection d'Ollama au démarrage
+  // Decide whether an Ollama scan is needed on first load
   useEffect(() => {
-    const autoDetectOllama = async () => {
-      // Ne pas lancer si le provider n'est pas "local" ou si un modèle est déjà configuré
-      if (settings.provider !== "local" || (settings.localModel && settings.localModel !== "")) {
-        return;
-      }
+    const shouldScan = settings.provider === "local" && !settings.localModel;
+    if (shouldScan) {
+      setPendingOllamaScan(true);
+    }
+  }, []);
 
-      const ollamaAvailable = await detectOllama();
-      if (!ollamaAvailable) {
-        // Ollama n'est pas détecté, montrer le wizard après un délai
-        setTimeout(() => setShowOllamaWizard(true), 2000);
-      }
-    };
-
-    autoDetectOllama();
-  }, [settings.provider, settings.localModel]);
+  // Open the Ollama wizard as soon as the intro animation is finished
+  useEffect(() => {
+    if (!showIntroAnimation && pendingOllamaScan) {
+      setPendingOllamaScan(false);
+      setShowOllamaWizard(true);
+    }
+  }, [showIntroAnimation, pendingOllamaScan]);
 
   const handleOllamaWizardComplete = (model: string) => {
     handleUpdateSettings({
@@ -956,7 +955,10 @@ export default function App() {
 
       {showOllamaWizard && (
         <OllamaSetupWizard
-          onComplete={handleOllamaWizardComplete}
+          onComplete={(model) => {
+            handleOllamaWizardComplete(model);
+            setShowOllamaWizard(false);
+          }}
           onClose={() => setShowOllamaWizard(false)}
         />
       )}

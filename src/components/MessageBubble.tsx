@@ -51,7 +51,9 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       >
         <div
           className={cn(
-            "prose prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-transparent prose-pre:p-0 prose-strong:text-blue-300 prose-code:text-blue-300",
+            "prose dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-transparent prose-pre:p-0",
+            "prose-strong:text-blue-700 dark:prose-strong:text-blue-300",
+            "prose-code:text-blue-700 dark:prose-code:text-blue-300",
             message.role === "user"
               ? "inline-block rounded-[28px] border border-blue-500/20 bg-blue-600/10 px-5 py-4 text-left shadow-xl"
               : "",

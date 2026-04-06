@@ -1,291 +1,343 @@
-import { X, Download, Terminal, CheckCircle2, AlertTriangle, Cpu, HardDrive, RefreshCw } from "lucide-react";
+import { X, Download, Terminal, CheckCircle2, AlertTriangle, Cpu, RefreshCw, Zap, ExternalLink, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
-import { detectOllama, getRecommendedModelDownload, autoConfigureOllama } from "../lib/ollama-auto-detect";
-import { safeLog } from "../lib/security";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  detectOllama,
+  getOllamaModels,
+  getRecommendedModelDownload,
+  pullOllamaModel,
+  isSystemCompatibleWithLLM,
+  selectBestModel,
+  getSystemSpecs,
+  type PullProgress,
+} from "../lib/ollama-auto-detect";
+
+type WizardStep = "scanning" | "install" | "no_models" | "downloading" | "done" | "incompatible";
 
 interface OllamaSetupWizardProps {
   onComplete: (model: string) => void;
   onClose: () => void;
-  onOpenTerminal?: () => void;
 }
 
-export default function OllamaSetupWizard({ onComplete, onClose, onOpenTerminal }: OllamaSetupWizardProps) {
-  const [step, setStep] = useState<"detect" | "install" | "configure" | "done">("detect");
-  const [isChecking, setIsChecking] = useState(false);
-  const [ollamaDetected, setOllamaDetected] = useState(false);
+function formatBytes(bytes: number): string {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
+  return `${bytes} B`;
+}
+
+export default function OllamaSetupWizard({ onComplete, onClose }: OllamaSetupWizardProps) {
+  const [step, setStep] = useState<WizardStep>("scanning");
+  const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
+  const [pullError, setPullError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState("");
-  const [autoConfigResult, setAutoConfigResult] = useState<{ success: boolean; model?: string; error?: string } | null>(null);
+  const [copiedCmd, setCopiedCmd] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Log when component mounts
-  useEffect(() => {
-    safeLog("[OllamaWizard] Component mounted");
-    safeLog("[OllamaWizard] Current step:", step);
-  }, [step]);
-
-  const handleDetect = async () => {
-    safeLog("[OllamaWizard] Starting detection...");
-    setIsChecking(true);
-    try {
-      const detected = await detectOllama();
-      safeLog("[OllamaWizard] Detection result:", detected);
-      setOllamaDetected(detected);
-      
-      if (detected) {
-        safeLog("[OllamaWizard] Ollama detected, moving to configure step");
-        setStep("configure");
-        toast.success("Ollama détecté !");
-        
-        // Auto-configure
-        const result = await autoConfigureOllama();
-        safeLog("[OllamaWizard] Auto-config result:", result);
-        setAutoConfigResult(result);
-        
-        if (result.success && result.model) {
-          setSelectedModel(result.model);
-          setTimeout(() => {
-            safeLog("[OllamaWizard] Calling onComplete with model:", result.model);
-            onComplete(result.model!);
-            setStep("done");
-          }, 1500);
-        }
-      } else {
-        safeLog("[OllamaWizard] Ollama not detected, moving to install step");
-        setStep("install");
-      }
-    } catch (error) {
-      safeLog("[OllamaWizard] Detection error:", error);
-      toast.error("Erreur lors de la détection d'Ollama");
-      setStep("install");
-    } finally {
-      setIsChecking(false);
-    }
-  };
-
-  const handleManualConfigure = async () => {
-    setIsChecking(true);
-    try {
-      const result = await autoConfigureOllama();
-      setAutoConfigResult(result);
-      
-      if (result.success && result.model) {
-        setSelectedModel(result.model);
-        setTimeout(() => {
-          onComplete(result.model!);
-          setStep("done");
-        }, 1500);
-      }
-    } catch (error) {
-      toast.error("Erreur lors de la configuration");
-    } finally {
-      setIsChecking(false);
-    }
-  };
-
+  const sysCheck = isSystemCompatibleWithLLM();
   const recommendation = getRecommendedModelDownload();
 
+  const runScan = useCallback(async () => {
+    setStep("scanning");
+    setPullError(null);
+
+    if (!sysCheck.compatible) {
+      setStep("incompatible");
+      return;
+    }
+
+    const ollamaRunning = await detectOllama();
+    if (!ollamaRunning) {
+      setStep("install");
+      return;
+    }
+
+    const [models, specs] = await Promise.all([getOllamaModels(), getSystemSpecs()]);
+
+    if (models.length > 0) {
+      const best = selectBestModel(models, specs);
+      const model = best?.name || models[0].name;
+      setSelectedModel(model);
+      setStep("done");
+      onComplete(model);
+      return;
+    }
+
+    setStep("no_models");
+  }, [sysCheck.compatible, onComplete]);
+
+  useEffect(() => {
+    void runScan();
+  }, []);
+
+  const handleDownload = useCallback(async () => {
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setStep("downloading");
+    setPullProgress({ status: "Démarrage du téléchargement..." });
+    setPullError(null);
+
+    const result = await pullOllamaModel(
+      recommendation.model,
+      (p) => setPullProgress(p),
+      ctrl.signal
+    );
+
+    abortRef.current = null;
+
+    if (result.success) {
+      setSelectedModel(recommendation.model);
+      setStep("done");
+      onComplete(recommendation.model);
+      toast.success(`Modèle ${recommendation.model} prêt !`);
+    } else {
+      setPullError(result.error || "Erreur inconnue");
+      setStep("no_models");
+    }
+  }, [recommendation.model, onComplete]);
+
+  const handleCopyCmd = () => {
+    navigator.clipboard.writeText(recommendation.command).then(() => {
+      setCopiedCmd(true);
+      setTimeout(() => setCopiedCmd(false), 2000);
+    });
+  };
+
+  const handleCancelDownload = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStep("no_models");
+  };
+
+  const levelColor = {
+    high: "emerald",
+    medium: "blue",
+    low: "amber",
+  }[sysCheck.level];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#17181a] shadow-2xl">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-gray-950 shadow-2xl overflow-hidden">
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
-          <h3 className="text-lg font-semibold text-white">Configuration Ollama</h3>
-          <button
-            onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 p-1.5 text-white/50 hover:bg-white/10 hover:text-white transition-all"
-          >
-            <X size={16} />
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/20">
+              <Terminal size={18} className="text-emerald-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Assistant IA Local</h3>
+              <p className="text-xs text-white/40">Configuration Ollama</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-xl border border-white/10 bg-white/5 p-1.5 text-white/40 hover:text-white transition-colors">
+            <X size={15} />
           </button>
         </div>
 
+        {/* System badge */}
+        <div className={cn(
+          "mx-6 mt-4 flex items-center gap-2 rounded-xl border px-3 py-2",
+          sysCheck.level === "high" ? "border-emerald-500/20 bg-emerald-500/8" :
+          sysCheck.level === "medium" ? "border-blue-500/20 bg-blue-500/8" :
+          "border-amber-500/20 bg-amber-500/8"
+        )}>
+          <Cpu size={14} className={cn(
+            sysCheck.level === "high" ? "text-emerald-400" :
+            sysCheck.level === "medium" ? "text-blue-400" : "text-amber-400"
+          )} />
+          <span className="text-xs text-white/60">{sysCheck.reason}</span>
+        </div>
+
         <div className="p-6">
-          {step === "detect" && (
-            <div className="space-y-6">
-              <div className="flex flex-col items-center py-8 text-center">
-                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10">
-                  <Terminal size={40} className="text-emerald-400" />
-                </div>
-                <h4 className="text-xl font-semibold text-white mb-2">Configuration automatique d'Ollama</h4>
-                <p className="text-sm text-white/60 max-w-md">
-                  Nous allons détecter si Ollama est installé sur votre ordinateur et configurer automatiquement le meilleur modèle LLM adapté à votre système.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-center gap-4">
-                <button
-                  onClick={onClose}
-                  className="rounded-2xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-all"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={() => {
-                    safeLog("[OllamaWizard] Detect button clicked");
-                    handleDetect();
-                  }}
-                  disabled={isChecking}
-                  className="rounded-2xl border border-emerald-500/30 bg-emerald-500/12 px-6 py-3 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/16 transition-all disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isChecking ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
-                      Détection en cours...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 size={18} />
-                      Détecter Ollama
-                    </>
-                  )}
-                </button>
+          {/* SCANNING */}
+          {step === "scanning" && (
+            <div className="flex flex-col items-center py-10 text-center gap-4">
+              <Loader2 size={40} className="animate-spin text-emerald-400" />
+              <div>
+                <p className="text-base font-semibold text-white">Détection d'Ollama...</p>
+                <p className="text-sm text-white/50 mt-1">Scan du système en cours</p>
               </div>
             </div>
           )}
 
+          {/* INCOMPATIBLE */}
+          {step === "incompatible" && (
+            <div className="flex flex-col items-center py-8 text-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-red-500/30 bg-red-500/10">
+                <AlertTriangle size={32} className="text-red-400" />
+              </div>
+              <div>
+                <p className="text-base font-semibold text-white">Système incompatible</p>
+                <p className="text-sm text-white/50 mt-1">{sysCheck.reason}</p>
+                <p className="text-xs text-white/40 mt-3">Vous pouvez utiliser OpenRouter ou Gemini à la place.</p>
+              </div>
+              <button onClick={onClose} className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm text-white/70 hover:text-white transition-colors">
+                Continuer sans Ollama
+              </button>
+            </div>
+          )}
+
+          {/* INSTALL */}
           {step === "install" && (
-            <div className="space-y-6">
-              <div className="flex flex-col items-center py-8 text-center">
-                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-orange-500/30 bg-orange-500/10">
-                  <Download size={40} className="text-orange-400" />
+            <div className="space-y-4">
+              <div className="flex flex-col items-center py-6 text-center gap-3">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-orange-500/30 bg-orange-500/10">
+                  <Download size={32} className="text-orange-400" />
                 </div>
-                <h4 className="text-xl font-semibold text-white mb-2">Ollama non détecté</h4>
-                <p className="text-sm text-white/60 max-w-md mb-4">
-                  Ollama n'est pas installé ou n'est pas en cours d'exécution sur votre ordinateur.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-4">
-                <h5 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <Terminal size={16} className="text-orange-400" />
-                  Étapes d'installation :
-                </h5>
-                <ol className="space-y-3 text-sm text-white/70">
-                  <li className="flex gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] font-semibold text-white">1</span>
-                    <span>Téléchargez Ollama depuis <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:underline">ollama.com</a></span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] font-semibold text-white">2</span>
-                    <span>Installez Ollama sur votre ordinateur</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] font-semibold text-white">3</span>
-                    <span>Lancez Ollama (il démarrera automatiquement au démarrage)</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] font-semibold text-white">4</span>
-                    <span className="font-mono text-xs bg-black/30 px-2 py-1 rounded">{recommendation.command}</span>
-                  </li>
-                </ol>
-
-                <div className="mt-4 p-3 rounded-xl border border-blue-500/20 bg-blue-500/10">
-                  <p className="text-xs text-blue-100 flex items-start gap-2">
-                    <Cpu size={14} className="mt-0.5 shrink-0" />
-                    <span>
-                      <strong>Recommandé pour votre système :</strong> {recommendation.model}
-                      <br />
-                      <span className="text-blue-100/70">{recommendation.reason}</span>
-                    </span>
-                  </p>
+                <div>
+                  <p className="text-base font-semibold text-white">Ollama non détecté</p>
+                  <p className="text-sm text-white/50 mt-1">Installez Ollama pour utiliser l'IA en local</p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-center gap-4">
-                <button
-                  onClick={onClose}
-                  className="rounded-2xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-all"
-                >
-                  Annuler
+              <div className="rounded-2xl border border-white/8 bg-white/3 p-4 space-y-3">
+                <p className="text-xs font-semibold text-white/60 uppercase tracking-wider">Étapes</p>
+                {[
+                  { n: 1, label: "Téléchargez Ollama", sub: "ollama.com", href: "https://ollama.com/download" },
+                  { n: 2, label: "Installez et lancez Ollama", sub: "Il démarre automatiquement" },
+                  { n: 3, label: "Cliquez sur Réessayer", sub: "Le modèle sera téléchargé automatiquement" },
+                ].map(({ n, label, sub, href }) => (
+                  <div key={n} className="flex items-start gap-3">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/8 text-[10px] font-bold text-white/60">{n}</span>
+                    <div className="flex-1">
+                      {href ? (
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-300 hover:text-orange-200 flex items-center gap-1 transition-colors">
+                          {label} <ExternalLink size={11} />
+                        </a>
+                      ) : (
+                        <p className="text-sm text-white/70">{label}</p>
+                      )}
+                      <p className="text-xs text-white/35 mt-0.5">{sub}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <button onClick={onClose} className="flex-1 rounded-xl border border-white/8 bg-white/4 py-2.5 text-sm text-white/50 hover:text-white transition-colors">
+                  Plus tard
                 </button>
                 <button
-                  onClick={() => {
-                    setStep("detect");
-                    handleDetect();
-                  }}
-                  className="rounded-2xl border border-blue-500/30 bg-blue-500/12 px-6 py-3 text-sm font-semibold text-blue-100 hover:bg-blue-500/16 transition-all flex items-center gap-2"
+                  onClick={() => void runScan()}
+                  className="flex-1 rounded-xl border border-blue-500/30 bg-blue-500/10 py-2.5 text-sm font-semibold text-blue-200 hover:bg-blue-500/15 transition-colors flex items-center justify-center gap-2"
                 >
-                  <RefreshCw size={18} />
-                  Réessayer la détection
+                  <RefreshCw size={14} />
+                  Réessayer
                 </button>
               </div>
             </div>
           )}
 
-          {step === "configure" && (
-            <div className="space-y-6">
-              <div className="flex flex-col items-center py-8 text-center">
-                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-blue-500/30 bg-blue-500/10">
-                  <Cpu size={40} className="text-blue-400" />
+          {/* NO MODELS */}
+          {step === "no_models" && (
+            <div className="space-y-4">
+              <div className="flex flex-col items-center py-4 text-center gap-2">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-500/30 bg-violet-500/10">
+                  <Zap size={28} className="text-violet-400" />
                 </div>
-                <h4 className="text-xl font-semibold text-white mb-2">Configuration automatique</h4>
-                <p className="text-sm text-white/60 max-w-md">
-                  Ollama est détecté ! Nous allons configurer automatiquement le meilleur modèle pour votre système.
-                </p>
+                <p className="text-base font-semibold text-white">Ollama actif — aucun modèle</p>
+                <p className="text-sm text-white/50">Téléchargez le modèle recommandé pour votre PC</p>
               </div>
 
-              {autoConfigResult && (
-                <div className={cn(
-                  "rounded-2xl border p-4",
-                  autoConfigResult.success 
-                    ? "border-emerald-500/30 bg-emerald-500/10" 
-                    : "border-red-500/30 bg-red-500/10"
-                )}>
-                  {autoConfigResult.success ? (
-                    <p className="text-sm text-emerald-100 flex items-center gap-2">
-                      <CheckCircle2 size={18} />
-                      Modèle sélectionné : <strong>{autoConfigResult.model}</strong>
-                    </p>
-                  ) : (
-                    <p className="text-sm text-red-100 flex items-center gap-2">
-                      <AlertTriangle size={18} />
-                      {autoConfigResult.error}
-                    </p>
-                  )}
+              {pullError && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/8 px-3 py-2.5 text-xs text-red-300 flex items-center gap-2">
+                  <AlertTriangle size={13} />
+                  {pullError}
                 </div>
               )}
 
-              <div className="flex items-center justify-center gap-4">
+              <div className="rounded-2xl border border-white/8 bg-white/3 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-white">{recommendation.model}</p>
+                  <span className="text-xs text-white/40">{recommendation.size}</span>
+                </div>
+                <p className="text-xs text-white/50">{recommendation.reason}</p>
+                <div className="flex items-center gap-2 pt-1">
+                  <code className="flex-1 rounded-lg bg-black/30 px-2 py-1.5 text-xs text-white/60 font-mono truncate">
+                    {recommendation.command}
+                  </code>
+                  <button
+                    onClick={handleCopyCmd}
+                    className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white/50 hover:text-white transition-colors"
+                  >
+                    {copiedCmd ? "✓" : "Copier"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button onClick={onClose} className="flex-1 rounded-xl border border-white/8 bg-white/4 py-2.5 text-sm text-white/50 hover:text-white transition-colors">
+                  Plus tard
+                </button>
                 <button
-                  onClick={handleManualConfigure}
-                  disabled={isChecking}
-                  className="rounded-2xl border border-blue-500/30 bg-blue-500/12 px-6 py-3 text-sm font-semibold text-blue-100 hover:bg-blue-500/16 transition-all disabled:opacity-50 flex items-center gap-2"
+                  onClick={() => void handleDownload()}
+                  className="flex-1 rounded-xl border border-violet-500/30 bg-violet-500/10 py-2.5 text-sm font-semibold text-violet-200 hover:bg-violet-500/15 transition-colors flex items-center justify-center gap-2"
                 >
-                  {isChecking ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-                      Configuration...
-                    </>
-                  ) : (
-                    <>
-                      <Cpu size={18} />
-                      Configurer automatiquement
-                    </>
-                  )}
+                  <Download size={14} />
+                  Télécharger
                 </button>
               </div>
             </div>
           )}
 
-          {step === "done" && (
-            <div className="space-y-6">
-              <div className="flex flex-col items-center py-8 text-center">
-                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10">
-                  <CheckCircle2 size={40} className="text-emerald-400" />
+          {/* DOWNLOADING */}
+          {step === "downloading" && (
+            <div className="space-y-5">
+              <div className="flex flex-col items-center py-4 text-center gap-2">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-500/30 bg-violet-500/10">
+                  <Loader2 size={28} className="animate-spin text-violet-400" />
                 </div>
-                <h4 className="text-xl font-semibold text-white mb-2">Configuration terminée !</h4>
-                <p className="text-sm text-white/60 max-w-md">
-                  Ollama est configuré avec le modèle <strong>{selectedModel}</strong>. Vous pouvez maintenant discuter avec l'IA.
-                </p>
+                <p className="text-base font-semibold text-white">Téléchargement en cours</p>
+                <p className="text-sm text-white/50">{recommendation.model}</p>
               </div>
 
-              <div className="flex items-center justify-center">
-                <button
-                  onClick={onClose}
-                  className="rounded-2xl border border-emerald-500/30 bg-emerald-500/12 px-8 py-3 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/16 transition-all"
-                >
-                  Commencer
-                </button>
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-white/50">
+                  <span>{pullProgress?.status || "Initialisation..."}</span>
+                  {pullProgress?.percent != null && (
+                    <span>{pullProgress.percent}%</span>
+                  )}
+                </div>
+                <div className="h-2 w-full rounded-full bg-white/8 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-violet-500 to-emerald-500 transition-all duration-300"
+                    style={{ width: `${pullProgress?.percent ?? 0}%` }}
+                  />
+                </div>
+                {pullProgress?.completed != null && pullProgress?.total != null && (
+                  <p className="text-center text-xs text-white/30">
+                    {formatBytes(pullProgress.completed)} / {formatBytes(pullProgress.total)}
+                  </p>
+                )}
               </div>
+
+              <button
+                onClick={handleCancelDownload}
+                className="w-full rounded-xl border border-white/8 bg-white/4 py-2.5 text-sm text-white/50 hover:text-white transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          )}
+
+          {/* DONE */}
+          {step === "done" && (
+            <div className="flex flex-col items-center py-8 text-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10">
+                <CheckCircle2 size={32} className="text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-base font-semibold text-white">Prêt !</p>
+                <p className="text-sm text-white/50 mt-1">
+                  Modèle actif : <span className="text-white/80 font-mono text-xs">{selectedModel}</span>
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-8 py-2.5 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/15 transition-colors flex items-center gap-2"
+              >
+                Commencer <ChevronRight size={14} />
+              </button>
             </div>
           )}
         </div>

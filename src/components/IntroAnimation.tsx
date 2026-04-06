@@ -70,96 +70,104 @@ export default function IntroAnimation({ onComplete, isFirstTime = false }: Intr
     }
   }, [isFirstTime, onComplete]);
 
+  const colorMap: Record<string, { bg: string; border: string; dot: string }> = {
+    emerald: { bg: "bg-emerald-500/15", border: "border-emerald-500/30", dot: "bg-emerald-500" },
+    sky:     { bg: "bg-sky-500/15",     border: "border-sky-500/30",     dot: "bg-sky-500"     },
+    amber:   { bg: "bg-amber-500/15",   border: "border-amber-500/30",   dot: "bg-amber-500"   },
+    violet:  { bg: "bg-violet-500/15",  border: "border-violet-500/30",  dot: "bg-violet-500"  },
+  };
+
   return (
     <AnimatePresence mode="wait">
       {!isSkipped && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-white dark:bg-[#131314]"
+          exit={{ opacity: 0, scale: 0.98 }}
+          transition={{ duration: 0.25 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#131314] dark:bg-[#131314]"
         >
           <div className="absolute inset-0 bg-mesh" />
-          
-          <div className="relative z-10 w-full max-w-4xl px-4">
-            <div className="flex items-center justify-between mb-8">
+
+          <div className="relative z-10 w-full max-w-lg px-4">
+            {/* Logo bar */}
+            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-sky-500/20 border border-white/10">
-                  <Sparkles size={20} className="text-emerald-300" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/20">
+                  <Sparkles size={16} className="text-emerald-400" />
                 </div>
-                <span className="text-sm font-bold text-white/60">GeoSylva AI</span>
+                <span className="text-sm font-semibold text-white/50">GeoSylva AI</span>
               </div>
               {isFirstTime && (
                 <button
                   onClick={handleSkip}
-                  className="text-sm text-white/40 hover:text-white/60 transition-colors"
+                  className="text-xs text-white/30 hover:text-white/60 transition-colors px-2 py-1"
                 >
                   Passer
                 </button>
               )}
             </div>
 
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-8 md:p-12">
+            <div className="relative overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] backdrop-blur-xl p-8">
               <AnimatePresence mode="wait">
-                {slides.map((slide, index) => (
-                  step === index && (
+                {slides.map((slide, index) =>
+                  step === index ? (
                     <motion.div
                       key={index}
-                      initial={{ opacity: 0, x: 50 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -50 }}
-                      transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -16 }}
+                      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                       className="text-center"
                     >
-                      <div className="mb-8 flex justify-center">
+                      <div className="mb-6 flex justify-center">
                         <div className={cn(
-                          "flex h-24 w-24 items-center justify-center rounded-3xl border bg-gradient-to-br",
-                          `from-${slide.color}-500/20 to-${slide.color}-500/5`,
-                          `border-${slide.color}-500/30`
+                          "flex h-20 w-20 items-center justify-center rounded-2xl border",
+                          colorMap[slide.color].bg,
+                          colorMap[slide.color].border
                         )}>
                           {slide.icon}
                         </div>
                       </div>
-                      <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl">
+                      <h2 className="mb-3 text-2xl font-bold text-white">
                         {slide.title}
                       </h2>
-                      <p className="text-lg text-white/60 md:text-xl">
+                      <p className="text-sm text-white/50 leading-relaxed">
                         {slide.description}
                       </p>
                     </motion.div>
-                  )
-                ))}
+                  ) : null
+                )}
               </AnimatePresence>
 
               {/* Progress dots */}
-              <div className="mt-12 flex items-center justify-center gap-2">
+              <div className="mt-8 flex items-center justify-center gap-1.5">
                 {slides.map((_, index) => (
                   <div
                     key={index}
                     className={cn(
-                      "h-2 rounded-full transition-all duration-300",
+                      "h-1.5 rounded-full transition-all duration-300",
                       step === index
-                        ? `w-8 bg-${slides[step].color}-500`
-                        : "w-2 bg-white/20"
+                        ? `w-6 ${colorMap[slides[step].color].dot}`
+                        : "w-1.5 bg-white/15"
                     )}
                   />
                 ))}
               </div>
 
               {/* Navigation */}
-              <div className="mt-8 flex items-center justify-center">
+              <div className="mt-6 flex items-center justify-center">
                 <button
                   onClick={handleNext}
                   className={cn(
-                    "flex items-center gap-2 rounded-2xl border px-6 py-3 text-sm font-semibold transition-all",
+                    "flex items-center gap-2 rounded-xl border px-6 py-2.5 text-sm font-semibold transition-all",
                     step === slides.length - 1
-                      ? `border-emerald-500/30 bg-emerald-500/12 text-emerald-100 hover:bg-emerald-500/18`
-                      : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
+                      ? "border-emerald-500/30 bg-emerald-500/12 text-emerald-200 hover:bg-emerald-500/18"
+                      : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
                   )}
                 >
                   {step === slides.length - 1 ? "Commencer" : "Suivant"}
-                  <ArrowRight size={16} />
+                  <ArrowRight size={14} />
                 </button>
               </div>
             </div>
