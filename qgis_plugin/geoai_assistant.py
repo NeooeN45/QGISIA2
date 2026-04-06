@@ -2293,94 +2293,61 @@ class GeoAIAssistant:
         try:
             import webbrowser
             import subprocess
-            import sys
             import time
             server_url = "http://localhost:5173"
-
-            # Chemin du projet
             project_path = r"c:\Users\camil\Documents\Projet\GeoSylva_AI_QGIS_OpenRouter"
 
-            # Trouver npm
-            npm_cmd = "npm"
-            try:
-                # Essayer npm directement
-                subprocess.run([npm_cmd, "--version"], capture_output=True, timeout=2, check=True)
-            except:
-                # Essayer avec where sur Windows
-                if sys.platform == "win32":
-                    try:
-                        result = subprocess.run(["where", "npm"], capture_output=True, timeout=2, text=True, check=True)
-                        npm_cmd = result.stdout.strip().split('\n')[0]
-                    except:
-                        # Essayer les chemins communs
-                        common_paths = [
-                            r"C:\Program Files\nodejs\npm.cmd",
-                            r"C:\Program Files (x86)\nodejs\npm.cmd",
-                            os.path.expanduser(r"~\AppData\Roaming\npm\npm.cmd"),
-                        ]
-                        for path in common_paths:
-                            if os.path.exists(path):
-                                npm_cmd = path
-                                break
-
             # Vérifier si le serveur est déjà en cours
+            server_running = False
             try:
-                import requests
-                requests.get(server_url, timeout=2)
+                import urllib.request
+                urllib.request.urlopen(server_url, timeout=2)
                 server_running = True
             except:
-                server_running = False
+                pass
 
             if not server_running:
-                # Démarrer le serveur
                 self.iface.messageBar().pushMessage(
                     "GeoSylva AI",
-                    f"Démarrage du serveur avec {npm_cmd}...",
+                    "Démarrage du serveur de développement...",
                     Qgis.MessageLevel.Info,
                     3
                 )
-
                 try:
-                    if sys.platform == "win32":
-                        subprocess.Popen(
-                            [npm_cmd, "run", "dev"],
-                            cwd=project_path,
-                            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-                        )
-                    else:
-                        subprocess.Popen(
-                            [npm_cmd, "run", "dev"],
-                            cwd=project_path
-                        )
-
-                    # Attendre que le serveur soit prêt
+                    # shell=True permet à Windows de trouver npm via le PATH système
+                    subprocess.Popen(
+                        "npm run dev",
+                        cwd=project_path,
+                        shell=True,
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                    )
+                    # Attendre que le serveur soit prêt (max 30s) sans bloquer l'UI
+                    from qgis.PyQt.QtWidgets import QApplication
                     for i in range(30):
                         time.sleep(1)
+                        QApplication.processEvents()
                         try:
-                            requests.get(server_url, timeout=2)
+                            urllib.request.urlopen(server_url, timeout=2)
+                            server_running = True
                             break
                         except:
-                            continue
-
+                            pass
                 except Exception as e:
                     self.iface.messageBar().pushMessage(
                         "GeoSylva AI",
-                        f"Erreur démarrage serveur: {str(e)}\nVeuillez démarrer manuellement: cd {project_path} && npm run dev",
+                        f"Serveur non démarré: {str(e)} — démarrez manuellement: npm run dev",
                         Qgis.MessageLevel.Warning,
-                    10
+                        8
                     )
 
             # Ouvrir le navigateur
             webbrowser.open(server_url)
-
-            # Message de succès
             self.iface.messageBar().pushMessage(
                 "GeoSylva AI",
-                "Interface ouverte dans votre navigateur.",
+                "Interface GeoSylva AI ouverte dans votre navigateur.",
                 Qgis.MessageLevel.Success,
                 3
             )
-
             self._debug("run:browser_opened")
 
         except Exception as e:
