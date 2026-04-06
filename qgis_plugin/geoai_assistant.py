@@ -2207,9 +2207,9 @@ class GeoAIAssistant:
             self.action.setShortcut(action_shortcut)
             shortcut_context = ICON_CONFIG.get("shortcut_context", "window")
             if shortcut_context == "window":
-                self.action.setShortcutContext(Qt.WindowShortcut)
+                self.action.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
             else:
-                self.action.setShortcutContext(Qt.ApplicationShortcut)
+                self.action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         
         # Ajouter à la barre d'outils
         self.iface.addToolBarIcon(self.action)
