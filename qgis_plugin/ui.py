@@ -344,7 +344,7 @@ class GeoSylvaLaunchDialog(QWidget):
 
         # Chemin du projet
         if self.project_path:
-            path_label = f"📁 Projet: {self.project_path}"
+            path_label = QLabel(f"📁 Projet: {self.project_path}")
             path_label.setStyleSheet("""
                 QLabel {
                     color: #6b7280;
