@@ -104,19 +104,29 @@ class InfoCard(QFrame):
         layout.addWidget(content_label)
 
 
-class GeoSylvaLaunchDialog(QWidget):
-    """Dialogue de lancement superbe pour GeoSylva AI"""
+class GeoSylvaLaunchDock(QDockWidget):
+    """Dock widget de lancement pour GeoSylva AI - affiché sur le côté de QGIS"""
 
     def __init__(self, iface, server_url="http://localhost:5173", parent=None):
-        super().__init__(parent)
+        super().__init__("GeoSylva AI", parent)
         self.iface = iface
         self.server_url = server_url
         self.project_path = self._find_project_path()
         self.server_process = None
         self.server_ready = False
-        self.setWindowTitle("GeoSylva AI - Assistant SIG")
-        self.setMinimumSize(500, 400)
-        self._setup_ui()
+        self.setObjectName("geoaiLaunchDock")
+
+        # Configuration du dock
+        self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        self.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                        QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                        QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+
+        # Créer le widget principal
+        self._create_ui()
+
+        # Appliquer le style
+        self._apply_style()
 
     def _find_project_path(self):
         """Trouve le chemin du projet GeoSylva AI"""
@@ -221,15 +231,25 @@ class GeoSylvaLaunchDialog(QWidget):
             """)
             return False
 
-    def _setup_ui(self):
+    def _create_ui(self):
         """Configure l'interface utilisateur"""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(24)
+        # Widget conteneur
+        container = QWidget()
+        container.setObjectName("geoaiContainer")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(16)
 
         # Header
         header = self._create_header()
         layout.addWidget(header)
+
+        # Séparateur
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        separator.setStyleSheet("background: rgba(255, 255, 255, 0.1);")
+        layout.addWidget(separator)
 
         # Cartes d'information
         info_cards = self._create_info_cards()
@@ -256,13 +276,8 @@ class GeoSylvaLaunchDialog(QWidget):
         footer = self._create_footer()
         layout.addWidget(footer)
 
-        # Style global
-        self.setStyleSheet("""
-            QWidget {
-                background: #131314;
-                color: #e3e3e3;
-            }
-        """)
+        # Définir le widget du dock
+        self.setWidget(container)
 
     def _create_header(self):
         """Crée le header avec logo et titre"""
@@ -386,6 +401,18 @@ class GeoSylvaLaunchDialog(QWidget):
 
         return footer
 
+    def _apply_style(self):
+        """Applique le style global"""
+        self.setStyleSheet("""
+            QDockWidget#geoaiLaunchDock {
+                background: #131314;
+                border: none;
+            }
+            QWidget#geoaiContainer {
+                background: #131314;
+            }
+        """)
+
     def _launch_browser(self):
         """Lance le navigateur externe avec l'interface GeoSylva AI"""
         try:
@@ -438,7 +465,7 @@ class GeoSylvaLaunchDialog(QWidget):
                     5
                 )
 
-                # Fermer le dialogue après un délai
+                # Fermer le dock après un délai
                 QTimer.singleShot(2000, self.close)
             else:
                 # Serveur non prêt

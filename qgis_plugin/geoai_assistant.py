@@ -1849,6 +1849,7 @@ class GeoAIAssistant:
         self.bridge = None
         self.channel = None
         self.dock = None
+        self.launch_dock = None
         self.view = None
         self.external_ui_url = None
         self.main_thread_executor = MainThreadExecutor()
@@ -2284,19 +2285,24 @@ class GeoAIAssistant:
         self._debug("initGui:end")
 
     def run(self):
-        """Lance le dialogue de lancement qui ouvre le navigateur externe"""
+        """Lance le dock widget de lancement qui ouvre le navigateur externe"""
         self._debug("run:start")
 
         try:
-            from .ui import GeoSylvaLaunchDialog
+            from .ui import GeoSylvaLaunchDock
             # URL du serveur par défaut
             server_url = "http://localhost:5173"
-            
-            # Créer et afficher le dialogue
-            dialog = GeoSylvaLaunchDialog(self.iface, server_url, self.iface.mainWindow())
-            dialog.show()
-            
-            self._debug("run:dialog_shown")
+
+            # Créer le dock widget
+            if self.launch_dock is None:
+                self.launch_dock = GeoSylvaLaunchDock(self.iface, server_url, self.iface.mainWindow())
+                self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.launch_dock)
+
+            # Afficher le dock
+            self.launch_dock.show()
+            self.launch_dock.raise_()
+
+            self._debug("run:dock_shown")
         except ImportError as e:
             self._debug(f"run:import_error {e}")
             # Fallback: ouvrir directement le navigateur
@@ -2316,7 +2322,7 @@ class GeoAIAssistant:
                 Qgis.MessageLevel.Critical,
                 5
             )
-        
+
         self._debug("run:end")
     
     def _open_settings(self):
@@ -2407,18 +2413,6 @@ class GeoAIAssistant:
         # Arrêter le serveur d'assets
         if self.asset_server is not None:
             self.asset_server.stop()
-            self.asset_server = None
-
-        # Supprimer le dock
-        if self.dock is not None:
-            self.iface.removeDockWidget(self.dock)
-            self.dock.deleteLater()
-            self.dock = None
-
-        # Supprimer les actions du menu
-        if hasattr(self, 'geoai_menu'):
-            self.geoai_menu.clear()
-            self.menu.removeAction(self.geoai_menu.menuAction())
             self.geoai_menu.deleteLater()
         
         # Supprimer l'action principale
@@ -2435,5 +2429,10 @@ class GeoAIAssistant:
             self.help_action.deleteLater()
         if hasattr(self, 'about_action'):
             self.about_action.deleteLater()
-        
+
+        # Supprimer le dock de lancement
+        if self.launch_dock is not None:
+            self.iface.removeDockWidget(self.launch_dock)
+            self.launch_dock = None
+
         self._debug("unload:end")
