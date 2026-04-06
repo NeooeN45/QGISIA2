@@ -64,7 +64,9 @@ class InfoCard(QFrame):
 
     def __init__(self, title, content, icon="ℹ️", parent=None):
         super().__init__(parent)
-        self.setFrameStyle(QFrame.StyledPanel)
+        # Qt6: utiliser Shape et Shadow au lieu de StyledPanel
+        self.setFrameShape(QFrame.Shape.Panel)
+        self.setFrameShadow(QFrame.Shadow.Sunken)
         self.setStyleSheet("""
             QFrame {
                 background: rgba(255, 255, 255, 0.05);
@@ -649,8 +651,8 @@ class EnhancedDockWidget(QDockWidget):
         
         # Séparateur
         separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
         separator.setStyleSheet("background: rgba(255, 255, 255, 0.1);")
         layout.addWidget(separator)
         
