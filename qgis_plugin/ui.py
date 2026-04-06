@@ -540,9 +540,9 @@ class LoadingOverlay(QWidget):
 
     def _setup_ui(self):
         """Configure l'interface de l'overlay"""
-        self.setWindowFlags(Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -627,7 +627,7 @@ class EnhancedDockWidget(QDockWidget):
 
         # Configuration
         self.setAllowedAreas(
-            Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea
+            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
         )
 
         # Créer le widget principal
