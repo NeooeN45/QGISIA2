@@ -174,23 +174,36 @@ class GeoSylvaLaunchDock(QDockWidget):
                 }
             """)
 
+            # Trouver npm
+            npm_path = self._find_npm()
+            if not npm_path:
+                self.status_label.setText("❌ npm non trouvé")
+                self.status_label.setStyleSheet("""
+                    QLabel {
+                        color: #ef4444;
+                        font-size: 12px;
+                        font-weight: 600;
+                    }
+                """)
+                return False
+
             # Lancer npm run dev en arrière-plan
             if sys.platform == "win32":
-                # Windows: utiliser start /B pour lancer en arrière-plan
+                # Windows: utiliser npm directement
                 self.server_process = subprocess.Popen(
-                    ["npm", "run", "dev"],
+                    [npm_path, "run", "dev"],
                     cwd=self.project_path,
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
                 )
             else:
                 # Linux/Mac
                 self.server_process = subprocess.Popen(
-                    ["npm", "run", "dev"],
+                    [npm_path, "run", "dev"],
                     cwd=self.project_path,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
                 )
 
             # Attendre que le serveur soit prêt (max 30 secondes)
@@ -230,6 +243,43 @@ class GeoSylvaLaunchDock(QDockWidget):
                 }
             """)
             return False
+
+    def _find_npm(self):
+        """Trouve le chemin vers npm"""
+        # Essayer npm directement
+        try:
+            result = subprocess.run(["npm", "--version"], capture_output=True, timeout=5)
+            if result.returncode == 0:
+                return "npm"
+        except:
+            pass
+
+        # Essayer avec where/which
+        try:
+            if sys.platform == "win32":
+                result = subprocess.run(["where", "npm"], capture_output=True, timeout=5, text=True)
+                if result.returncode == 0:
+                    npm_path = result.stdout.strip().split('\n')[0]
+                    return npm_path
+            else:
+                result = subprocess.run(["which", "npm"], capture_output=True, timeout=5, text=True)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+        except:
+            pass
+
+        # Chemins communs pour npm
+        common_paths = [
+            r"C:\Program Files\nodejs\npm.cmd",
+            r"C:\Program Files (x86)\nodejs\npm.cmd",
+            os.path.expanduser(r"~\AppData\Roaming\npm\npm.cmd"),
+        ]
+
+        for path in common_paths:
+            if os.path.exists(path):
+                return path
+
+        return None
 
     def _create_ui(self):
         """Configure l'interface utilisateur"""
