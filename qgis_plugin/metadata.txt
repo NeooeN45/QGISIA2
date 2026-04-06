@@ -1,0 +1,13 @@
+[general]
+name=GeoSylva AI
+description=Assistant SIG IA pour QGIS avec services officiels, outils raster et fallback navigateur local
+about=Une extension QGIS tout-en-un qui combine chat SIG, services geospatiaux officiels, automatisation PyQGIS et interface web locale ou navigateur selon les capacites Qt disponibles.
+version=1.2
+qgisMinimumVersion=3.0
+author=GeoSylva AI
+email=geosylva86@gmail.com
+repository=https://github.com/geosylva86/qgis-geoai-assistant
+category=Plugins
+tags=ai, assistant, qgis, pyqgis, geospatial, cadastre, raster
+icon=icon.png
+experimental=False

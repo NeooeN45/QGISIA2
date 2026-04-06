@@ -1,0 +1,7 @@
+{
+  "name": "GeoSylva AI",
+  "description": "Un assistant SIG intelligent pour QGIS, capable d'orchestrer des services officiels, des traitements raster et des workflows PyQGIS guidés.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

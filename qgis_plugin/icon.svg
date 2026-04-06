@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect x="8" y="8" width="112" height="112" rx="30" fill="#050505" />
+  <rect x="11.5" y="11.5" width="105" height="105" rx="26.5" stroke="#262626" stroke-width="3" />
+  <rect x="18" y="18" width="92" height="92" rx="22" fill="url(#panelGlow)" fill-opacity="0.5" />
+
+  <path
+    d="M38 36L57 29L74 35L91 29V91L74 97L57 91L38 97V36Z"
+    stroke="#F5F5F5"
+    stroke-width="6"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M57 29V91M74 35V97"
+    stroke="#E5E7EB"
+    stroke-width="4.5"
+    stroke-linecap="round"
+    opacity="0.9"
+  />
+  <path
+    d="M46 52C50 49 55 48 60 50C64 52 68 52 72 49C76 46 81 46 86 49"
+    stroke="#9CA3AF"
+    stroke-width="3.5"
+    stroke-linecap="round"
+    opacity="0.8"
+  />
+  <path
+    d="M46 66C50 63 55 62 60 64C64 66 68 66 72 63C76 60 81 60 86 63"
+    stroke="#6B7280"
+    stroke-width="3.5"
+    stroke-linecap="round"
+    opacity="0.72"
+  />
+
+  <g transform="translate(0 1)">
+    <circle cx="85" cy="43" r="5.5" fill="#4285F4" />
+    <circle cx="98" cy="43" r="5.5" fill="#EA4335" />
+    <circle cx="85" cy="56" r="5.5" fill="#FBBC05" />
+    <circle cx="98" cy="56" r="5.5" fill="#34A853" />
+  </g>
+
+  <path
+    d="M88.5 82L91.3 87.7L97.5 88.6L93 92.9L94 99L88.5 96.1L83 99L84 92.9L79.5 88.6L85.7 87.7L88.5 82Z"
+    fill="#FFFFFF"
+  />
+
+  <defs>
+    <radialGradient id="panelGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(66 33) rotate(90) scale(78)">
+      <stop offset="0" stop-color="#171717" />
+      <stop offset="1" stop-color="#050505" />
+    </radialGradient>
+  </defs>
+</svg>

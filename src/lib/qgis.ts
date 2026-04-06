@@ -1,0 +1,1430 @@
+import {
+  CARTOGRAPHIC_CATALOG,
+  getCatalogItemById,
+  RemoteServiceConfig,
+  SUPPORTED_REMOTE_SERVICE_TYPES,
+} from "./catalog";
+
+const QGIS_RESULT_TIMEOUT_MS = 5000;
+
+type QgisCallback<T> = (value: T) => void;
+
+export interface LayerStatistics {
+  count: number;
+  sum: number;
+  mean: number;
+  min: number;
+  max: number;
+  range: number;
+  sampleStandardDeviation: number;
+  populationStandardDeviation: number;
+}
+
+export interface LayerSummary {
+  id: string;
+  name: string;
+  type: string;
+  geometryType: string;
+  crs: string;
+  featureCount: number | null;
+  selectedFeatureCount: number;
+  visible: boolean;
+  opacity: number;
+  subsetString: string;
+  provider: string;
+  editable: boolean;
+}
+
+export interface LayerExtent {
+  xmin: number;
+  ymin: number;
+  xmax: number;
+  ymax: number;
+}
+
+export interface LayerFieldDiagnostic {
+  name: string;
+  type: string;
+  nullCount: number;
+  fillRate: number;
+}
+
+export interface LayerDiagnostics {
+  layerId: string;
+  layerName: string;
+  layerType: string;
+  geometryType: string;
+  crs: string;
+  featureCount: number | null;
+  selectedFeatureCount: number;
+  sampledFeatureCount: number;
+  isSampled: boolean;
+  invalidGeometryCount: number;
+  emptyGeometryCount: number;
+  subsetString: string;
+  extent: LayerExtent | null;
+  warnings: string[];
+  fieldDiagnostics: LayerFieldDiagnostic[];
+}
+
+export interface RasterCalculationResult {
+  outputLayerName: string;
+  outputPath: string;
+  formula: string;
+}
+
+export interface RasterBandMergeResult {
+  outputLayerName: string;
+  outputPath: string;
+  inputLayers: string[];
+  separateBands: boolean;
+}
+
+export interface InventoryGridResult {
+  gridLayerName: string;
+  centroidLayerName: string;
+  sourceLayerName: string;
+  cellWidth: number;
+  cellHeight: number;
+  clipped: boolean;
+}
+
+export interface ScriptExecutionResult {
+  ok: boolean;
+  message: string;
+  traceback?: string;
+}
+
+interface RawQgisBridge {
+  openLayers?: () => void;
+  openSettings?: () => void;
+  pickFile?: (
+    fileFilter: string,
+    title: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  getLayersCatalog?: (callback?: QgisCallback<string>) => string | void;
+  getLayerDiagnostics?: (
+    layerId: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  runScript?: (script: string, callback?: QgisCallback<string>) => string | void;
+  runScriptDirect?: (
+    script: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  runScriptDetailed?: (
+    script: string,
+    requireConfirmation: boolean,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  getLayerFields?: (
+    layerId: string,
+    callback?: QgisCallback<string[]>,
+  ) => string[] | void;
+  filterLayer?: (
+    layerId: string,
+    subsetString: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  getLayersList?: (callback?: QgisCallback<string[]>) => string[] | void;
+  setLayerVisibility?: (
+    layerId: string,
+    visible: boolean,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  setLayerOpacity?: (
+    layerId: string,
+    opacity: number,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  zoomToLayer?: (
+    layerId: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  getLayerStatistics?: (
+    layerId: string,
+    field: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  reprojectLayer?: (
+    layerId: string,
+    targetCrs: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  addServiceLayer?: (
+    configJson: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  addRasterFile?: (
+    filePath: string,
+    layerName: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  addGeoJsonLayer?: (
+    geojson: string,
+    layerName: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  calculateRasterFormula?: (
+    layerIdsJson: string,
+    formula: string,
+    outputName: string,
+    outputPath: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  mergeRasterBands?: (
+    layerIdsJson: string,
+    outputName: string,
+    outputPath: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  createInventoryGrid?: (
+    layerRef: string,
+    cellWidth: number,
+    cellHeight: number,
+    gridName: string,
+    centroidsName: string,
+    clipToSource: boolean,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  calculateMnh?: (
+    mnsLayerId: string,
+    mntLayerId: string,
+    outputName: string,
+    outputPath: string,
+    clampNegative: boolean,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  applyParcelStylePreset?: (
+    layerId: string,
+    presetId: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  setLayerLabels?: (
+    layerId: string,
+    fieldName: string,
+    enabled: boolean,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+  splitSelectedLayerByLine?: (
+    layerId: string,
+    lineWkt: string,
+    outputName: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
+}
+
+declare global {
+  interface Window {
+    qgis?: RawQgisBridge;
+  }
+}
+
+let httpBridge: RawQgisBridge | null = null;
+
+function isHttpBridgeEnabled(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get("bridge") === "http";
+  } catch {
+    return false;
+  }
+}
+
+async function readHttpBridgeResult<T>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<T | undefined> {
+  try {
+    const response = await fetch(input, init);
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const payload = (await response.json()) as { ok?: boolean; result?: T };
+    return payload.ok ? payload.result : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getHttpBridge(): RawQgisBridge | undefined {
+  if (!isHttpBridgeEnabled()) {
+    return undefined;
+  }
+
+  if (httpBridge) {
+    return httpBridge;
+  }
+
+  const baseUrl = window.location.origin;
+  const makeUrl = (path: string, params?: Record<string, string>) => {
+    const url = new URL(path, baseUrl);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.set(key, value);
+      });
+    }
+    return url;
+  };
+
+  const postJson = <T>(path: string, body?: Record<string, unknown>) =>
+    readHttpBridgeResult<T>(makeUrl(path), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body ?? {}),
+    });
+
+  httpBridge = {
+    openLayers: () => {
+      void postJson("/api/qgis/openLayers");
+    },
+    openSettings: () => {
+      void postJson("/api/qgis/openSettings");
+    },
+    pickFile: (fileFilter, title, callback) => {
+      void postJson<string>("/api/qgis/pickFile", {
+        fileFilter,
+        title,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    getLayersCatalog: (callback) => {
+      void readHttpBridgeResult<string>(makeUrl("/api/qgis/getLayersCatalog")).then(
+        (result) => {
+          if (callback) {
+            callback(typeof result === "string" ? result : "[]");
+          }
+        },
+      );
+    },
+    getLayerDiagnostics: (layerId, callback) => {
+      void readHttpBridgeResult<string>(
+        makeUrl("/api/qgis/getLayerDiagnostics", { layerId }),
+      ).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    runScript: (script, callback) => {
+      void postJson<string>("/api/qgis/runScript", { script }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    runScriptDirect: (script, callback) => {
+      void postJson<string>("/api/qgis/runScriptDirect", { script }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    runScriptDetailed: (script, requireConfirmation, callback) => {
+      void postJson<string>("/api/qgis/runScriptDetailed", {
+        script,
+        requireConfirmation,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    getLayerFields: (layerId, callback) => {
+      void readHttpBridgeResult<string[]>(
+        makeUrl("/api/qgis/getLayerFields", { layerId }),
+      ).then((result) => {
+        if (callback) {
+          callback(Array.isArray(result) ? result : []);
+        }
+      });
+    },
+    filterLayer: (layerId, subsetString, callback) => {
+      void postJson<string>("/api/qgis/filterLayer", {
+        layerId,
+        subsetString,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    getLayersList: (callback) => {
+      void readHttpBridgeResult<string[]>(makeUrl("/api/qgis/getLayersList")).then(
+        (result) => {
+          if (callback) {
+            callback(Array.isArray(result) ? result : []);
+          }
+        },
+      );
+    },
+    setLayerVisibility: (layerId, visible, callback) => {
+      void postJson<string>("/api/qgis/setLayerVisibility", {
+        layerId,
+        visible,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    setLayerOpacity: (layerId, opacity, callback) => {
+      void postJson<string>("/api/qgis/setLayerOpacity", {
+        layerId,
+        opacity,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    zoomToLayer: (layerId, callback) => {
+      void postJson<string>("/api/qgis/zoomToLayer", {
+        layerId,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    getLayerStatistics: (layerId, field, callback) => {
+      void readHttpBridgeResult<string>(
+        makeUrl("/api/qgis/getLayerStatistics", { layerId, field }),
+      ).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    reprojectLayer: (layerId, targetCrs, callback) => {
+      void postJson<string>("/api/qgis/reprojectLayer", {
+        layerId,
+        targetCrs,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    addServiceLayer: (configJson, callback) => {
+      void postJson<string>("/api/qgis/addServiceLayer", {
+        config: configJson,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    addRasterFile: (filePath, layerName, callback) => {
+      void postJson<string>("/api/qgis/addRasterFile", {
+        filePath,
+        layerName,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    addGeoJsonLayer: (geojson, layerName, callback) => {
+      void postJson<string>("/api/qgis/addGeoJsonLayer", {
+        geojson,
+        layerName,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    calculateRasterFormula: (
+      layerIdsJson,
+      formula,
+      outputName,
+      outputPath,
+      callback,
+    ) => {
+      void postJson<string>("/api/qgis/calculateRasterFormula", {
+        layerIds: layerIdsJson,
+        formula,
+        outputName,
+        outputPath,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    mergeRasterBands: (layerIdsJson, outputName, outputPath, callback) => {
+      void postJson<string>("/api/qgis/mergeRasterBands", {
+        layerIds: layerIdsJson,
+        outputName,
+        outputPath,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    createInventoryGrid: (
+      layerRef,
+      cellWidth,
+      cellHeight,
+      gridName,
+      centroidsName,
+      clipToSource,
+      callback,
+    ) => {
+      void postJson<string>("/api/qgis/createInventoryGrid", {
+        layerRef,
+        layerId: layerRef,
+        cellWidth,
+        cellHeight,
+        gridName,
+        centroidsName,
+        clipToSource,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    calculateMnh: (
+      mnsLayerId,
+      mntLayerId,
+      outputName,
+      outputPath,
+      clampNegative,
+      callback,
+    ) => {
+      void postJson<string>("/api/qgis/calculateMnh", {
+        mnsLayerId,
+        mntLayerId,
+        outputName,
+        outputPath,
+        clampNegative,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    applyParcelStylePreset: (layerId, presetId, callback) => {
+      void postJson<string>("/api/qgis/applyParcelStylePreset", {
+        layerId,
+        presetId,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    setLayerLabels: (layerId, fieldName, enabled, callback) => {
+      void postJson<string>("/api/qgis/setLayerLabels", {
+        layerId,
+        fieldName,
+        enabled,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    splitSelectedLayerByLine: (layerId, lineWkt, outputName, callback) => {
+      void postJson<string>("/api/qgis/splitSelectedLayerByLine", {
+        layerId,
+        lineWkt,
+        outputName,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+  };
+
+  return httpBridge;
+}
+
+export function getBridge(): RawQgisBridge | undefined {
+  return window.qgis ?? getHttpBridge();
+}
+
+export function isQgisAvailable(): boolean {
+  return Boolean(getBridge());
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function normalizeLayerSummary(value: unknown): LayerSummary | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const id = typeof candidate.id === "string" ? candidate.id : "";
+  const name = typeof candidate.name === "string" ? candidate.name : "";
+
+  if (!id || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    type: typeof candidate.type === "string" ? candidate.type : "",
+    geometryType:
+      typeof candidate.geometryType === "string" ? candidate.geometryType : "",
+    crs: typeof candidate.crs === "string" ? candidate.crs : "",
+    featureCount:
+      typeof candidate.featureCount === "number" ? candidate.featureCount : null,
+    selectedFeatureCount:
+      typeof candidate.selectedFeatureCount === "number"
+        ? candidate.selectedFeatureCount
+        : 0,
+    visible: Boolean(candidate.visible),
+    opacity:
+      typeof candidate.opacity === "number"
+        ? Math.min(1, Math.max(0, candidate.opacity))
+        : 1,
+    subsetString:
+      typeof candidate.subsetString === "string" ? candidate.subsetString : "",
+    provider: typeof candidate.provider === "string" ? candidate.provider : "",
+    editable: Boolean(candidate.editable),
+  };
+}
+
+function normalizeLayerCatalog(value: unknown): LayerSummary[] {
+  if (typeof value === "string") {
+    try {
+      return normalizeLayerCatalog(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => normalizeLayerSummary(entry))
+    .filter((entry): entry is LayerSummary => entry !== null);
+}
+
+function normalizeLayerDiagnostics(value: unknown): LayerDiagnostics | null {
+  if (typeof value === "string") {
+    try {
+      return normalizeLayerDiagnostics(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const layerId = typeof candidate.layerId === "string" ? candidate.layerId : "";
+  const layerName = typeof candidate.layerName === "string" ? candidate.layerName : "";
+
+  if (!layerId || !layerName) {
+    return null;
+  }
+
+  const rawExtent =
+    candidate.extent && typeof candidate.extent === "object"
+      ? (candidate.extent as Record<string, unknown>)
+      : null;
+
+  return {
+    layerId,
+    layerName,
+    layerType: typeof candidate.layerType === "string" ? candidate.layerType : "",
+    geometryType:
+      typeof candidate.geometryType === "string" ? candidate.geometryType : "",
+    crs: typeof candidate.crs === "string" ? candidate.crs : "",
+    featureCount:
+      typeof candidate.featureCount === "number" ? candidate.featureCount : null,
+    selectedFeatureCount:
+      typeof candidate.selectedFeatureCount === "number"
+        ? candidate.selectedFeatureCount
+        : 0,
+    sampledFeatureCount:
+      typeof candidate.sampledFeatureCount === "number"
+        ? candidate.sampledFeatureCount
+        : 0,
+    isSampled: Boolean(candidate.isSampled),
+    invalidGeometryCount:
+      typeof candidate.invalidGeometryCount === "number"
+        ? candidate.invalidGeometryCount
+        : 0,
+    emptyGeometryCount:
+      typeof candidate.emptyGeometryCount === "number"
+        ? candidate.emptyGeometryCount
+        : 0,
+    subsetString:
+      typeof candidate.subsetString === "string" ? candidate.subsetString : "",
+    extent:
+      rawExtent &&
+      typeof rawExtent.xmin === "number" &&
+      typeof rawExtent.ymin === "number" &&
+      typeof rawExtent.xmax === "number" &&
+      typeof rawExtent.ymax === "number"
+        ? {
+            xmin: rawExtent.xmin,
+            ymin: rawExtent.ymin,
+            xmax: rawExtent.xmax,
+            ymax: rawExtent.ymax,
+          }
+        : null,
+    warnings: Array.isArray(candidate.warnings)
+      ? candidate.warnings.filter(
+          (warning): warning is string => typeof warning === "string",
+        )
+      : [],
+    fieldDiagnostics: Array.isArray(candidate.fieldDiagnostics)
+      ? candidate.fieldDiagnostics
+          .map((entry) => {
+            if (!entry || typeof entry !== "object") {
+              return null;
+            }
+
+            const field = entry as Record<string, unknown>;
+            if (typeof field.name !== "string") {
+              return null;
+            }
+
+            return {
+              name: field.name,
+              type: typeof field.type === "string" ? field.type : "",
+              nullCount:
+                typeof field.nullCount === "number" ? field.nullCount : 0,
+              fillRate:
+                typeof field.fillRate === "number"
+                  ? Math.min(1, Math.max(0, field.fillRate))
+                  : 0,
+            };
+          })
+          .filter((entry): entry is LayerFieldDiagnostic => entry !== null)
+      : [],
+  };
+}
+
+function normalizeRasterCalculationResult(
+  value: unknown,
+): RasterCalculationResult | null {
+  if (typeof value === "string") {
+    try {
+      return normalizeRasterCalculationResult(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const outputLayerName =
+    typeof candidate.outputLayerName === "string" ? candidate.outputLayerName : "";
+  const outputPath =
+    typeof candidate.outputPath === "string" ? candidate.outputPath : "";
+  const formula = typeof candidate.formula === "string" ? candidate.formula : "";
+
+  if (!outputLayerName) {
+    return null;
+  }
+
+  return {
+    outputLayerName,
+    outputPath,
+    formula,
+  };
+}
+
+function normalizeRasterBandMergeResult(
+  value: unknown,
+): RasterBandMergeResult | null {
+  if (typeof value === "string") {
+    try {
+      return normalizeRasterBandMergeResult(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const outputLayerName =
+    typeof candidate.outputLayerName === "string" ? candidate.outputLayerName : "";
+  const outputPath =
+    typeof candidate.outputPath === "string" ? candidate.outputPath : "";
+  const inputLayers = Array.isArray(candidate.inputLayers)
+    ? candidate.inputLayers.filter(
+        (entry): entry is string => typeof entry === "string" && entry.length > 0,
+      )
+    : [];
+  const separateBands = Boolean(candidate.separateBands);
+
+  if (!outputLayerName) {
+    return null;
+  }
+
+  return {
+    outputLayerName,
+    outputPath,
+    inputLayers,
+    separateBands,
+  };
+}
+
+function normalizeInventoryGridResult(
+  value: unknown,
+): InventoryGridResult | null {
+  if (typeof value === "string") {
+    try {
+      return normalizeInventoryGridResult(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const gridLayerName =
+    typeof candidate.gridLayerName === "string" ? candidate.gridLayerName : "";
+  const centroidLayerName =
+    typeof candidate.centroidLayerName === "string"
+      ? candidate.centroidLayerName
+      : "";
+  const sourceLayerName =
+    typeof candidate.sourceLayerName === "string"
+      ? candidate.sourceLayerName
+      : "";
+  const cellWidth =
+    typeof candidate.cellWidth === "number" ? candidate.cellWidth : 0;
+  const cellHeight =
+    typeof candidate.cellHeight === "number" ? candidate.cellHeight : 0;
+  const clipped = Boolean(candidate.clipped);
+
+  if (!gridLayerName || !centroidLayerName || !sourceLayerName) {
+    return null;
+  }
+
+  return {
+    gridLayerName,
+    centroidLayerName,
+    sourceLayerName,
+    cellWidth,
+    cellHeight,
+    clipped,
+  };
+}
+
+export async function callQgisWithResult<T>(
+  invoker: (callback: QgisCallback<T>) => T | void,
+  fallback: T,
+): Promise<T> {
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const timeout = window.setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallback);
+      }
+    }, QGIS_RESULT_TIMEOUT_MS);
+
+    const callback = (value: T) => {
+      if (!settled) {
+        settled = true;
+        window.clearTimeout(timeout);
+        resolve(value);
+      }
+    };
+
+    try {
+      const result = invoker(callback);
+      if (result !== undefined && !settled) {
+        settled = true;
+        window.clearTimeout(timeout);
+        resolve(result as T);
+      }
+    } catch {
+      if (!settled) {
+        settled = true;
+        window.clearTimeout(timeout);
+        resolve(fallback);
+      }
+    }
+  });
+}
+
+function callQgisCommand(command: () => unknown): boolean {
+  try {
+    command();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function getLayersList(): Promise<string[]> {
+  const bridge = getBridge();
+  if (!bridge) {
+    return [];
+  }
+
+  if (!bridge.getLayersList) {
+    if (bridge.getLayersCatalog) {
+      return (await getLayersCatalog()).map((layer) => layer.name);
+    }
+
+    return [];
+  }
+
+  const result = await callQgisWithResult<string[]>(
+    (callback) => bridge.getLayersList?.(callback),
+    [],
+  );
+
+  return normalizeStringArray(result);
+}
+
+export async function getLayersCatalog(): Promise<LayerSummary[]> {
+  const bridge = getBridge();
+  if (bridge?.getLayersCatalog) {
+    const result = await callQgisWithResult<string>(
+      (callback) => bridge.getLayersCatalog?.(callback),
+      "[]",
+    );
+
+    return normalizeLayerCatalog(result);
+  }
+
+  const layerNames = await getLayersList();
+  return layerNames.map((name) => ({
+    id: name,
+    name,
+    type: "",
+    geometryType: "",
+    crs: "",
+    featureCount: null,
+    selectedFeatureCount: 0,
+    visible: true,
+    opacity: 1,
+    subsetString: "",
+    provider: "",
+    editable: false,
+  }));
+}
+
+export async function getLayerFields(layerId: string): Promise<string[]> {
+  const bridge = getBridge();
+  if (!bridge?.getLayerFields) {
+    return [];
+  }
+
+  const result = await callQgisWithResult<string[]>(
+    (callback) => bridge.getLayerFields?.(layerId, callback),
+    [],
+  );
+
+  return normalizeStringArray(result);
+}
+
+export async function getLayerDiagnostics(
+  layerId: string,
+): Promise<LayerDiagnostics | null> {
+  const bridge = getBridge();
+  if (!bridge?.getLayerDiagnostics) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.getLayerDiagnostics?.(layerId, callback),
+    "",
+  );
+
+  if (!result) {
+    return null;
+  }
+
+  return normalizeLayerDiagnostics(result);
+}
+
+export function openQgisLayersPanel(): boolean {
+  const bridge = getBridge();
+  if (!bridge?.openLayers) {
+    return false;
+  }
+
+  return callQgisCommand(() => bridge.openLayers?.());
+}
+
+export function openQgisSettings(): boolean {
+  const bridge = getBridge();
+  if (!bridge?.openSettings) {
+    return false;
+  }
+
+  return callQgisCommand(() => bridge.openSettings?.());
+}
+
+export async function pickQgisFile(
+  fileFilter = "",
+  title = "Choisir un fichier",
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.pickFile) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.pickFile?.(fileFilter, title, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function runScript(
+  script: string,
+  options?: { requireConfirmation?: boolean },
+): Promise<string | null> {
+  const requireConfirmation = options?.requireConfirmation !== false;
+  const bridge = getBridge();
+  const bridgeMethod =
+    requireConfirmation || !bridge?.runScriptDirect
+      ? bridge?.runScript
+      : bridge.runScriptDirect;
+
+  if (!bridgeMethod) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridgeMethod(script, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function runScriptDetailed(
+  script: string,
+  options?: { requireConfirmation?: boolean },
+): Promise<ScriptExecutionResult | null> {
+  const requireConfirmation = options?.requireConfirmation !== false;
+  const bridge = getBridge();
+
+  if (bridge?.runScriptDetailed) {
+    const result = await callQgisWithResult<string>(
+      (callback) => bridge.runScriptDetailed?.(script, requireConfirmation, callback),
+      "",
+    );
+
+    if (!result) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(result) as ScriptExecutionResult;
+    } catch {
+      return {
+        ok: !/^Erreur\b/i.test(result),
+        message: result,
+      };
+    }
+  }
+
+  const legacyResult = await runScript(script, { requireConfirmation });
+  if (!legacyResult) {
+    return null;
+  }
+
+  return {
+    ok: !/^Erreur\b/i.test(legacyResult),
+    message: legacyResult,
+  };
+}
+
+export async function filterLayer(
+  layerId: string,
+  subsetString: string,
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.filterLayer) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.filterLayer?.(layerId, subsetString, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function setLayerVisibility(
+  layerId: string,
+  visible: boolean,
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.setLayerVisibility) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.setLayerVisibility?.(layerId, visible, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function setLayerOpacity(
+  layerId: string,
+  opacity: number,
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.setLayerOpacity) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.setLayerOpacity?.(layerId, opacity, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function zoomToLayer(layerId: string): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.zoomToLayer) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.zoomToLayer?.(layerId, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function getLayerStatistics(
+  layerId: string,
+  field: string,
+): Promise<LayerStatistics | null> {
+  const bridge = getBridge();
+  if (!bridge?.getLayerStatistics) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.getLayerStatistics?.(layerId, field, callback),
+    "",
+  );
+
+  if (!result) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(result) as LayerStatistics;
+  } catch {
+    return null;
+  }
+}
+
+export async function reprojectLayer(
+  layerId: string,
+  targetCrs: string,
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.reprojectLayer) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.reprojectLayer?.(layerId, targetCrs, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export function getSupportedRemoteServiceTypes() {
+  return SUPPORTED_REMOTE_SERVICE_TYPES;
+}
+
+export function getServiceCatalog() {
+  return CARTOGRAPHIC_CATALOG;
+}
+
+export async function addRemoteService(
+  config: RemoteServiceConfig,
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.addServiceLayer) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) =>
+      bridge.addServiceLayer?.(JSON.stringify(config), callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function addCatalogService(itemId: string): Promise<string | null> {
+  const item = getCatalogItemById(itemId);
+  if (!item) {
+    return null;
+  }
+
+  return addRemoteService(item);
+}
+
+export async function addRasterFile(
+  filePath: string,
+  layerName = "",
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.addRasterFile) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.addRasterFile?.(filePath, layerName, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function addGeoJsonLayer(
+  geojson: string,
+  layerName = "",
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.addGeoJsonLayer) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.addGeoJsonLayer?.(geojson, layerName, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function calculateRasterFormula(
+  layerIds: string[],
+  formula: string,
+  outputName: string,
+  outputPath = "",
+): Promise<RasterCalculationResult | null> {
+  const bridge = getBridge();
+  if (!bridge?.calculateRasterFormula) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) =>
+      bridge.calculateRasterFormula?.(
+        JSON.stringify(layerIds),
+        formula,
+        outputName,
+        outputPath,
+        callback,
+      ),
+    "",
+  );
+
+  return normalizeRasterCalculationResult(result);
+}
+
+export async function mergeRasterBands(
+  layerIds: string[],
+  outputName: string,
+  outputPath = "",
+): Promise<RasterBandMergeResult | null> {
+  const bridge = getBridge();
+  if (!bridge?.mergeRasterBands) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) =>
+      bridge.mergeRasterBands?.(
+        JSON.stringify(layerIds),
+        outputName,
+        outputPath,
+        callback,
+      ),
+    "",
+  );
+
+  return normalizeRasterBandMergeResult(result);
+}
+
+export async function createInventoryGrid(
+  layerRef: string,
+  cellWidth: number,
+  cellHeight: number,
+  gridName: string,
+  centroidsName: string,
+  clipToSource = true,
+): Promise<InventoryGridResult | null> {
+  const bridge = getBridge();
+  if (!bridge?.createInventoryGrid) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) =>
+      bridge.createInventoryGrid?.(
+        layerRef,
+        cellWidth,
+        cellHeight,
+        gridName,
+        centroidsName,
+        clipToSource,
+        callback,
+      ),
+    "",
+  );
+
+  return normalizeInventoryGridResult(result);
+}
+
+export async function calculateMnh(
+  mnsLayerId: string,
+  mntLayerId: string,
+  outputName: string,
+  outputPath = "",
+  clampNegative = true,
+): Promise<RasterCalculationResult | null> {
+  const bridge = getBridge();
+  if (!bridge?.calculateMnh) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) =>
+      bridge.calculateMnh?.(
+        mnsLayerId,
+        mntLayerId,
+        outputName,
+        outputPath,
+        clampNegative,
+        callback,
+      ),
+    "",
+  );
+
+  return normalizeRasterCalculationResult(result);
+}
+
+export async function applyParcelStylePreset(
+  layerId: string,
+  presetId = "cadastre",
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.applyParcelStylePreset) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.applyParcelStylePreset?.(layerId, presetId, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function setLayerLabels(
+  layerId: string,
+  fieldName = "",
+  enabled = true,
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.setLayerLabels) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.setLayerLabels?.(layerId, fieldName, enabled, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function setProjectCrs(crsCode: string): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.runScript) {
+    return null;
+  }
+
+  const script = [
+    "from qgis.core import QgsCoordinateReferenceSystem, QgsProject",
+    `crs = QgsCoordinateReferenceSystem("${crsCode}")`,
+    "if crs.isValid():",
+    "    QgsProject.instance().setCrs(crs)",
+    `    print(f"Projection du projet changée en ${crsCode}")`,
+    "else:",
+    `    print(f"CRS invalide : ${crsCode}")`,
+  ].join("\n");
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.runScript?.(script, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export async function splitSelectedLayerByLine(
+  layerId: string,
+  lineWkt: string,
+  outputName: string,
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.splitSelectedLayerByLine) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) =>
+      bridge.splitSelectedLayerByLine?.(layerId, lineWkt, outputName, callback),
+    "",
+  );
+
+  return typeof result === "string" && result.length > 0 ? result : null;
+}

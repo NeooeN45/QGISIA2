@@ -1,0 +1,766 @@
+export type AiProvider = "google" | "local" | "openrouter";
+export type OpenRouterAgentMode = "single" | "multi";
+export type OpenRouterExecutionMode = "draft" | "tools";
+export type OpenRouterDataCollectionPolicy = "allow" | "deny";
+export type ThemeMode = "dark" | "light" | "auto";
+
+export interface AppSettings {
+  apiKey: string;
+  model: string;
+  provider: AiProvider;
+  localEndpoint: string;
+  localModel: string;
+  googleApiKey: string;
+  googleModel: string;
+  openrouterApiKey: string;
+  openrouterEndpoint: string;
+  openrouterAppName: string;
+  openrouterReferer: string;
+  openrouterProviderOrder: string[];
+  openrouterAllowFallbacks: boolean;
+  openrouterRequireParameters: boolean;
+  openrouterDataCollection: OpenRouterDataCollectionPolicy;
+  openrouterOnlyZdr: boolean;
+  openrouterUseResponseHealing: boolean;
+  openrouterAgentMode: OpenRouterAgentMode;
+  openrouterExecutionMode: OpenRouterExecutionMode;
+  openrouterUseRetriever: boolean;
+  openrouterShowTrace: boolean;
+  openrouterPlannerModel: string;
+  openrouterDeepPlannerModel: string;
+  openrouterReviewerModel: string;
+  openrouterRetrieverModel: string;
+  openrouterExecutorModel: string;
+  autoExecutePythonScripts: boolean;
+  autoRepairPythonScripts: boolean;
+  autoRepairMaxAttempts: number;
+  theme: ThemeMode;
+}
+
+export interface ModelPreset {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface OpenRouterStackPreset {
+  id: "free" | "value" | "quality";
+  label: string;
+  badge: string;
+  description: string;
+  priceHint: string;
+  plannerModel: string;
+  deepPlannerModel: string;
+  reviewerModel: string;
+  retrieverModel: string;
+  executorModel: string;
+}
+
+export interface SettingsValidationOptions {
+  hasGeminiEnvKey?: boolean;
+  hasOpenRouterEnvKey?: boolean;
+}
+
+export const DEFAULT_GOOGLE_MODEL = "gemini-2.5-flash";
+export const DEFAULT_LOCAL_MODEL = "qwen3:4b-instruct-2507-q4_K_M";
+export const DEFAULT_LOCAL_ENDPOINT = "http://localhost:11434/api/generate";
+export const DEFAULT_OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1";
+export const DEFAULT_OPENROUTER_APP_NAME = "GeoAI QGIS";
+export const DEFAULT_OPENROUTER_PLANNER_MODEL = "qwen/qwen3-next-80b-a3b-instruct";
+export const DEFAULT_OPENROUTER_DEEP_PLANNER_MODEL = "openai/gpt-oss-120b";
+export const DEFAULT_OPENROUTER_REVIEWER_MODEL = "openai/gpt-oss-120b";
+export const DEFAULT_OPENROUTER_RETRIEVER_MODEL =
+  "nvidia/llama-nemotron-embed-vl-1b-v2:free";
+export const DEFAULT_OPENROUTER_EXECUTOR_MODEL = "qwen/qwen3-coder-next";
+export const DEFAULT_OPENROUTER_FREE_COMPAT_PLANNER_MODEL =
+  "arcee-ai/trinity-large-preview:free";
+export const DEFAULT_OPENROUTER_FREE_COMPAT_EXECUTOR_MODEL =
+  "arcee-ai/trinity-mini:free";
+
+const LEGACY_DEFAULT_GOOGLE_MODEL = DEFAULT_GOOGLE_MODEL;
+
+export const GEMINI_MODEL_PRESETS: ModelPreset[] = [
+  {
+    id: "gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
+    description: "Rapide et polyvalent pour le chat courant.",
+  },
+  {
+    id: "gemini-2.5-flash-lite",
+    label: "Gemini 2.5 Flash-Lite",
+    description: "Le plus economique pour les usages frequents.",
+  },
+  {
+    id: "gemini-2.5-pro",
+    label: "Gemini 2.5 Pro",
+    description: "Le plus solide pour raisonnement et code complexes.",
+  },
+];
+
+export const LOCAL_MODEL_PRESETS: ModelPreset[] = [
+  {
+    id: DEFAULT_LOCAL_MODEL,
+    label: "Qwen3 4B Instruct 2507",
+    description: "Léger et rapide, bon compromis pour 8 Go de VRAM.",
+  },
+  {
+    id: "qwen3:8b",
+    label: "Qwen3 8B",
+    description: "Meilleure qualité de raisonnement, nécessite ~6 Go VRAM.",
+  },
+  {
+    id: "qwen2.5-coder:7b",
+    label: "Qwen2.5 Coder 7B",
+    description: "Spécialisé code et PyQGIS, excellent pour les scripts.",
+  },
+  {
+    id: "mistral:7b-instruct",
+    label: "Mistral 7B Instruct",
+    description: "Très bon en français, solide pour le dialogue GIS.",
+  },
+  {
+    id: "phi4:14b",
+    label: "Phi-4 14B",
+    description: "Raisonnement avancé, idéal si 12+ Go VRAM disponibles.",
+  },
+  {
+    id: "gemma3:12b",
+    label: "Gemma 3 12B",
+    description: "Google, très polyvalent, bon suivi d'instructions.",
+  },
+  {
+    id: "deepseek-coder-v2:16b",
+    label: "DeepSeek Coder V2 16B",
+    description: "Le plus fort en code pur, demande 12+ Go VRAM.",
+  },
+  {
+    id: "llama3.1:8b",
+    label: "Llama 3.1 8B",
+    description: "Meta, équilibré et fiable, bonne base généraliste.",
+  },
+];
+
+export const OPENROUTER_ROLE_PRESETS = {
+  planner: [
+    {
+      id: "qwen/qwen3-next-80b-a3b-instruct",
+      label: "Qwen3 Next 80B",
+      description: "Excellent ratio prix / qualité pour le planning général.",
+    },
+    {
+      id: "qwen/qwen3-next-80b-a3b-instruct:free",
+      label: "Qwen3 Next 80B Free",
+      description: "Version gratuite très solide pour planner sans coût.",
+    },
+    {
+      id: "stepfun/step-3.5-flash:free",
+      label: "Step 3.5 Flash",
+      description: "Planificateur rapide avec long contexte.",
+    },
+    {
+      id: "z-ai/glm-4.5-air:free",
+      label: "GLM 4.5 Air Free",
+      description: "Planner gratuit orienté agents avec mode raisonnement.",
+    },
+    {
+      id: "arcee-ai/trinity-large-preview:free",
+      label: "Trinity Large Preview Free",
+      description: "Long contexte gratuit, bon pour prompts complexes.",
+    },
+    {
+      id: "arcee-ai/trinity-mini:free",
+      label: "Trinity Mini Free",
+      description: "Planner gratuit plus stable quand les autres variantes free saturent.",
+    },
+    {
+      id: "minimax/minimax-m2.5:free",
+      label: "MiniMax M2.5",
+      description: "Planificateur plus lourd pour workflows complexes.",
+    },
+  ],
+  reviewer: [
+    {
+      id: "openai/gpt-oss-120b",
+      label: "gpt-oss-120b",
+      description: "Reviewer très fort et encore peu coûteux.",
+    },
+    {
+      id: "openai/gpt-oss-120b:free",
+      label: "gpt-oss-120b Free",
+      description: "Très bon reviewer gratuit pour validation d'actions.",
+    },
+    {
+      id: "openai/gpt-oss-20b",
+      label: "gpt-oss-20b",
+      description: "Reviewer économique et rapide.",
+    },
+    {
+      id: "openai/gpt-oss-20b:free",
+      label: "gpt-oss-20b Free",
+      description: "Fallback reviewer gratuit à faible coût de latence.",
+    },
+    {
+      id: "nvidia/nemotron-3-nano-30b-a3b:free",
+      label: "Nemotron 3 Nano 30B",
+      description: "Revieweur pour verifier risques et qualite.",
+    },
+    {
+      id: "nvidia/nemotron-3-super-120b-a12b:free",
+      label: "Nemotron 3 Super",
+      description: "Contre-lecture plus large mais plus lente.",
+    },
+    {
+      id: "arcee-ai/trinity-large-preview:free",
+      label: "Trinity Large Preview Free",
+      description: "Reviewer gratuit actuellement le plus compatible pour les plans JSON.",
+    },
+    {
+      id: "arcee-ai/trinity-mini:free",
+      label: "Trinity Mini Free",
+      description: "Reviewer gratuit plus leger quand tu veux rester sur un stack stable.",
+    },
+  ],
+  retriever: [
+    {
+      id: "nvidia/llama-nemotron-embed-vl-1b-v2:free",
+      label: "Llama Nemotron Embed VL 1B V2",
+      description: "Embeddings OpenRouter pour reranker le contexte.",
+    },
+  ],
+  executor: [
+    {
+      id: "qwen/qwen3-coder-next",
+      label: "Qwen3 Coder Next",
+      description: "Meilleur choix valeur pour un agent codeur en production.",
+    },
+    {
+      id: "qwen/qwen3-coder",
+      label: "Qwen3 Coder 480B",
+      description: "Qualité maximale pour code, outils et longues sessions.",
+    },
+    {
+      id: "qwen/qwen3-coder:free",
+      label: "Qwen3 Coder Free",
+      description: "Version gratuite la plus intéressante pour l'exécution code.",
+    },
+    {
+      id: "qwen/qwen3-next-80b-a3b-instruct",
+      label: "Qwen3 Next 80B",
+      description: "Bon exécuteur généraliste quand tu veux moins de spécialisation code.",
+    },
+    {
+      id: "stepfun/step-3.5-flash:free",
+      label: "Step 3.5 Flash",
+      description: "Execution rapide avec outils QGIS quand disponible.",
+    },
+    {
+      id: "nvidia/nemotron-3-super-120b-a12b:free",
+      label: "Nemotron 3 Super",
+      description: "Execution plus riche, utile pour analyses longues.",
+    },
+    {
+      id: "minimax/minimax-m2.5:free",
+      label: "MiniMax M2.5",
+      description: "Execution generaliste en contexte logiciel.",
+    },
+    {
+      id: "arcee-ai/trinity-mini:free",
+      label: "Trinity Mini Free",
+      description: "Executeur gratuit teste avec tool-calling et sortie finale exploitable.",
+    },
+  ],
+} satisfies Record<string, ModelPreset[]>;
+
+export const OPENROUTER_STACK_PRESETS: OpenRouterStackPreset[] = [
+  {
+    id: "free",
+    label: "Gratuit",
+    badge: "0 $",
+    description: "Pile gratuite testee en conditions reelles, plus robuste que les variantes free les plus saturees.",
+    priceHint: "gratuit",
+    plannerModel: DEFAULT_OPENROUTER_FREE_COMPAT_PLANNER_MODEL,
+    deepPlannerModel: DEFAULT_OPENROUTER_FREE_COMPAT_PLANNER_MODEL,
+    reviewerModel: DEFAULT_OPENROUTER_FREE_COMPAT_PLANNER_MODEL,
+    retrieverModel: "nvidia/llama-nemotron-embed-vl-1b-v2:free",
+    executorModel: DEFAULT_OPENROUTER_FREE_COMPAT_EXECUTOR_MODEL,
+  },
+  {
+    id: "value",
+    label: "Valeur",
+    badge: "€",
+    description: "Le meilleur compromis coût / qualité pour un GeoAI agentique quotidien.",
+    priceHint: "faible coût",
+    plannerModel: "qwen/qwen3-next-80b-a3b-instruct",
+    deepPlannerModel: "openai/gpt-oss-120b",
+    reviewerModel: "openai/gpt-oss-120b",
+    retrieverModel: "nvidia/llama-nemotron-embed-vl-1b-v2:free",
+    executorModel: "qwen/qwen3-coder-next",
+  },
+  {
+    id: "quality",
+    label: "Qualité",
+    badge: "€€",
+    description: "Plus cher, mais meilleur sur exécution code et robustesse des sorties.",
+    priceHint: "coût modéré",
+    plannerModel: "qwen/qwen3-next-80b-a3b-instruct",
+    deepPlannerModel: "openai/gpt-oss-120b",
+    reviewerModel: "openai/gpt-oss-120b",
+    retrieverModel: "nvidia/llama-nemotron-embed-vl-1b-v2:free",
+    executorModel: "qwen/qwen3-coder",
+  },
+];
+
+export const DEFAULT_OPENROUTER_STACK_PRESET_ID: OpenRouterStackPreset["id"] = "value";
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  apiKey: "",
+  model: DEFAULT_LOCAL_MODEL,
+  provider: "local",
+  localEndpoint: DEFAULT_LOCAL_ENDPOINT,
+  localModel: DEFAULT_LOCAL_MODEL,
+  googleApiKey: "",
+  googleModel: DEFAULT_GOOGLE_MODEL,
+  openrouterApiKey: "",
+  openrouterEndpoint: DEFAULT_OPENROUTER_ENDPOINT,
+  openrouterAppName: DEFAULT_OPENROUTER_APP_NAME,
+  openrouterReferer: "",
+  openrouterProviderOrder: [],
+  openrouterAllowFallbacks: true,
+  openrouterRequireParameters: false,
+  openrouterDataCollection: "allow",
+  openrouterOnlyZdr: false,
+  openrouterUseResponseHealing: true,
+  openrouterAgentMode: "multi",
+  openrouterExecutionMode: "tools",
+  openrouterUseRetriever: true,
+  openrouterShowTrace: false,
+  openrouterPlannerModel: DEFAULT_OPENROUTER_PLANNER_MODEL,
+  openrouterDeepPlannerModel: DEFAULT_OPENROUTER_DEEP_PLANNER_MODEL,
+  openrouterReviewerModel: DEFAULT_OPENROUTER_REVIEWER_MODEL,
+  openrouterRetrieverModel: DEFAULT_OPENROUTER_RETRIEVER_MODEL,
+  openrouterExecutorModel: DEFAULT_OPENROUTER_EXECUTOR_MODEL,
+  autoExecutePythonScripts: true,
+  autoRepairPythonScripts: true,
+  autoRepairMaxAttempts: 2,
+  theme: "dark",
+};
+
+function toProvider(value: string | null): AiProvider | undefined {
+  if (value === "google" || value === "local" || value === "openrouter") {
+    return value;
+  }
+
+  return undefined;
+}
+
+function selectModelForProvider(
+  provider: AiProvider,
+  settings: Pick<
+    AppSettings,
+    "googleModel" | "localModel" | "openrouterExecutorModel"
+  >,
+): string {
+  if (provider === "google") {
+    return settings.googleModel;
+  }
+
+  if (provider === "openrouter") {
+    return settings.openrouterExecutorModel;
+  }
+
+  return settings.localModel;
+}
+
+function selectApiKeyForProvider(
+  provider: AiProvider,
+  settings: Pick<AppSettings, "googleApiKey" | "openrouterApiKey">,
+): string {
+  if (provider === "google") {
+    return settings.googleApiKey;
+  }
+
+  if (provider === "openrouter") {
+    return settings.openrouterApiKey;
+  }
+
+  return "";
+}
+
+function normalizeProviderOrder(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry, index, list) => entry.length > 0 && list.indexOf(entry) === index);
+}
+
+function loadSettingsFromUrl(): Partial<AppSettings> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const provider = toProvider(params.get("provider"));
+  const model = params.get("model")?.trim() || undefined;
+  const endpoint = params.get("endpoint")?.trim() || undefined;
+  const baseUrl = params.get("baseUrl")?.trim() || undefined;
+
+  const overrides: Partial<AppSettings> = {};
+  if (provider) {
+    overrides.provider = provider;
+  }
+
+  if (provider === "google" && model) {
+    overrides.googleModel = model;
+  }
+
+  if (provider === "local" && model) {
+    overrides.localModel = model;
+  }
+
+  if (provider === "openrouter" && model) {
+    overrides.openrouterExecutorModel = model;
+  }
+
+  if (provider === "local" && endpoint) {
+    overrides.localEndpoint = endpoint;
+  }
+
+  if (provider === "openrouter" && (endpoint || baseUrl)) {
+    overrides.openrouterEndpoint = endpoint || baseUrl;
+  }
+
+  return overrides;
+}
+
+export function getConfiguredGeminiApiKey(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  return (env.VITE_GEMINI_API_KEY || "").trim();
+}
+
+export function hasConfiguredGeminiApiKey(): boolean {
+  return getConfiguredGeminiApiKey().length > 0;
+}
+
+export function getConfiguredOpenRouterApiKey(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  return (env.VITE_OPENROUTER_API_KEY || "").trim();
+}
+
+export function hasConfiguredOpenRouterApiKey(): boolean {
+  return getConfiguredOpenRouterApiKey().length > 0;
+}
+
+export function getActiveModel(settings: AppSettings): string {
+  return selectModelForProvider(settings.provider, settings);
+}
+
+export function getOpenRouterStackPresetId(
+  settings: Pick<
+    AppSettings,
+    | "openrouterPlannerModel"
+    | "openrouterDeepPlannerModel"
+    | "openrouterReviewerModel"
+    | "openrouterRetrieverModel"
+    | "openrouterExecutorModel"
+  >,
+): OpenRouterStackPreset["id"] | null {
+  const matchedPreset = OPENROUTER_STACK_PRESETS.find(
+    (preset) =>
+      preset.plannerModel === settings.openrouterPlannerModel &&
+      preset.deepPlannerModel === settings.openrouterDeepPlannerModel &&
+      preset.reviewerModel === settings.openrouterReviewerModel &&
+      preset.retrieverModel === settings.openrouterRetrieverModel &&
+      preset.executorModel === settings.openrouterExecutorModel,
+  );
+
+  return matchedPreset?.id || null;
+}
+
+export function applyOpenRouterStackPreset(
+  current: AppSettings,
+  presetId: OpenRouterStackPreset["id"],
+): AppSettings {
+  const preset = OPENROUTER_STACK_PRESETS.find((entry) => entry.id === presetId);
+  if (!preset) {
+    return current;
+  }
+
+  return normalizeSettings({
+    ...current,
+    openrouterPlannerModel: preset.plannerModel,
+    openrouterDeepPlannerModel: preset.deepPlannerModel,
+    openrouterReviewerModel: preset.reviewerModel,
+    openrouterRetrieverModel: preset.retrieverModel,
+    openrouterExecutorModel: preset.executorModel,
+  });
+}
+
+export function normalizeSettings(input: AppSettings): AppSettings {
+  const provider = input.provider;
+  const googleApiKey = (input.googleApiKey || input.apiKey || "").trim();
+  const googleModel = (input.googleModel || DEFAULT_GOOGLE_MODEL).trim();
+  const localModel =
+    (input.localModel || (provider === "local" ? input.model : "") || DEFAULT_LOCAL_MODEL)
+      .trim();
+  const localEndpoint = (input.localEndpoint || DEFAULT_LOCAL_ENDPOINT).trim();
+  const openrouterApiKey =
+    (input.openrouterApiKey || (provider === "openrouter" ? input.apiKey : "") || "").trim();
+  const openrouterEndpoint =
+    (input.openrouterEndpoint || DEFAULT_OPENROUTER_ENDPOINT).trim();
+  const openrouterPlannerModel =
+    (input.openrouterPlannerModel || DEFAULT_OPENROUTER_PLANNER_MODEL).trim();
+  const openrouterDeepPlannerModel =
+    (input.openrouterDeepPlannerModel || DEFAULT_OPENROUTER_DEEP_PLANNER_MODEL).trim();
+  const openrouterReviewerModel =
+    (input.openrouterReviewerModel || DEFAULT_OPENROUTER_REVIEWER_MODEL).trim();
+  const openrouterRetrieverModel =
+    (input.openrouterRetrieverModel || DEFAULT_OPENROUTER_RETRIEVER_MODEL).trim();
+  const openrouterExecutorModel =
+    (
+      input.openrouterExecutorModel ||
+      (provider === "openrouter" ? input.model : "") ||
+      DEFAULT_OPENROUTER_EXECUTOR_MODEL
+    ).trim();
+
+  const normalized: AppSettings = {
+    ...DEFAULT_SETTINGS,
+    ...input,
+    provider,
+    apiKey: selectApiKeyForProvider(provider, {
+      googleApiKey,
+      openrouterApiKey,
+    }),
+    model: selectModelForProvider(provider, {
+      googleModel,
+      localModel,
+      openrouterExecutorModel,
+    }),
+    localEndpoint,
+    localModel,
+    googleApiKey,
+    googleModel,
+    openrouterApiKey,
+    openrouterEndpoint,
+    openrouterAppName: (input.openrouterAppName || DEFAULT_OPENROUTER_APP_NAME).trim(),
+    openrouterReferer: (input.openrouterReferer || "").trim(),
+    openrouterProviderOrder: normalizeProviderOrder(input.openrouterProviderOrder),
+    openrouterAllowFallbacks:
+      input.openrouterAllowFallbacks !== undefined
+        ? Boolean(input.openrouterAllowFallbacks)
+        : true,
+    openrouterRequireParameters: Boolean(input.openrouterRequireParameters),
+    openrouterDataCollection:
+      input.openrouterDataCollection === "deny" ? "deny" : "allow",
+    openrouterOnlyZdr: Boolean(input.openrouterOnlyZdr),
+    openrouterUseResponseHealing:
+      input.openrouterUseResponseHealing !== undefined
+        ? Boolean(input.openrouterUseResponseHealing)
+        : true,
+    openrouterAgentMode:
+      input.openrouterAgentMode === "single" ? "single" : "multi",
+    openrouterExecutionMode:
+      input.openrouterExecutionMode === "draft" ? "draft" : "tools",
+    openrouterUseRetriever: Boolean(input.openrouterUseRetriever),
+    openrouterShowTrace: Boolean(input.openrouterShowTrace),
+    openrouterPlannerModel,
+    openrouterDeepPlannerModel,
+    openrouterReviewerModel,
+    openrouterRetrieverModel,
+    openrouterExecutorModel,
+    autoExecutePythonScripts:
+      input.autoExecutePythonScripts !== undefined
+        ? Boolean(input.autoExecutePythonScripts)
+        : DEFAULT_SETTINGS.autoExecutePythonScripts,
+    autoRepairPythonScripts:
+      input.autoRepairPythonScripts !== undefined
+        ? Boolean(input.autoRepairPythonScripts)
+        : DEFAULT_SETTINGS.autoRepairPythonScripts,
+    autoRepairMaxAttempts: Math.max(
+      0,
+      Math.min(
+        typeof input.autoRepairMaxAttempts === "number"
+          ? Math.round(input.autoRepairMaxAttempts)
+          : DEFAULT_SETTINGS.autoRepairMaxAttempts,
+        4,
+      ),
+    ),
+    theme:
+      input.theme === "dark" || input.theme === "light" || input.theme === "auto"
+        ? input.theme
+        : DEFAULT_SETTINGS.theme,
+  };
+
+  return normalized;
+}
+
+function shouldMigrateLegacyDefaults(parsed: Partial<AppSettings>): boolean {
+  const provider = toProvider((parsed.provider as string) || null) || "google";
+  const legacyApiKey =
+    typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "";
+  const googleApiKey =
+    typeof parsed.googleApiKey === "string" ? parsed.googleApiKey.trim() : "";
+  const legacyModel =
+    typeof parsed.model === "string" ? parsed.model.trim() : LEGACY_DEFAULT_GOOGLE_MODEL;
+  const googleModel =
+    typeof parsed.googleModel === "string"
+      ? parsed.googleModel.trim()
+      : legacyModel;
+  const localEndpoint =
+    typeof parsed.localEndpoint === "string"
+      ? parsed.localEndpoint.trim()
+      : DEFAULT_LOCAL_ENDPOINT;
+
+  return (
+    provider === "google" &&
+    legacyApiKey.length === 0 &&
+    googleApiKey.length === 0 &&
+    googleModel === LEGACY_DEFAULT_GOOGLE_MODEL &&
+    localEndpoint === DEFAULT_LOCAL_ENDPOINT
+  );
+}
+
+export function loadStoredSettings(storageKey = "geoai-settings"): AppSettings {
+  const urlOverrides = loadSettingsFromUrl();
+
+  try {
+    const rawValue = localStorage.getItem(storageKey);
+    if (!rawValue) {
+      return normalizeSettings({
+        ...DEFAULT_SETTINGS,
+        ...urlOverrides,
+      });
+    }
+
+    const parsed = JSON.parse(rawValue) as Partial<AppSettings>;
+    const safeParsed = shouldMigrateLegacyDefaults(parsed) ? {} : parsed;
+    const provider =
+      urlOverrides.provider ||
+      toProvider((safeParsed.provider as string) || null) ||
+      DEFAULT_SETTINGS.provider;
+
+    const mergedBeforeNormalize: AppSettings = {
+      ...DEFAULT_SETTINGS,
+      ...safeParsed,
+      ...urlOverrides,
+      provider,
+      googleApiKey:
+        (urlOverrides.provider === "google"
+          ? DEFAULT_SETTINGS.googleApiKey
+          : undefined) ||
+        safeParsed.googleApiKey ||
+        (provider === "google" ? safeParsed.apiKey || "" : ""),
+      googleModel:
+        urlOverrides.googleModel ||
+        safeParsed.googleModel ||
+        (provider === "google" ? safeParsed.model || DEFAULT_GOOGLE_MODEL : DEFAULT_GOOGLE_MODEL),
+      localModel:
+        urlOverrides.localModel ||
+        safeParsed.localModel ||
+        (provider === "local" ? safeParsed.model || DEFAULT_LOCAL_MODEL : DEFAULT_LOCAL_MODEL),
+      openrouterApiKey:
+        safeParsed.openrouterApiKey ||
+        (provider === "openrouter" ? safeParsed.apiKey || "" : ""),
+      openrouterExecutorModel:
+        urlOverrides.openrouterExecutorModel ||
+        safeParsed.openrouterExecutorModel ||
+        (provider === "openrouter"
+          ? safeParsed.model || DEFAULT_OPENROUTER_EXECUTOR_MODEL
+          : DEFAULT_OPENROUTER_EXECUTOR_MODEL),
+      localEndpoint:
+        urlOverrides.localEndpoint ||
+        safeParsed.localEndpoint ||
+        DEFAULT_LOCAL_ENDPOINT,
+      openrouterEndpoint:
+        urlOverrides.openrouterEndpoint ||
+        safeParsed.openrouterEndpoint ||
+        DEFAULT_OPENROUTER_ENDPOINT,
+      apiKey: typeof safeParsed.apiKey === "string" ? safeParsed.apiKey : "",
+      model: typeof safeParsed.model === "string" ? safeParsed.model : DEFAULT_SETTINGS.model,
+    };
+
+    return normalizeSettings(mergedBeforeNormalize);
+  } catch {
+    return normalizeSettings({
+      ...DEFAULT_SETTINGS,
+      ...urlOverrides,
+    });
+  }
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function validateSettings(
+  settings: AppSettings,
+  options: SettingsValidationOptions = {},
+): string[] {
+  const issues: string[] = [];
+  const normalized = normalizeSettings(settings);
+
+  if (normalized.provider === "google") {
+    if (!normalized.googleModel.trim()) {
+      issues.push("Le modele Gemini est requis.");
+    }
+
+    if (!normalized.googleApiKey.trim() && !options.hasGeminiEnvKey) {
+      issues.push("Ajoute une cle API Gemini ou configure VITE_GEMINI_API_KEY.");
+    }
+  }
+
+  if (normalized.provider === "local") {
+    if (!normalized.localModel.trim()) {
+      issues.push("Le modele local est requis.");
+    }
+
+    if (!isValidHttpUrl(normalized.localEndpoint)) {
+      issues.push("L'endpoint local doit etre une URL HTTP valide.");
+    }
+  }
+
+  if (normalized.provider === "openrouter") {
+    if (!normalized.openrouterApiKey.trim() && !options.hasOpenRouterEnvKey) {
+      issues.push(
+        "Ajoute une cle API OpenRouter ou configure VITE_OPENROUTER_API_KEY.",
+      );
+    }
+
+    if (!isValidHttpUrl(normalized.openrouterEndpoint)) {
+      issues.push("L'endpoint OpenRouter doit etre une URL HTTP valide.");
+    }
+
+    if (!normalized.openrouterExecutorModel.trim()) {
+      issues.push("Le modele executeur OpenRouter est requis.");
+    }
+
+    if (!normalized.openrouterPlannerModel.trim()) {
+      issues.push("Le modele planner OpenRouter est requis.");
+    }
+
+    if (
+      normalized.openrouterAgentMode === "multi" &&
+      !normalized.openrouterReviewerModel.trim()
+    ) {
+      issues.push("Le modele reviewer OpenRouter est requis en mode multi-agent.");
+    }
+
+    if (
+      normalized.openrouterAgentMode === "multi" &&
+      normalized.openrouterUseRetriever &&
+      !normalized.openrouterRetrieverModel.trim()
+    ) {
+      issues.push("Le modele retriever OpenRouter est requis quand le reranking est actif.");
+    }
+  }
+
+  return issues;
+}
