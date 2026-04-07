@@ -1,7 +1,7 @@
-import { Database, Image as ImageIcon, Leaf, Map, Plus, Sparkles, TreePine, Waves, Layers as LayersIcon, BarChart3 } from "lucide-react";
-import { motion } from "motion/react";
+import { Database, Image as ImageIcon, Leaf, Map, Plus, Sparkles, TreePine, Waves, Layers as LayersIcon, BarChart3, ChevronDown } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { useState, useMemo } from "react";
 import QuickPromptsPanel from "./QuickPromptsPanel";
-import { useMemo } from "react";
 
 interface WelcomeScreenProps {
   onSendMessage: (message: string) => void;
@@ -173,6 +173,7 @@ const getDynamicSuggestions = (layers: Array<{ name: string; type?: string; geom
 
 export default function WelcomeScreen({ onSendMessage, layers = [] }: WelcomeScreenProps) {
   const suggestions = useMemo(() => getDynamicSuggestions(layers), [layers]);
+  const [showQuickPrompts, setShowQuickPrompts] = useState(false);
   return (
     <div className="relative flex min-h-full flex-col justify-center overflow-hidden py-12">
       <div className="absolute left-1/4 top-1/4 -z-10 h-72 w-72 rounded-full bg-blue-600/8 blur-[120px]" />
@@ -236,14 +237,32 @@ export default function WelcomeScreen({ onSendMessage, layers = [] }: WelcomeScr
         ))}
       </motion.div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.6, ease: "easeOut" }}
-        className="mt-8"
-      >
-        <QuickPromptsPanel onSelectPrompt={onSendMessage} />
-      </motion.div>
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          onClick={() => setShowQuickPrompts((v) => !v)}
+          className="flex items-center gap-1.5 text-[11px] text-white/20 hover:text-white/45 transition-colors"
+        >
+          <ChevronDown
+            size={12}
+            className={`transition-transform duration-200 ${showQuickPrompts ? "rotate-180" : ""}`}
+          />
+          Suggestions rapides
+        </button>
+      </div>
+      <AnimatePresence>
+        {showQuickPrompts && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden mt-3"
+          >
+            <QuickPromptsPanel onSelectPrompt={(p) => { onSendMessage(p); setShowQuickPrompts(false); }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
