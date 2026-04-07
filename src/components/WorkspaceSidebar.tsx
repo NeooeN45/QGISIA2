@@ -970,37 +970,6 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
 
   const renderServicesTab = () => (
     <div className="space-y-4">
-      {/* ── Accès rapides ── */}
-      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gradient-to-br from-emerald-500/5 to-cyan-500/5 p-3">
-        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-300/70">
-          Accès rapides
-        </p>
-        <div className="grid grid-cols-3 gap-1.5">
-          {[
-            { id: "osm-standard", label: "OSM", icon: "🗺" },
-            { id: "geopf-wms-raster", label: "IGN Photo", icon: "🛰" },
-            { id: "geopf-wmts-planign", label: "IGN Plan", icon: "📍" },
-            { id: "carto-dark", label: "Dark", icon: "🌑" },
-            { id: "esri-world-imagery", label: "Satellite", icon: "🌍" },
-            { id: "ign-scan25", label: "Topo 1:25k", icon: "⛰" },
-          ].map(({ id, label, icon }) => {
-            const item = ALL_DATA_SOURCES.find((c) => c.id === id);
-            if (!item) return null;
-            return (
-              <button
-                key={id}
-                onClick={() => void onAddRemoteService(item)}
-                title={item.name}
-                className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white/70 dark:bg-white/[0.03] px-1.5 py-2 text-center transition-all hover:border-emerald-500/30 hover:bg-emerald-500/8 hover:shadow-sm"
-              >
-                <span className="text-base leading-none">{icon}</span>
-                <span className="text-[9px] font-semibold text-gray-600 dark:text-gray-300 leading-tight">{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* ── Sources officielles ── */}
       <CollapsibleSection
         title="Sources officielles"
