@@ -327,10 +327,10 @@ export default function SettingsModal({
     source: "browser",
   }));
 
-  // Charger les vraies specs Python dès que le modal s'ouvre
-  useEffect(() => {
-    void getSystemSpecs().then((specs) => {
-      if (!specs) return;
+  // Charger les vraies specs Python + scan Ollama au montage du modal
+  const refreshSpecs = useCallback(async () => {
+    const specs = await getSystemSpecs();
+    if (specs) {
       setPcSpecs({
         ramGb: specs.ram_total_gb,
         ramAvailableGb: specs.ram_available_gb,
@@ -344,7 +344,17 @@ export default function SettingsModal({
         gpuCuda: specs.gpu_has_cuda,
         source: "python",
       });
-    });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void refreshSpecs();
+  }, [refreshSpecs]);
+
+  // Auto-scan Ollama au montage
+  useEffect(() => {
+    void loadInstalledModels();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1065,13 +1075,22 @@ export default function SettingsModal({
 
                     {/* Panneau specs PC */}
                     <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Specs détectées</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 flex-1">Specs détectées</p>
+                        <button
+                          type="button"
+                          onClick={() => void refreshSpecs()}
+                          className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/40 hover:bg-white/10 hover:text-white/70 transition-all"
+                          title="Re-détecter les specs"
+                        >
+                          <RefreshCw size={9} />
+                          Actualiser
+                        </button>
                         <span className={cn(
                           "rounded-full px-1.5 py-0.5 text-[9px] font-semibold",
                           pcSpecsSource === "python" ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
                         )}>
-                          {pcSpecsSource === "python" ? "✓ Via QGIS (précis)" : "⚠ Via navigateur (limité)"}
+                          {pcSpecsSource === "python" ? "✓ QGIS" : "⚠ Navigateur"}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
