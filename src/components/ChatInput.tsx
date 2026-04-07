@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ChevronDown,
   Database,
   Layers,
   Loader2,
@@ -80,6 +81,7 @@ export default function ChatInput({
   onToggleLayerSelection,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
+  const [showTests, setShowTests] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const settings = useSettingsStore((s) => s.settings);
   const isQgisConnected = useUIStore((s) => s.isQgisConnected);
@@ -183,18 +185,30 @@ export default function ChatInput({
         )}
 
         {isQgisConnected && (
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            {quickTests.map((test) => (
-              <button
-                key={test.label}
-                type="button"
-                onClick={() => void onSendMessage(test.prompt)}
-                disabled={isLoading}
-                className="rounded-full border border-cyan-500/20 bg-cyan-500/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-100 transition-all hover:bg-cyan-500/14 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {test.label}
-              </button>
-            ))}
+          <div className="mb-2">
+            <button
+              type="button"
+              onClick={() => setShowTests((v) => !v)}
+              className="flex items-center gap-1 text-[10px] text-white/20 hover:text-white/40 transition-colors"
+            >
+              <ChevronDown size={10} className={`transition-transform duration-150 ${showTests ? "rotate-180" : ""}`} />
+              Tests rapides
+            </button>
+            {showTests && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                {quickTests.map((test) => (
+                  <button
+                    key={test.label}
+                    type="button"
+                    onClick={() => { void onSendMessage(test.prompt); setShowTests(false); }}
+                    disabled={isLoading}
+                    className="rounded-full border border-cyan-500/20 bg-cyan-500/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-100 transition-all hover:bg-cyan-500/14 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {test.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

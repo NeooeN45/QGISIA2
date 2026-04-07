@@ -3,10 +3,61 @@
 Détection des capacités du système pour Ollama et LLM
 """
 import platform
-import psutil
 import subprocess
 import os
 from typing import Dict, List, Optional
+
+try:
+    import psutil as _psutil
+    _HAS_PSUTIL = True
+except ImportError:
+    _psutil = None  # type: ignore
+    _HAS_PSUTIL = False
+
+
+def _ram_total_gb_fallback() -> float:
+    """Fallback RAM total via ctypes (Windows) ou /proc/meminfo (Linux/Mac)"""
+    try:
+        if platform.system() == "Windows":
+            import ctypes
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(stat)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            return (round(stat.ullTotalPhys / (1024**3), 1),
+                    round(stat.ullAvailPhys / (1024**3), 1))
+        elif os.path.exists("/proc/meminfo"):
+            total, avail = 0, 0
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        total = int(line.split()[1]) * 1024
+                    elif line.startswith("MemAvailable:"):
+                        avail = int(line.split()[1]) * 1024
+            return (round(total / (1024**3), 1), round(avail / (1024**3), 1))
+    except Exception:
+        pass
+    return (8.0, 4.0)
+
+
+def _cpu_count_fallback():
+    """Fallback CPU count via os.cpu_count"""
+    try:
+        logical = os.cpu_count() or 1
+        return logical, max(1, logical // 2)
+    except Exception:
+        return 1, 1
 
 
 class SystemCapabilities:
@@ -17,16 +68,25 @@ class SystemCapabilities:
     
     def _get_system_info(self) -> Dict:
         """Récupère les informations du système"""
+        if _HAS_PSUTIL:
+            ram_total = round(_psutil.virtual_memory().total / (1024**3), 1)
+            ram_avail = round(_psutil.virtual_memory().available / (1024**3), 1)
+            cpu_logical = _psutil.cpu_count(logical=True) or 1
+            cpu_physical = _psutil.cpu_count(logical=False) or 1
+        else:
+            ram_total, ram_avail = _ram_total_gb_fallback()
+            cpu_logical, cpu_physical = _cpu_count_fallback()
+
         info = {
             "platform": platform.system(),
             "platform_release": platform.release(),
             "platform_version": platform.version(),
             "architecture": platform.machine(),
             "processor": platform.processor(),
-            "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 1),
-            "ram_available_gb": round(psutil.virtual_memory().available / (1024**3), 1),
-            "cpu_count": psutil.cpu_count(logical=True),
-            "cpu_physical_count": psutil.cpu_count(logical=False),
+            "ram_total_gb": ram_total,
+            "ram_available_gb": ram_avail,
+            "cpu_count": cpu_logical,
+            "cpu_physical_count": cpu_physical,
         }
         
         # Détection GPU
