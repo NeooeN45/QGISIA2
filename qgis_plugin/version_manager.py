@@ -18,10 +18,11 @@ class QgisVersionManager:
         self.current_site_packages = self._detect_site_packages()
     
     def _detect_qgis_version(self) -> str:
-        """Détecte la version de QGIS en cours d'exécution"""
+        """Détecte la version de QGIS en cours d'exécution (compatible 3.x et 4.x)"""
         try:
             from qgis.core import Qgis
-            return Qgis.versionInt()
+            ver = Qgis.versionInt() if callable(Qgis.versionInt) else int(Qgis.QGIS_VERSION_INT)
+            return str(ver)
         except ImportError:
             return "unknown"
     
@@ -47,17 +48,30 @@ class QgisVersionManager:
         return None
     
     def _detect_site_packages(self) -> Optional[Path]:
-        """Détecte le site-packages de la version actuelle de QGIS"""
+        """Détecte le site-packages de la version actuelle de QGIS (PyQt5 ou PyQt6)"""
         qgis_path = self.current_qgis_path
         if not qgis_path:
             return None
-        
-        # Chercher Python*/Lib/site-packages
+
+        # QGIS 4 utilise PyQt6, QGIS 3 PyQt5
+        try:
+            qgis_major = int(str(self.current_qgis_version)[:1])
+        except (ValueError, TypeError):
+            qgis_major = 3
+        pyqt_pkg = "PyQt6" if qgis_major >= 4 else "PyQt5"
+
+        # Chercher Python*/Lib/site-packages avec le bon PyQt
+        for python_dir in sorted(qgis_path.glob("Python*"), reverse=True):
+            site_packages = python_dir / "Lib" / "site-packages"
+            if site_packages.exists() and (site_packages / pyqt_pkg).exists():
+                return site_packages
+
+        # Fallback : prendre le premier site-packages existant
         for python_dir in sorted(qgis_path.glob("Python*"), reverse=True):
             site_packages = python_dir / "Lib" / "site-packages"
             if site_packages.exists():
                 return site_packages
-        
+
         return None
     
     def get_qgis_info(self) -> dict:
@@ -154,12 +168,19 @@ class QgisVersionManager:
             return Path(plugin_path)
         
         # Méthode 2: Via le profil utilisateur
+        # Détecter si QGIS 3 ou 4 pour le nom du dossier profil
+        try:
+            qgis_major = int(str(self.current_qgis_version)[:1])
+        except (ValueError, TypeError):
+            qgis_major = 3
+        qgis_folder = f"QGIS{qgis_major}"
+
         if sys.platform == "win32":
-            profile_dir = Path(os.environ.get("APPDATA", "")) / "QGIS" / "QGIS3" / "profiles"
+            profile_dir = Path(os.environ.get("APPDATA", "")) / "QGIS" / qgis_folder / "profiles"
         elif sys.platform == "darwin":
-            profile_dir = Path.home() / "Library" / "Application Support" / "QGIS" / "QGIS3" / "profiles"
+            profile_dir = Path.home() / "Library" / "Application Support" / "QGIS" / qgis_folder / "profiles"
         else:
-            profile_dir = Path.home() / ".local" / "share" / "QGIS" / "QGIS3" / "profiles"
+            profile_dir = Path.home() / ".local" / "share" / "QGIS" / qgis_folder / "profiles"
         
         # Chercher le profil par défaut
         default_profile = profile_dir / "default" / "python" / "plugins"
