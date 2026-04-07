@@ -904,7 +904,9 @@ export interface SystemSpecs {
 }
 
 export async function getSystemSpecs(): Promise<SystemSpecs | null> {
-  if (!isHttpBridgeEnabled()) return null;
+  // Pas de guard isHttpBridgeEnabled() : on tente toujours le fetch direct.
+  // Si QGIS sert la page, le serveur HTTP local répondra quel que soit le flag bridge=http.
+  // Si non servi par QGIS, le fetch échoue silencieusement et le fallback navigateur s'applique.
   try {
     const baseUrl = window.location.origin;
     const url = new URL("/api/qgis/getSystemSpecs", baseUrl);
