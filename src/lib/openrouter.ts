@@ -144,6 +144,8 @@ interface ChatCompletionOptions {
   responseFormat?: OpenRouterJsonSchemaResponseFormat;
   zdr?: boolean;
   maxTokens?: number;
+  temperature?: number;
+  topP?: number;
 }
 
 function normalizeBaseUrl(value: string): string {
@@ -201,8 +203,8 @@ function calculateRoleMaxTokens(
         return Math.min(Math.max(maxCompletion, 300), 1000);
     }
   } else {
-    // Compte payant: utiliser le contexte du modèle
-    const contextLength = 32000;
+    // Compte payant: contexte conservateur pour les modèles modernes (128K tokens minimum)
+    const contextLength = 128_000;
     const maxCompletion = Math.min(contextLength - estimatedInputTokens - 1000, 8192);
     
     switch (role) {
@@ -245,16 +247,58 @@ function buildHeaders(
 
 function requireResponseOk(
   response: Response,
-  payload?: { error?: { message?: string } },
+  payload?: { error?: { message?: string; metadata?: { raw?: string } } },
 ): void {
   if (response.ok) {
     return;
   }
 
+  const detail = payload?.error?.message || payload?.error?.metadata?.raw || "";
+
+  if (response.status === 401) {
+    throw new Error(
+      "Clé API OpenRouter invalide ou expirée (401). Vérifiez votre clé dans les paramètres."
+    );
+  }
+  if (response.status === 402) {
+    throw new Error(
+      "Crédit OpenRouter insuffisant (402). Rechargez votre solde sur openrouter.ai/credits."
+    );
+  }
+  if (response.status === 429) {
+    throw new Error(
+      `Limite de requêtes OpenRouter atteinte (429). Attendez quelques secondes avant de réessayer.${detail ? " — " + detail : ""}`
+    );
+  }
+  if (response.status === 408 || response.status === 504) {
+    throw new Error(
+      `Délai d’attente dépassé chez OpenRouter (${response.status}). Le modèle est peut-être surchargé.`
+    );
+  }
+  if (response.status >= 500) {
+    throw new Error(
+      `Erreur serveur OpenRouter (${response.status}). Réessayez dans quelques instants.${detail ? " — " + detail : ""}`
+    );
+  }
+
   throw new Error(
-    payload?.error?.message ||
-      `OpenRouter a renvoye une erreur HTTP ${response.status}.`,
+    detail || `OpenRouter a renvoye une erreur HTTP ${response.status}.`,
   );
+}
+
+async function withApiTimeout<T>(fn: () => Promise<T>, timeoutMs = 120_000, label = "API"): Promise<T> {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fn();
+  } catch (err) {
+    if ((err as Error)?.name === "AbortError") {
+      throw new Error(`Délai dépassé (${timeoutMs / 1000}s) pour ${label}. Le modèle est peut-être surchargé.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(tid);
+  }
 }
 
 function summarizeForTrace(value: string): string {
@@ -347,6 +391,8 @@ async function finalizeAfterToolLoop(
         provider: options.provider,
         zdr: options.zdr,
         max_tokens: options.maxTokens,
+        temperature: options.temperature,
+        top_p: options.topP,
       }),
       signal: options.signal,
     });
@@ -660,11 +706,24 @@ export async function fetchOpenRouterKeyInfo(
     throw new Error("Aucune cle API OpenRouter n'est configuree.");
   }
 
-  const response = await fetch(`${normalizeBaseUrl(settings.openrouterEndpoint)}/key`, {
-    method: "GET",
-    headers: buildHeaders(apiKey, settings),
-    signal,
-  });
+  const ctrl = new AbortController();
+  const combinedSignal = signal ?? ctrl.signal;
+  const tid = setTimeout(() => ctrl.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetch(`${normalizeBaseUrl(settings.openrouterEndpoint)}/key`, {
+      method: "GET",
+      headers: buildHeaders(apiKey, settings),
+      signal: combinedSignal,
+    });
+  } catch (err) {
+    clearTimeout(tid);
+    if ((err as Error)?.name === "AbortError") {
+      throw new Error("Vérification de la clé OpenRouter expirée (timeout 10s). Vérifiez votre connexion.");
+    }
+    throw err;
+  }
+  clearTimeout(tid);
 
   const payload = (await response.json()) as OpenRouterKeyResponse;
   requireResponseOk(response, payload);
@@ -826,6 +885,8 @@ async function runChatCompletion(
         response_format: options.responseFormat,
         zdr: options.zdr,
         max_tokens: options.maxTokens,
+        temperature: options.temperature,
+        top_p: options.topP,
       }),
       signal: options.signal,
     });
@@ -966,9 +1027,8 @@ export async function generateOpenRouterReply(
   let keyInfo: OpenRouterKeyInfo | null = null;
   try {
     keyInfo = await fetchOpenRouterKeyInfo(input.settings, input.signal);
-  } catch (error) {
+  } catch {
     // En cas d'erreur, on suppose que c'est le free tier par défaut
-    console.warn("Impossible de récupérer les infos de la clé OpenRouter:", error);
   }
   
   const isFreeTier = keyInfo?.isFreeTier ?? true;
@@ -979,23 +1039,40 @@ export async function generateOpenRouterReply(
     {
       role: "system",
       content: [
-        "Tu es l'agent planner GeoAI QGIS. Formule une stratégie SIG fiable en français.",
-        "Respecte le schema JSON. N'invente pas de couches/champs/CRS inexistants.",
-        "Privilégie les API officielles (IGN, geo.api.gouv.fr, Overpass).",
-        "Pour les workflows simples: commune->searchGeoApiCommunes+zoomToLayer ; cadastre->searchGeoApiCommunes+searchCadastreParcels+applyParcelStylePreset+zoomToLayer.",
+        "Tu es l'agent planner de GeoSylva AI, expert SIG intégré dans QGIS. Réponds toujours en français.",
+        "Ton rôle : analyser la demande, identifier les couches et données concernées, et produire un plan d'exécution robuste.",
+        "",
+        "EXPERTISE DOMAINE :",
+        "- Géomatique française : Lambert 93 (EPSG:2154), normes IGN, données Géoportail",
+        "- Foresterie : peuplements, placettes, PSG, ONF, essences, volume bois",
+        "- Cadastre : parcelles, sections, commune, propriétaires via cadastre.gouv.fr",
+        "- Analyse spatiale : intersection, tampon, statistiques zonales, krigeage",
+        "",
+        "RÈGLES ABSOLUES :",
+        "- N'invente JAMAIS de couches, champs, CRS, fichiers ou statistiques absents du contexte.",
+        "- Données françaises : préconise EPSG:2154 en sortie systématiquement.",
+        "- N'affirme jamais un propriétaire de parcelle sans source publique (cadastre.gouv.fr).",
+        "- Identifie les risques et les informations manquantes avant d'agir.",
+        "",
+        "WORKFLOWS STANDARDS :",
+        "- Commune : searchGeoApiCommunes → zoomToLayer",
+        "- Cadastre : searchGeoApiCommunes → searchCadastreParcels → applyParcelStylePreset → zoomToLayer",
+        "- Raster NDVI : mergeRasterBands → calcul d'indices → export GeoTIFF",
+        "- Inventaire : createInventoryGrid → placement placettes → export",
+        "Respecte strictement le schéma JSON. ",
         input.conversationMode === "plan"
-          ? "Mode plan: 3-7 étapes, pas d'action directe."
-          : "Mode action: 3-5 étapes pour l'executor.",
+          ? "Mode PLAN : 3-7 étapes détaillées, pas d'exécution directe. Explique chaque étape."
+          : "Mode ACTION : 3-5 étapes concrètes et ordonnées pour l'executor.",
       ].join("\n"),
     },
     {
       role: "user",
       content: [
-        `Demande:\n${input.latestUserMessage}`,
+        `Demande utilisateur :\n${input.latestUserMessage}`,
         relevantContext
-          ? `Contexte prioritaire:\n${relevantContext.substring(0, 2000)}`
-          : "Aucun contexte.",
-        `Contexte complet:\n${input.prompt.substring(0, 3000)}`,
+          ? `Contexte SIG prioritaire :\n${relevantContext.substring(0, 3000)}`
+          : "Aucun contexte de couches disponible.",
+        `Contexte complet du projet :\n${input.prompt.substring(0, 4000)}`,
       ].join("\n\n"),
     },
   ];
@@ -1013,6 +1090,8 @@ export async function generateOpenRouterReply(
     provider: buildProviderPreferences(input.settings, { requireParameters: true }),
     zdr: input.settings.openrouterOnlyZdr,
     maxTokens: calculateRoleMaxTokens("planner", plannerMessages, isFreeTier),
+    temperature: input.settings.temperature,
+    topP: input.settings.topP,
   });
   let workingPlan = parseStructuredPlan(planner.text);
   trace.push({
@@ -1029,20 +1108,28 @@ export async function generateOpenRouterReply(
       {
         role: "system",
         content: [
-          "Tu es l'agent planner profond GeoAI QGIS. Améliore le plan fourni.",
-          "Rends le plan plus robuste: CRS, champs, filtres, risques, sorties.",
-          "Respecte le schema JSON. N'invente pas de données.",
-          "Clarifie l'état courant, réduis les étapes inutiles.",
+          "Tu es l'agent planner profond de GeoSylva AI. Ton rôle : raffiner et solidifier le plan initial.",
+          "",
+          "OBJECTIFS DU RAFFINAGE :",
+          "- Vérifier que chaque étape est réalisable avec les couches disponibles",
+          "- Préciser les CRS d'entrée et de sortie pour chaque opération",
+          "- Identifier les champs attributaires nécessaires et leurs valeurs attendues",
+          "- Renforcer la gestion d'erreurs : que faire si une couche est absente ?",
+          "- Éliminer les étapes redondantes ou non nécessaires",
+          "- Ajouter les préconditions manquantes (ex: reprojection avant analyse)",
+          "- Évaluer les risques de performance (couches volumineuses, calculs lourds)",
+          "",
+          "Respecte strictement le schéma JSON. N'invente pas de données ou couches absentes.",
         ].join("\n"),
       },
-        {
-          role: "user",
-          content: [
-          `Plan initial:\n${serializePlan(workingPlan).substring(0, 1500)}`,
+      {
+        role: "user",
+        content: [
+          `Plan initial à raffiner :\n${serializePlan(workingPlan).substring(0, 2500)}`,
           relevantContext
-            ? `Contexte:\n${relevantContext.substring(0, 1000)}`
-            : "Pas de contexte.",
-          `Demande:\n${input.latestUserMessage}`,
+            ? `Contexte SIG disponible :\n${relevantContext.substring(0, 2000)}`
+            : "Pas de contexte de couches.",
+          `Demande originale :\n${input.latestUserMessage}`,
         ].join("\n\n"),
       },
     ];
@@ -1060,6 +1147,8 @@ export async function generateOpenRouterReply(
       provider: buildProviderPreferences(input.settings, { requireParameters: true }),
       zdr: input.settings.openrouterOnlyZdr,
       maxTokens: calculateRoleMaxTokens("planner_deep", deepPlannerMessages, isFreeTier),
+      temperature: input.settings.temperature,
+      topP: input.settings.topP,
     });
 
     workingPlan = parseStructuredPlan(deepPlanner.text);
@@ -1076,17 +1165,23 @@ export async function generateOpenRouterReply(
           {
             role: "system",
             content: [
-              "Tu es l'agent reviewer GeoAI QGIS. Vérifie le plan.",
-              "Renvoie uniquement un plan final propre.",
-              "Respecte le schema JSON. N'invente pas de données.",
-              "Le plan doit être sobre, verifiable et actionnable.",
+              "Tu es l'agent reviewer de GeoSylva AI. Ton rôle : valider la qualité et la cohérence du plan.",
+              "",
+              "CRITÈRES DE VALIDATION :",
+              "- Chaque étape est-elle réalisable avec les données disponibles ?",
+              "- Les CRS sont-ils correctement gérés (reprojection si nécessaire) ?",
+              "- Les risques identifiés sont-ils traités ou mentionnés ?",
+              "- La validation_request est-elle claire et actionnable pour l'utilisateur ?",
+              "- Y a-t-il des étapes redondantes ou des incohérences à corriger ?",
+              "",
+              "Renvoie uniquement le plan corrigé et validé. Respecte le schéma JSON. N'invente pas de données.",
             ].join("\n"),
           },
           {
             role: "user",
             content: [
-              `Plan à vérifier:\n${serializePlan(workingPlan).substring(0, 1500)}`,
-              `Demande:\n${input.latestUserMessage}`,
+              `Plan à valider :\n${serializePlan(workingPlan).substring(0, 2500)}`,
+              `Demande originale :\n${input.latestUserMessage}`,
             ].join("\n\n"),
           },
         ];
@@ -1103,6 +1198,8 @@ export async function generateOpenRouterReply(
         provider: buildProviderPreferences(input.settings, { requireParameters: true }),
         zdr: input.settings.openrouterOnlyZdr,
         maxTokens: calculateRoleMaxTokens("reviewer", reviewerMessages, isFreeTier),
+        temperature: input.settings.temperature,
+        topP: input.settings.topP,
       });
 
       workingPlan = parseStructuredPlan(reviewer.text);
@@ -1129,20 +1226,26 @@ export async function generateOpenRouterReply(
         {
           role: "system",
           content: [
-            "Tu es l'agent reviewer GeoAI QGIS. Vérifie la stratégie avant exécution.",
-            "Renvoie uniquement une version corrigée.",
-            "Respecte le schema JSON. N'invente pas de données.",
-            "Supprime les étapes inutiles.",
+            "Tu es l'agent reviewer de GeoSylva AI. Valide la stratégie avant exécution réelle.",
+            "",
+            "VÉRIFICATIONS CRITIQUES :",
+            "- Les couches citées existent-elles dans le contexte fourni ?",
+            "- Les CRS sont-ils compatibles avec les opérations prévues ?",
+            "- Les étapes sont-elles dans le bon ordre logique ?",
+            "- Y a-t-il des risques de perte de données ou d'erreurs QGIS ?",
+            "- La validation_request est-elle précise et utile pour l'utilisateur ?",
+            "",
+            "Renvoie uniquement la stratégie corrigée. Respecte le schéma JSON. N'invente pas de données.",
           ].join("\n"),
         },
         {
           role: "user",
           content: [
-            `Stratégie:\n${serializePlan(workingPlan).substring(0, 1500)}`,
+            `Stratégie à valider :\n${serializePlan(workingPlan).substring(0, 2500)}`,
             relevantContext
-              ? `Contexte:\n${relevantContext.substring(0, 1000)}`
-              : "Pas de contexte.",
-            `Demande:\n${input.latestUserMessage}`,
+              ? `Contexte SIG disponible :\n${relevantContext.substring(0, 1500)}`
+              : "Pas de contexte de couches.",
+            `Demande originale :\n${input.latestUserMessage}`,
           ].join("\n\n"),
         },
       ];
@@ -1159,6 +1262,8 @@ export async function generateOpenRouterReply(
       provider: buildProviderPreferences(input.settings, { requireParameters: true }),
       zdr: input.settings.openrouterOnlyZdr,
       maxTokens: calculateRoleMaxTokens("reviewer", reviewerMessages, isFreeTier),
+      temperature: input.settings.temperature,
+      topP: input.settings.topP,
     });
 
     reviewedPlan = parseStructuredPlan(reviewer.text);
@@ -1173,23 +1278,41 @@ export async function generateOpenRouterReply(
       {
         role: "system",
         content: [
-            "Tu es l'agent executeur GeoAI QGIS. Réponds en français de manière concise.",
-            "Utilise les outils QGIS pour vérifier l'état réel avant de conclure.",
-            "Si une action ne peut pas se faire via outils, propose un script PyQGIS.",
-            "N'invente pas l'état du projet: consulte les outils.",
-            "N'affirme jamais un propriétaire de parcelle sans source.",
-            "Workflows: commune->searchGeoApiCommunes+zoomToLayer ; cadastre->searchGeoApiCommunes+searchCadastreParcels+applyParcelStylePreset+zoomToLayer.",
-          ].join("\n"),
+          "Tu es l'agent exécuteur de GeoSylva AI, expert PyQGIS et SIG intégré dans QGIS. Réponds en français.",
+          "",
+          "RÔLE : Exécuter la stratégie validée en appelant les outils QGIS dans le bon ordre.",
+          "",
+          "EXPERTISE :",
+          "- PyQGIS : QgsProject, QgsVectorLayer, QgsRasterLayer, processing, iface",
+          "- Données françaises : EPSG:2154 (Lambert 93), IGN, Géoportail, cadastre.gouv.fr",
+          "- Foresterie : peuplements, placettes inventaire, PSG, essences, tarifs de cubage",
+          "- Geoprocessing : buffer, clip, intersect, union, dissolve, zonal stats",
+          "",
+          "RÈGLES D'EXÉCUTION :",
+          "1. Utilise TOUJOURS les outils bridge en priorité (getLayersList, getLayerFields, etc.)",
+          "2. Vérifie l'état réel du projet avant toute action (appelle getLayersCatalog si nécessaire)",
+          "3. Si action impossible via outils : génère UN SEUL bloc ```python``` PyQGIS complet avec gestion d'erreurs",
+          "4. N'invente JAMAIS l'état des couches, des champs ou des statistiques",
+          "5. N'affirme jamais un propriétaire de parcelle sans source publique officielle",
+          "6. Données françaises : vérifie et préconise EPSG:2154 en sortie",
+          "7. Termine toujours par un résumé clair de ce qui a été fait",
+          "",
+          "WORKFLOWS STANDARDS :",
+          "- Commune : searchGeoApiCommunes → zoomToLayer",
+          "- Cadastre : searchGeoApiCommunes → searchCadastreParcels → applyParcelStylePreset → zoomToLayer",
+          "- Raster NDVI : mergeRasterBands → calcul → export GeoTIFF",
+          "- Inventaire forestier : createInventoryGrid → placement placettes → statistiques",
+        ].join("\n"),
       },
       {
         role: "user",
         content: [
-          `Stratégie:\n${formatPlanAsMarkdown(reviewedPlan).substring(0, 2000)}`,
+          `Stratégie validée :\n${formatPlanAsMarkdown(reviewedPlan).substring(0, 3000)}`,
           relevantContext
-            ? `Contexte:\n${relevantContext.substring(0, 1500)}`
-            : "Pas de contexte.",
-          `Demande:\n${input.latestUserMessage}`,
-          "Vérifie l'état réel via les outils si nécessaire.",
+            ? `Contexte SIG du projet :\n${relevantContext.substring(0, 2000)}`
+            : "Pas de contexte de couches disponible.",
+          `Demande de l'utilisateur :\n${input.latestUserMessage}`,
+          "Exécute la stratégie étape par étape. Vérifie l'état réel via les outils avant chaque action importante.",
         ].join("\n\n"),
       },
     ];
@@ -1205,7 +1328,7 @@ export async function generateOpenRouterReply(
       input.settings.openrouterExecutionMode === "tools"
         ? getOpenAiQgisToolDefinitions()
         : undefined,
-    maxToolRounds: 3,
+    maxToolRounds: 6,
     plugins: buildPlugins(input.settings, false),
     provider: buildProviderPreferences(input.settings, {
       requireParameters:
@@ -1213,6 +1336,8 @@ export async function generateOpenRouterReply(
     }),
     zdr: input.settings.openrouterOnlyZdr,
     maxTokens: calculateRoleMaxTokens("executor", executorMessages, isFreeTier),
+    temperature: input.settings.temperature,
+    topP: input.settings.topP,
   });
 
   if (
@@ -1223,20 +1348,24 @@ export async function generateOpenRouterReply(
         {
           role: "system",
           content: [
-            "Tu es l'agent executeur GeoAI QGIS. Réponds en français.",
-            "Vérifie l'état réel via les outils avant de conclure.",
-            "N'invente pas de données. N'appelle pas d'outils inutiles.",
+            "Tu es l'agent exécuteur de GeoSylva AI. Réponds en français.",
+            "Utilise les outils QGIS pour vérifier l'état réel du projet avant de répondre.",
+            "N'invente pas de données, champs ou couches. N'appelle pas d'outils inutiles.",
+            "Si une action nécessite PyQGIS, fournis un bloc ```python``` complet et auto-suffisant.",
           ].join("\n"),
         },
         {
           role: "user",
           content: [
-            `Objectif:\n${reviewedPlan.objective}`,
+            `Objectif :\n${reviewedPlan.objective}`,
             reviewedPlan.concerned_layers.length > 0
-              ? `Couches:\n${reviewedPlan.concerned_layers.join(", ")}`
+              ? `Couches concernées :\n${reviewedPlan.concerned_layers.join(", ")}`
               : null,
-            `Demande:\n${input.latestUserMessage}`,
-            "Vérifie le projet via les outils si nécessaire.",
+            reviewedPlan.execution_plan.length > 0
+              ? `Étapes à exécuter :\n${reviewedPlan.execution_plan.map((s, i) => `${i + 1}. ${s}`).join("\n")}`
+              : null,
+            `Demande de l'utilisateur :\n${input.latestUserMessage}`,
+            "Commence par vérifier l'état réel du projet via les outils si nécessaire.",
           ]
             .filter(Boolean)
             .join("\n\n"),
@@ -1251,13 +1380,15 @@ export async function generateOpenRouterReply(
       appName: input.settings.openrouterAppName,
       referer: input.settings.openrouterReferer,
       tools: getOpenAiQgisToolDefinitions(),
-      maxToolRounds: 5,
+      maxToolRounds: 8,
       plugins: buildPlugins(input.settings, false),
       provider: buildProviderPreferences(input.settings, {
         requireParameters: true,
       }),
       zdr: input.settings.openrouterOnlyZdr,
       maxTokens: calculateRoleMaxTokens("executor", fallbackMessages, isFreeTier),
+      temperature: input.settings.temperature,
+      topP: input.settings.topP,
     });
   }
 

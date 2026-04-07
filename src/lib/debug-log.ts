@@ -12,7 +12,7 @@ export interface DebugEvent {
 
 const STORAGE_KEY = "geoai-debug-events";
 const UPDATE_EVENT = "geoai-debug-events-updated";
-const MAX_EVENTS = 80;
+const MAX_EVENTS = 200;
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";

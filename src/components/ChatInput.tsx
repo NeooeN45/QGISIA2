@@ -92,6 +92,12 @@ export default function ChatInput({
     textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 220)}px`;
   }, [input]);
 
+  useEffect(() => {
+    const handler = () => textareaRef.current?.focus();
+    document.addEventListener("focusChatInput", handler);
+    return () => document.removeEventListener("focusChatInput", handler);
+  }, []);
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -153,7 +159,7 @@ export default function ChatInput({
   };
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-[#131314] via-[#131314] to-transparent px-4 pb-8 pt-16 md:px-6">
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-gray-50 dark:from-[#131314] via-gray-50/95 dark:via-[#131314]/95 to-transparent px-4 pb-8 pt-20 md:px-6">
       <div className="pointer-events-auto mx-auto max-w-4xl">
         {selectedLayers.length > 0 && (
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -161,7 +167,7 @@ export default function ChatInput({
               <button
                 key={layer.id}
                 onClick={() => onToggleLayerSelection(layer.id)}
-                className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-100 transition-all hover:bg-emerald-500/16"
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700 dark:text-emerald-100 transition-all hover:bg-emerald-500/20"
                 title="Retirer cette couche du contexte"
               >
                 <span>{layer.name}</span>
@@ -184,7 +190,7 @@ export default function ChatInput({
                 type="button"
                 onClick={() => void onSendMessage(test.prompt)}
                 disabled={isLoading}
-                className="rounded-full border border-cyan-500/20 bg-cyan-500/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-100 transition-all hover:bg-cyan-500/14 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full border border-cyan-500/20 bg-cyan-500/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-100 transition-all hover:bg-cyan-500/14 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {test.label}
               </button>
@@ -193,8 +199,9 @@ export default function ChatInput({
         )}
 
         <form onSubmit={handleSubmit} className="group relative">
-          <div className="absolute -inset-1.5 rounded-[36px] bg-gradient-to-r from-[#4285f4] via-[#34a853] to-[#fbbc05] opacity-10 blur-xl transition-opacity duration-1000 group-focus-within:opacity-35" />
-          <div className="relative rounded-[32px] border border-gray-300 dark:border-[#333537] bg-gray-100 dark:bg-[#1a1a1b] px-5 py-2.5 shadow-sm dark:shadow-2xl transition-all focus-within:border-emerald-500/50 focus-within:bg-gray-200 dark:focus-within:bg-[#252628]">
+          <div className="absolute -inset-4 rounded-[44px] bg-gradient-to-r from-blue-500 via-emerald-500 to-violet-500 opacity-[0.18] blur-3xl transition-all duration-700 group-focus-within:opacity-[0.55] group-focus-within:-inset-6" />
+          <div className="absolute -inset-2 rounded-[40px] bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400 opacity-[0.08] blur-xl transition-all duration-500 group-focus-within:opacity-[0.25]" />
+          <div className="relative rounded-[32px] border border-gray-200 dark:border-[#333537] bg-gray-100/95 dark:bg-[#1a1a1b]/95 px-5 py-2.5 shadow-xl dark:shadow-2xl dark:shadow-black/60 transition-all focus-within:border-emerald-500/50 focus-within:bg-white dark:focus-within:bg-[#1e2022] focus-within:shadow-emerald-500/10">
             <div className="flex items-end gap-3">
               <div className="hidden items-center gap-1.5 md:flex">
                 <button
@@ -277,7 +284,7 @@ export default function ChatInput({
                         "rounded-full p-3 transition-all shadow-2xl",
                         input.trim() && !isLoading
                           ? "scale-105 bg-emerald-500 text-white shadow-emerald-500/30 hover:bg-emerald-400"
-                          : "bg-white dark:bg-[#131314] text-[#444746]",
+                          : "bg-gray-200 dark:bg-[#131314] text-[#444746]",
                       )}
                     >
                       {isLoading ? (
@@ -296,7 +303,7 @@ export default function ChatInput({
         {documents.length > 0 && (
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
                 Documents joints ({documents.length})
               </span>
               <button
@@ -311,19 +318,19 @@ export default function ChatInput({
               {documents.map((doc) => (
                 <div
                   key={doc.id}
-                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                  className="flex items-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2"
                 >
                   <span className="text-lg">{getFileIcon(doc.name)}</span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-white/70">
+                  <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-secondary)]">
                     {doc.name}
                   </span>
-                  <span className="text-[10px] text-white/40">
+                  <span className="text-[10px] text-[var(--text-muted)]">
                     {formatFileSize(doc.size)}
                   </span>
                   <button
                     type="button"
                     onClick={() => useDocumentStore.getState().removeDocument(doc.id)}
-                    className="rounded-lg border border-white/10 bg-white/5 p-1 text-white/40 transition-all hover:bg-white/10 hover:text-white/60"
+                    className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-1 text-[var(--text-muted)] transition-all hover:border-red-400/30 hover:text-red-500"
                   >
                     <X size={10} />
                   </button>
@@ -334,15 +341,15 @@ export default function ChatInput({
         )}
 
         <div className="mt-4 flex flex-wrap justify-center gap-3">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#333537] bg-white dark:bg-[#1a1a1b] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8e918f]">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
             <Sparkles size={12} className="text-blue-400" />
             {getActiveModel(settings)}
           </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#333537] bg-white dark:bg-[#1a1a1b] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8e918f]">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
             <Database size={12} className="text-emerald-400" />
             PyQGIS natif
           </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#333537] bg-white dark:bg-[#1a1a1b] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8e918f]">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
             <Workflow size={12} className="text-fuchsia-400" />
             {settings.provider === "openrouter"
               ? settings.openrouterAgentMode === "multi"
@@ -353,12 +360,12 @@ export default function ChatInput({
                 : "Local"}
           </div>
           {selectedLayers.length > 0 && (
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-[#333537] bg-white dark:bg-[#1a1a1b] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8e918f]">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
               <Layers size={12} className="text-cyan-400" />
               {selectedLayers.length} couche(s) ciblée(s)
             </div>
           )}
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#333537] bg-white dark:bg-[#1a1a1b] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#8e918f]">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
             <Sparkles size={12} className="text-emerald-400" />
             {conversationMode === "plan" ? "Mode plan" : "Mode action"}
           </div>

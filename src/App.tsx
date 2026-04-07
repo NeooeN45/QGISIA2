@@ -18,6 +18,7 @@ import {
   getLayerDiagnostics,
   getLayerFields,
   getLayersList,
+  getLayersCatalog,
   isQgisAvailable,
   LayerSummary,
   runScriptDetailed,
@@ -33,6 +34,7 @@ import { useSettingsStore } from "./stores/useSettingsStore";
 import { useConversationStore } from "./stores/useConversationStore";
 import { useLayerStore } from "./stores/useLayerStore";
 import { useUIStore } from "./stores/useUIStore";
+import { exportConversationToMarkdown, downloadFile } from "./lib/conversation-export";
 
 type ResetMode = "welcome" | "reset";
 
@@ -130,8 +132,13 @@ async function buildLayerContext(
 
 function buildWorkspaceSnapshot(layers: LayerSummary[]): string {
   if (layers.length === 0) {
-    return "Snapshot automatique du projet QGIS courant : aucune couche chargee.";
+    return [
+      "Snapshot automatique du projet QGIS courant : aucune couche chargee.",
+      "REGLE ABSOLUE : n'invente aucune couche, aucun champ, aucune valeur. Le projet est vide.",
+    ].join("\n");
   }
+
+  const exactNames = layers.map((l) => `"${l.name}"`).join(", ");
 
   const layerLines = layers.slice(0, 12).map((layer) => {
     const typeLabel =
@@ -140,6 +147,10 @@ function buildWorkspaceSnapshot(layers: LayerSummary[]): string {
       typeof layer.featureCount === "number"
         ? `${layer.featureCount} entite(s)`
         : "nombre d'entites inconnu";
+    const crsWarning =
+      layer.crs && layer.crs !== "EPSG:2154" && layer.type === "vector"
+        ? `  ⚠ CRS non Lambert 93 : ${layer.crs} → reprojectLayer recommande`
+        : null;
 
     return [
       `- ${layer.name}`,
@@ -150,6 +161,7 @@ function buildWorkspaceSnapshot(layers: LayerSummary[]): string {
       `  visibilite: ${layer.visible ? "visible" : "masquee"}`,
       `  opacite: ${Math.round(layer.opacity * 100)}%`,
       layer.subsetString ? `  filtre actif: ${layer.subsetString}` : null,
+      crsWarning,
     ]
       .filter(Boolean)
       .join("\n");
@@ -160,6 +172,7 @@ function buildWorkspaceSnapshot(layers: LayerSummary[]): string {
   return [
     "Snapshot automatique du projet QGIS courant.",
     `Nombre de couches chargees: ${layers.length}.`,
+    `NOMS EXACTS DES COUCHES (utilise UNIQUEMENT ces noms dans mapLayersByName) : ${exactNames}`,
     layerLines.join("\n\n"),
     remainingCount > 0
       ? `... ${remainingCount} couche(s) supplementaire(s) non listee(s).`
@@ -179,25 +192,30 @@ function buildModelPrompt(
   const modeInstruction =
     conversation.mode === "plan"
       ? [
-          "Tu es l'agent planificateur de GeoSylva AI QGIS.",
-          "Reponds en francais.",
-          "Ne fournis pas directement de script exécutable sauf si l'utilisateur le demande explicitement.",
-          "N'invente jamais de couches, de champs, de CRS, de statistiques ou de resultats absents du contexte.",
-          "Quand une information doit venir du web, utilise les outils et API officielles listés ci-dessous.",
-          "N'affirme jamais un proprietaire de parcelle sans source explicite et publiquement disponible.",
-          "Quand la demande correspond a un workflow connu, propose la bonne chaine d'outils.",
-          "Quand plusieurs taches sont demandees, planifie-les toutes dans l'ordre logique.",
-          "Réponds avec les sections: Objectif, Couches concernées, Plan d'exécution (étapes numérotées avec outils), Risques, Validation demandée.",
+          "Tu es l'agent planificateur de GeoSylva AI QGIS. Reponds en francais.",
+          "ROLE : analyser la demande et produire un plan d'execution detaille et realiste.",
+          "REGLES :",
+          "- N'invente JAMAIS de couches, champs, CRS, statistiques ou resultats absents du contexte.",
+          "- N'affirme jamais un proprietaire de parcelle sans source publique explicite.",
+          "- Si donnees francaises : indique systematiquement la reprojection en Lambert 93 (EPSG:2154).",
+          "- Quand plusieurs taches sont demandees, planifie-les TOUTES dans l'ordre optimal.",
+          "- Indique les outils bridge a utiliser ET les endroits ou PyQGIS est necessaire.",
+          "FORMAT DE REPONSE : sections Objectif | Couches concernees | Plan etape par etape (outil + parametre) | Risques | Validation attendue.",
         ].join("\n")
       : [
-          "Tu es l'agent opérateur de GeoSylva AI QGIS.",
-          "Reponds en francais.",
-          "N'invente jamais de couches, de champs, de CRS, de statistiques ou de resultats absents du contexte.",
-          "Utilise les outils QGIS natifs du bridge quand ils permettent de réaliser la demande.",
-          "Avant d'ecrire du PyQGIS, cherche d'abord s'il existe un outil natif ou une chaine d'outils.",
-          "Quand plusieurs taches sont demandees, enchaine-les dans l'ordre et explique chaque etape.",
-          "N'affirme jamais un proprietaire de parcelle sans source explicite et publiquement disponible.",
-          "Réponds à la dernière demande utilisateur avec une réponse directement exploitable.",
+          "Tu es l'agent operateur de GeoSylva AI QGIS. Reponds en francais.",
+          "ROLE : executer les taches SIG de maniere autonome, complete et sans hesitation.",
+          "PHILOSOPHIE D'AGENT :",
+          "- EXECUTE sans demander permission pour chaque etape logique",
+          "- ANTICIPE : donnees francaises = Lambert 93 (EPSG:2154) automatiquement si CRS != EPSG:2154",
+          "- ENCHAINE : plusieurs taches = les executer toutes dans l'ordre logique",
+          "- RAPPORTE : confirme avec resultats concrets (noms couches, comptes, surfaces)",
+          "REGLES ABSOLUES :",
+          "- N'invente JAMAIS de couches, champs, CRS ou resultats absents du contexte.",
+          "- Utilise TOUJOURS les outils bridge natifs en priorite avant PyQGIS libre.",
+          "- PyQGIS : UN SEUL bloc complet et executable avec iface.messageBar() a la fin.",
+          "- N'affirme jamais un proprietaire de parcelle sans source publique explicite.",
+          "FORMATS : outil bridge → liste les appels dans l'ordre | PyQGIS → un seul bloc complet.",
         ].join("\n");
 
   return [
@@ -274,6 +292,54 @@ function replaceFirstPythonBlock(content: string, script: string): string {
   }
 
   return [content, replacement].filter(Boolean).join("\n\n");
+}
+
+/**
+ * Wraps a PyQGIS script with try/except guard rails for better error messages.
+ * Skips wrapping if the script already has a top-level try block.
+ */
+function wrapScriptWithGuardRails(script: string): string {
+  if (/^try\s*:/m.test(script.trim())) {
+    return script;
+  }
+  const indented = script
+    .split("\n")
+    .map((line) => `    ${line}`)
+    .join("\n");
+  return [
+    "import traceback as _tb",
+    "try:",
+    indented,
+    "except Exception as _e:",
+    '    iface.messageBar().pushCritical("Erreur PyQGIS", str(_e))',
+    '    print("=== TRACEBACK ===\\n" + _tb.format_exc())',
+    "    raise",
+  ].join("\n");
+}
+
+/**
+ * Extracts layer names referenced via mapLayersByName() in a PyQGIS script.
+ */
+function extractLayerNamesFromScript(script: string): string[] {
+  const pattern = /mapLayersByName\(\s*["']([^"']+)["']\s*\)/g;
+  const names: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(script)) !== null) {
+    names.push(match[1]);
+  }
+  return [...new Set(names)];
+}
+
+/**
+ * Returns layer names from the script that do NOT exist in the QGIS catalog.
+ * Used to detect LLM hallucinations before script execution.
+ */
+function detectHallucinatedLayers(
+  scriptLayerNames: string[],
+  catalog: LayerSummary[],
+): string[] {
+  const realNames = new Set(catalog.map((l) => l.name.toLowerCase()));
+  return scriptLayerNames.filter((name) => !realNames.has(name.toLowerCase()));
 }
 
 function summarizeExecutionMessage(value: string): string {
@@ -355,6 +421,25 @@ async function maybeAutoExecuteAssistantPythonScript(input: {
     );
   }
 
+  // ── Guard rail 1: Hallucination detection ────────────────────────────────
+  const catalog = await getLayersCatalog().catch(() => [] as LayerSummary[]);
+  const scriptLayerNames = extractLayerNamesFromScript(initialScript);
+  const hallucinated = detectHallucinatedLayers(scriptLayerNames, catalog);
+  const availableLayerNames = catalog.map((l) => l.name);
+
+  if (hallucinated.length > 0) {
+    appendDebugEvent({
+      level: "warning",
+      source: "assistant",
+      title: "Couches introuvables dans le script PyQGIS",
+      message: `Le script reference des couches qui n'existent pas dans le projet QGIS : ${hallucinated.join(", ")}`,
+      details: `Couches disponibles : ${availableLayerNames.join(", ") || "aucune"}`,
+    });
+    toast.warning(
+      `Attention : couche(s) introuvable(s) : ${hallucinated.join(", ")}`,
+    );
+  }
+
   const attempts: AutoExecutionAttempt[] = [];
   const maxRepairs = settings.autoRepairPythonScripts
     ? settings.autoRepairMaxAttempts
@@ -364,7 +449,9 @@ async function maybeAutoExecuteAssistantPythonScript(input: {
   let currentContent = assistantContent;
 
   for (let repairAttempt = 0; repairAttempt <= maxRepairs; repairAttempt += 1) {
-    const result = await runScriptDetailed(currentScript, {
+    // ── Guard rail 2: Wrap script with try/except before execution ─────────
+    const scriptToRun = wrapScriptWithGuardRails(currentScript);
+    const result = await runScriptDetailed(scriptToRun, {
       requireConfirmation: false,
     });
 
@@ -419,6 +506,7 @@ async function maybeAutoExecuteAssistantPythonScript(input: {
 
     try {
       const repairedContent = await repairPythonScriptWithProvider({
+        availableLayerNames,
         errorMessage: result.message,
         failedScript: currentScript,
         layerContext,
@@ -501,31 +589,23 @@ export default function App() {
   useEffect(() => {
     const applyTheme = () => {
       const theme = settings.theme;
-      console.log("[THEME DEBUG] ===========================================");
-      console.log("[THEME DEBUG] Applying theme:", theme);
-      console.log("[THEME DEBUG] Current document classes:", document.documentElement.className);
-      console.log("[THEME DEBUG] Settings object:", settings);
 
       appendDebugEvent({
         level: "info",
         source: "app",
         title: "Theme Applied",
-        message: `Applying theme: ${theme} | Current classes: ${document.documentElement.className}`,
+        message: `Applying theme: ${theme}`,
       });
 
       if (theme === "dark") {
-        console.log("[THEME DEBUG] Setting dark mode");
         document.documentElement.classList.add("dark");
         document.documentElement.classList.remove("light");
       } else if (theme === "light") {
-        console.log("[THEME DEBUG] Setting light mode");
         document.documentElement.classList.add("light");
         document.documentElement.classList.remove("dark");
       } else {
         // auto mode
-        console.log("[THEME DEBUG] Auto mode - checking system preference");
         const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        console.log("[THEME DEBUG] System prefers dark:", prefersDark);
         if (prefersDark) {
           document.documentElement.classList.add("dark");
           document.documentElement.classList.remove("light");
@@ -534,15 +614,6 @@ export default function App() {
           document.documentElement.classList.remove("dark");
         }
       }
-
-      console.log("[THEME DEBUG] After applying - document classes:", document.documentElement.className);
-
-      appendDebugEvent({
-        level: "info",
-        source: "app",
-        title: "Theme Classes Updated",
-        message: `New classes: ${document.documentElement.className}`,
-      });
     };
 
     applyTheme();
@@ -566,7 +637,6 @@ export default function App() {
   const handleExportConversation = useCallback(() => {
     const conv = convStore.getState().activeConversation();
     if (conv) {
-      const { exportConversationToMarkdown, downloadFile } = require("./lib/conversation-export");
       const markdown = exportConversationToMarkdown(conv);
       downloadFile(markdown, `${conv.title || "conversation"}.md`, "text/markdown");
       toast.success("Conversation exportée en Markdown");
@@ -576,7 +646,7 @@ export default function App() {
   // Keyboard shortcuts
   useKeyboardShortcuts([
     {
-      key: "k",
+      key: "n",
       ctrlKey: true,
       action: () => void createNewConversation(),
       description: "Nouvelle conversation",
@@ -585,8 +655,7 @@ export default function App() {
       key: "/",
       ctrlKey: true,
       action: () => {
-        // Focus sur l'input de chat - à implémenter avec ref
-        toast.info("Focus sur la zone de chat (à implémenter)");
+        document.dispatchEvent(new CustomEvent("focusChatInput"));
       },
       description: "Focus sur la zone de chat",
     },
@@ -679,7 +748,13 @@ export default function App() {
           .addAssistantMessage(currentConversation.id, assistantMessage);
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Erreur inattendue.";
+          error instanceof Error
+            ? error.message
+            : typeof error === "string"
+              ? error
+              : (error as Record<string, unknown>)?.error
+                  ? String((error as Record<string, unknown>).error)
+                  : "Erreur inattendue lors de la génération.";
 
         if (
           message === "signal is aborted without reason" ||
@@ -689,7 +764,6 @@ export default function App() {
         } else if (error instanceof DOMException && error.name === "AbortError") {
           toast.info("Génération arrêtée.");
         } else {
-          console.error("GeoAI error:", error);
           appendDebugEvent({
             level: "error",
             source: "assistant",
@@ -698,7 +772,7 @@ export default function App() {
             details:
               error instanceof Error && error.stack
                 ? error.stack
-                : undefined,
+                : JSON.stringify(error, null, 2),
           });
           toast.error(message);
         }
@@ -809,17 +883,18 @@ export default function App() {
   }, [activeConversationId, conversations]);
 
   // Refresh layers periodically & check QGIS connection
+  // Polling pauses when the tab is hidden to avoid unnecessary background work
   useEffect(() => {
     void refreshLayers();
     setIsQgisConnected(isQgisAvailable());
 
     const layerInterval = window.setInterval(() => {
-      void refreshLayers();
-    }, 6000);
+      if (!document.hidden) void refreshLayers();
+    }, 10000);
 
     const qgisInterval = window.setInterval(() => {
-      setIsQgisConnected(isQgisAvailable());
-    }, 1000);
+      if (!document.hidden) setIsQgisConnected(isQgisAvailable());
+    }, 3000);
 
     return () => {
       window.clearInterval(layerInterval);
@@ -831,7 +906,9 @@ export default function App() {
   const [showInstallationWizard, setShowInstallationWizard] = useState(false);
   const [showOllamaWizard, setShowOllamaWizard] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [showIntroAnimation, setShowIntroAnimation] = useState(true);
+  const [showIntroAnimation, setShowIntroAnimation] = useState(
+    !localStorage.getItem("geosylva-intro-seen"),
+  );
   // Flag: trigger Ollama scan once intro is done
   const [pendingOllamaScan, setPendingOllamaScan] = useState(false);
 

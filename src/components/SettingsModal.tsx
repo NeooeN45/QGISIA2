@@ -1,10 +1,12 @@
-import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
+import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  AlertCircle,
   CheckCircle2,
   ChevronDown,
   Copy,
   Cpu,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
@@ -12,6 +14,7 @@ import {
   Info,
   KeyRound,
   Loader2,
+  Package,
   RefreshCw,
   Save,
   Server,
@@ -26,6 +29,7 @@ import OllamaSetupWizard from "./OllamaSetupWizard";
 import { toast } from "sonner";
 
 import { cn } from "@/src/lib/utils";
+import { getOllamaModels, pullOllamaModel, type PullProgress } from "../lib/ollama-auto-detect";
 
 import {
   applyOpenRouterStackPreset,
@@ -45,6 +49,9 @@ import {
   OPENROUTER_ROLE_PRESETS,
   OPENROUTER_STACK_PRESETS,
   validateSettings,
+  validateGeminiKeyFormat,
+  validateOpenRouterKeyFormat,
+  type ApiKeyStatus,
 } from "../lib/settings";
 import { fetchOpenRouterKeyInfo, OpenRouterKeyInfo } from "../lib/openrouter";
 import {
@@ -63,6 +70,7 @@ import {
 } from "../lib/model-diagnostics";
 
 import { safeLog } from "../lib/security";
+import { getSystemSpecs } from "../lib/qgis";
 
 interface SettingsModalProps {
   localSettings: AppSettings;
@@ -235,9 +243,22 @@ export default function SettingsModal({
   const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [activeTab, setActiveTab] = useState<"provider" | "config" | "execution" | "diagnostics">("provider");
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["provider", "basic"]));
-  const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    const defaults = new Set<string>(["provider"]);
+    const p = localSettings.provider;
+    if (p === "google") defaults.add("google-config");
+    if (p === "local") defaults.add("local-config");
+    if (p === "openrouter") defaults.add("openrouter-config");
+    defaults.add("openrouter-stack");
+    defaults.add("generation-params");
+    defaults.add("config-summary");
+    defaults.add("openrouter-key-status");
+    defaults.add("diagnostics-tests");
+    defaults.add("debug-logs");
+    defaults.add("pyqgis-auto");
+    return defaults;
+  });
+  // openRouterModels remplacé par OPENROUTER_ROLE_PRESETS statiques (plus fiable)
   const [openRouterKeyInfo, setOpenRouterKeyInfo] = useState<OpenRouterKeyInfo | null>(null);
   const [isLoadingOpenRouterKeyInfo, setIsLoadingOpenRouterKeyInfo] = useState(false);
   const [openRouterKeyInfoError, setOpenRouterKeyInfoError] = useState<string | null>(null);
@@ -248,6 +269,173 @@ export default function SettingsModal({
   const [probeResults, setProbeResults] = useState<Record<string, ModelProbeResult>>({});
   const [activeProbeId, setActiveProbeId] = useState<string | null>(null);
   const [showOllamaWizard, setShowOllamaWizard] = useState(false);
+  const [logLevelFilter, setLogLevelFilter] = useState<"all" | "error" | "warning" | "info">("all");
+  const [logSearch, setLogSearch] = useState("");
+
+  // ── Specs système : fallback navigateur + vraies valeurs Python si QGIS connecté ──
+
+  // Fallback navigateur (limité par confidentialité)
+  const browserRamRaw = (navigator as unknown as Record<string, unknown>).deviceMemory as number | undefined;
+  const browserCores = navigator.hardwareConcurrency || 4;
+
+  // Lecture GPU via WebGL (heuristique)
+  const webglGpu = (() => {
+    try {
+      const canvas = document.createElement("canvas");
+      const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+      if (!gl) return { label: "", vram: 0 };
+      const ext = (gl as WebGLRenderingContext).getExtension("WEBGL_debug_renderer_info");
+      const raw = ext ? (gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_WEBGL) as string : "";
+      const label = raw.replace(/\s*\(.*\)$/, "").trim();
+      const vramMatch = /(\d+)\s*(?:GB|Go)/i.exec(raw);
+      let vram = vramMatch ? parseInt(vramMatch[1], 10) : 0;
+      if (!vram) {
+        const r = raw.toUpperCase();
+        if (r.includes("RTX 4090") || r.includes("RTX 3090") || r.includes("RX 7900")) vram = 24;
+        else if (r.includes("RTX 4080") || r.includes("RTX 3080")) vram = 16;
+        else if (r.includes("RTX 4070") || r.includes("RTX 3070") || r.includes("RX 6800")) vram = 12;
+        else if (r.includes("RTX 4060") || r.includes("RTX 3060") || r.includes("RX 6700")) vram = 8;
+        else if (r.includes("RTX 3050") || r.includes("RTX 2060") || r.includes("RX 6600")) vram = 6;
+        else if (r.includes("GTX 1660") || r.includes("GTX 1070") || r.includes("RX 580")) vram = 6;
+        else if (r.includes("GTX 1060") || r.includes("GTX 1050") || r.includes("RX 570")) vram = 4;
+        else if (r.includes("INTEL") || r.includes("UHD") || r.includes("IRIS")) vram = 0;
+      }
+      return { label, vram };
+    } catch { return { label: "", vram: 0 }; }
+  })();
+
+  // State des specs (combiné Python + navigateur)
+  const [pcSpecs, setPcSpecs] = useState<{
+    ramGb: number;
+    ramAvailableGb: number;
+    ramCapped: boolean;
+    cores: number;
+    coresFull: string;
+    vramGb: number;
+    gpuLabel: string;
+    gpuCuda: boolean;
+    source: "python" | "browser";
+  }>(() => ({
+    ramGb: browserRamRaw ?? 8,
+    ramAvailableGb: 0,
+    ramCapped: (browserRamRaw ?? 0) >= 8,
+    cores: browserCores,
+    coresFull: `${browserCores}`,
+    vramGb: webglGpu.vram,
+    gpuLabel: webglGpu.label,
+    gpuCuda: false,
+    source: "browser",
+  }));
+
+  // Charger les vraies specs Python dès que le modal s'ouvre
+  useEffect(() => {
+    void getSystemSpecs().then((specs) => {
+      if (!specs) return;
+      setPcSpecs({
+        ramGb: specs.ram_total_gb,
+        ramAvailableGb: specs.ram_available_gb,
+        ramCapped: false,
+        cores: specs.cpu_logical,
+        coresFull: specs.cpu_physical > 0
+          ? `${specs.cpu_logical} logiques / ${specs.cpu_physical} physiques`
+          : `${specs.cpu_logical}`,
+        vramGb: specs.gpu_vram_gb,
+        gpuLabel: specs.gpu_name || webglGpu.label,
+        gpuCuda: specs.gpu_has_cuda,
+        source: "python",
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { ramGb: pcRamGb, ramAvailableGb: pcRamAvailableGb, ramCapped: pcRamCapped,
+          cores: pcCores, coresFull: pcCoresFull, vramGb: pcVramGb,
+          gpuLabel: pcGpuLabel, gpuCuda: pcGpuCuda, source: pcSpecsSource } = pcSpecs;
+
+  // Classification globale du PC
+  const pcTier: "high" | "mid" | "low" | "minimal" = (() => {
+    if (pcRamGb >= 32 && (pcVramGb >= 12 || pcCores >= 16)) return "high";
+    if (pcRamGb >= 16 && (pcVramGb >= 6 || pcCores >= 8)) return "mid";
+    if (pcRamGb >= 8) return "low";
+    return "minimal";
+  })();
+
+  const getModelCompat = (preset: { ramMinGb?: number; vramMinGb?: number }) => {
+    const ramOk = !preset.ramMinGb || pcRamGb >= preset.ramMinGb;
+    const ramWarn = !preset.ramMinGb || pcRamGb >= preset.ramMinGb * 0.7;
+    const vramOk = !preset.vramMinGb || preset.vramMinGb === 0 || pcVramGb === 0 || pcVramGb >= preset.vramMinGb;
+    const vramWarn = !preset.vramMinGb || preset.vramMinGb === 0 || pcVramGb === 0 || pcVramGb >= preset.vramMinGb * 0.7;
+    if (ramOk && vramOk) return "ok";
+    if (ramWarn && vramWarn) return "warn";
+    return "bad";
+  };
+
+  // ── Gestion des modèles Ollama ───────────────────────────────────
+  const [installedModels, setInstalledModels] = useState<string[]>([]);
+  const [isLoadingOllamaModels, setIsLoadingOllamaModels] = useState(false);
+  const [installingModel, setInstallingModel] = useState<string | null>(null);
+  const [installProgress, setInstallProgress] = useState<PullProgress | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const [customModelInput, setCustomModelInput] = useState("");
+  const [modelFilters, setModelFilters] = useState<string[]>([]);
+  const toggleModelFilter = (id: string) => {
+    setModelFilters((prev) =>
+      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
+    );
+  };
+  const abortInstallRef = useRef<AbortController | null>(null);
+
+  const loadInstalledModels = useCallback(async () => {
+    setIsLoadingOllamaModels(true);
+    try {
+      const models = await getOllamaModels();
+      setInstalledModels(models.map((m) => m.name));
+    } catch {
+      // Ollama not running — ignore
+    } finally {
+      setIsLoadingOllamaModels(false);
+    }
+  }, []);
+
+  const handleInstallModel = useCallback(async (modelId: string) => {
+    if (installingModel) return;
+    setInstallingModel(modelId);
+    setInstallProgress(null);
+    setInstallError(null);
+    const ctrl = new AbortController();
+    abortInstallRef.current = ctrl;
+    try {
+      await pullOllamaModel(
+        modelId,
+        (progress) => setInstallProgress(progress),
+        ctrl.signal,
+      );
+      setInstalledModels((prev) => Array.from(new Set([...prev, modelId])));
+      setLocalSettings((current) => ({ ...current, localModel: modelId }));
+      toast.success(`✅ Modèle ${modelId} installé et sélectionné`);
+    } catch (err: unknown) {
+      if ((err as Error)?.name !== "AbortError") {
+        const msg = err instanceof Error ? err.message : String(err);
+        setInstallError(msg);
+        toast.error(`❌ Erreur: ${msg}`);
+      }
+    } finally {
+      setInstallingModel(null);
+      setInstallProgress(null);
+      abortInstallRef.current = null;
+    }
+  }, [installingModel]);
+
+  const isInstalled = useCallback((modelId: string) => {
+    if (installedModels.includes(modelId)) return true;
+    const [name, tag] = modelId.split(":");
+    return installedModels.some((m) => {
+      const [mName, mTag] = m.split(":");
+      if (mName !== name) return false;
+      if (!tag) return true; // preset sans tag = n'importe quelle version
+      return mTag === tag || mTag?.startsWith(tag + "-"); // ex: "4b" match "4b-instruct-q4_K_M"
+    });
+  }, [installedModels]);
 
   const handleOllamaWizardComplete = (model: string) => {
     safeLog("[SettingsModal] Ollama wizard completed with model:", model);
@@ -268,45 +456,12 @@ export default function SettingsModal({
   const hasEnvGeminiApiKey = hasConfiguredGeminiApiKey();
   const hasEnvOpenRouterApiKey = hasConfiguredOpenRouterApiKey();
 
-  // Charger les modèles OpenRouter disponibles
-  const loadOpenRouterModels = useCallback(async () => {
-    if (!normalizedLocalSettings.openrouterApiKey) {
-      return;
-    }
-
-    setIsLoadingModels(true);
-    try {
-      const response = await fetch("https://openrouter.ai/api/v1/models", {
-        headers: {
-          "Authorization": `Bearer ${normalizedLocalSettings.openrouterApiKey}`,
-          "HTTP-Referer": "https://geosylva.ai",
-          "X-Title": "GeoSylva AI",
-        },
-      });
-
-      const data = await response.json();
-      if (data.data) {
-        setOpenRouterModels(data.data);
-      }
-    } catch (error) {
-      console.error("Erreur lors du chargement des modèles OpenRouter:", error);
-    } finally {
-      setIsLoadingModels(false);
-    }
-  }, [normalizedLocalSettings.openrouterApiKey]);
   const settingsIssues = validateSettings(normalizedLocalSettings, {
     hasGeminiEnvKey: hasEnvGeminiApiKey,
     hasOpenRouterEnvKey: hasEnvOpenRouterApiKey,
   });
-  const canSaveSettings = settingsIssues.length === 0;
+  const canSaveSettings = true; // Toujours permettre la sauvegarde, les issues sont des warnings
   const activeOpenRouterPresetId = getOpenRouterStackPresetId(normalizedLocalSettings);
-
-  // Charger les modèles OpenRouter quand la clé est disponible
-  useEffect(() => {
-    if (normalizedLocalSettings.openrouterApiKey && openRouterModels.length === 0) {
-      void loadOpenRouterModels();
-    }
-  }, [normalizedLocalSettings.openrouterApiKey, openRouterModels.length, loadOpenRouterModels]);
 
   const googleKeySource = normalizedLocalSettings.googleApiKey
     ? "local"
@@ -387,10 +542,24 @@ export default function SettingsModal({
     </div>
   );
 
+  const handleProviderChange = (id: string) => {
+    setLocalSettings((current) => ({ ...current, provider: id as any }));
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      next.delete("google-config");
+      next.delete("local-config");
+      next.delete("openrouter-config");
+      if (id === "google") next.add("google-config");
+      if (id === "local") next.add("local-config");
+      if (id === "openrouter") next.add("openrouter-config");
+      return next;
+    });
+  };
+
   const renderProviderButton = (id: string, label: string, badge: string, description: string, color: string) => (
     <button
       type="button"
-      onClick={() => setLocalSettings((current) => ({ ...current, provider: id as any }))}
+      onClick={() => handleProviderChange(id)}
       className={cn(
         "group relative overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300",
         normalizedLocalSettings.provider === id
@@ -491,44 +660,90 @@ export default function SettingsModal({
     label: string,
     description: string,
     color: string,
+    roleKey?: keyof typeof OPENROUTER_ROLE_PRESETS,
   ) => {
-    // Filtrer les modèles pour ne garder que ceux qui supportent le text-to-text
-    const availableModels = openRouterModels.filter((m: any) =>
-      m.architecture?.modality?.includes("text-to-text") || m.architecture?.modality?.includes("text")
-    );
+    const presets = roleKey ? OPENROUTER_ROLE_PRESETS[roleKey] : [];
+    const isFree = (id: string) => id.endsWith(":free");
+    const isCustom = presets.length > 0 && !presets.some((p) => p.id === currentValue);
 
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="mb-3 flex items-center gap-2">
+      <div className="rounded-2xl border border-white/8 bg-white/3 p-4 space-y-3">
+        <div className="flex items-center gap-2">
           <div className={`h-2 w-2 rounded-full bg-${color}-400`} />
           <p className="text-xs font-semibold text-white/90 uppercase tracking-wider">{label}</p>
         </div>
-        <p className="mb-3 text-xs text-white/55">{description}</p>
-        
-        {isLoadingModels ? (
-          <div className="flex items-center gap-2 text-xs text-white/50">
-            <Loader2 size={14} className="animate-spin" />
-            Chargement des modèles...
-          </div>
-        ) : availableModels.length > 0 ? (
-          <select
-            value={currentValue}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition-all focus:border-fuchsia-500/40"
-          >
-            {availableModels.map((model: any) => (
-              <option key={model.id} value={model.id} className="bg-white dark:bg-[#131314]">
-                {model.name} {model.pricing?.prompt === 0 && model.pricing?.completion === 0 ? "(Gratuit)" : ""}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <div className="text-xs text-white/50">
-            Aucun modèle disponible. Vérifiez votre clé API.
+        <p className="text-xs text-white/45">{description}</p>
+
+        {presets.length > 0 && (
+          <div className="grid gap-1.5 md:grid-cols-2">
+            {presets.map((preset) => {
+              const selected = currentValue === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => onChange(preset.id)}
+                  className={cn(
+                    "rounded-xl border p-2.5 text-left transition-all",
+                    selected
+                      ? `border-${color}-500/40 bg-${color}-500/12 text-white`
+                      : "border-white/8 bg-black/15 text-white/55 hover:border-white/15 hover:bg-white/5",
+                  )}
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs font-semibold leading-tight">{preset.label}</p>
+                    {isFree(preset.id) && (
+                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">GRATUIT</span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[10px] leading-relaxed text-white/35">{preset.description}</p>
+                </button>
+              );
+            })}
           </div>
         )}
+
+        <div>
+          <label className="mb-1.5 block text-[10px] font-medium text-white/40 uppercase tracking-wider">
+            {isCustom ? "⚡ Modèle personnalisé actif" : "Ou saisir un identifiant OpenRouter"}
+          </label>
+          <input
+            type="text"
+            value={currentValue}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="ex: anthropic/claude-3.5-sonnet"
+            className={cn(
+              "w-full rounded-xl border bg-black/20 px-3 py-2 text-xs text-white outline-none transition-all placeholder:text-white/25",
+              isCustom
+                ? `border-${color}-500/40 focus:border-${color}-500/60`
+                : "border-white/10 focus:border-white/25"
+            )}
+          />
+        </div>
       </div>
     );
+  };
+
+  const geminiKeyStatus: ApiKeyStatus = normalizedLocalSettings.googleApiKey
+    ? validateGeminiKeyFormat(normalizedLocalSettings.googleApiKey)
+    : googleKeySource === "env" ? "valid" : "empty";
+
+  const openrouterKeyStatus: ApiKeyStatus = normalizedLocalSettings.openrouterApiKey
+    ? validateOpenRouterKeyFormat(normalizedLocalSettings.openrouterApiKey)
+    : openRouterKeySource === "env" ? "valid" : "empty";
+
+  const renderKeyStatusBadge = (status: ApiKeyStatus) => {
+    if (status === "valid") return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+        <CheckCircle2 size={10} /> Format OK
+      </span>
+    );
+    if (status === "invalid_format") return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+        ⚠ Format incorrect
+      </span>
+    );
+    return null;
   };
 
   const renderGoogleApiKeySection = () => (
@@ -538,17 +753,15 @@ export default function SettingsModal({
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
             <KeyRound size={16} className="text-blue-300" />
             Clé Gemini
+            {renderKeyStatusBadge(geminiKeyStatus)}
           </div>
           <p className="mt-2 text-xs leading-relaxed text-white/50">
-            Source actuelle:{" "}
+            Source:{" "}
             <strong className="text-white">
-              {googleKeySource === "local"
-                ? "clé locale"
-                : googleKeySource === "env"
-                  ? "variable d'environnement"
-                  : "non configurée"}
+              {googleKeySource === "local" ? "clé locale" : googleKeySource === "env" ? "variable d'environnement" : "non configurée"}
             </strong>
-            .
+            {" — "}
+            <span className="text-white/40">Stockée chiffrée en localStorage</span>
           </p>
         </div>
         <a
@@ -567,7 +780,7 @@ export default function SettingsModal({
           placeholder={
             googleKeySource === "env"
               ? maskSecret(envGeminiApiKey)
-              : "Saisir une clé API Gemini"
+              : "AIza... (clé Google AI Studio)"
           }
           visible={showGoogleKey}
           onChange={(value) =>
@@ -609,7 +822,12 @@ export default function SettingsModal({
                   : "border-white/10 bg-black/15 text-white/60 hover:bg-white/8",
               )}
             >
-              <p className="text-sm font-semibold">{preset.label}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-semibold">{preset.label}</p>
+                {preset.tags?.map(tag => (
+                  <span key={tag} className="rounded-full border border-blue-500/25 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-blue-300 uppercase tracking-wide">{tag}</span>
+                ))}
+              </div>
               <p className="mt-1 text-xs text-white/45">{preset.description}</p>
             </button>
           ))}
@@ -619,7 +837,7 @@ export default function SettingsModal({
   );
 
   const renderSidebarNavigation = () => (
-    <nav className="flex w-52 flex-col gap-1 border-r border-white/5 bg-white dark:bg-[#131314] p-3">
+    <nav className="flex w-52 flex-col gap-1 border-r border-white/[0.06] bg-[#131314] p-3">
       {[
         { id: "provider" as const, label: "Provider", icon: Cpu, description: "Choisir le fournisseur IA" },
         { id: "config" as const, label: "Configuration", icon: SettingsIcon, description: "Stack et modèles" },
@@ -759,7 +977,7 @@ export default function SettingsModal({
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.96, opacity: 0, y: 20 }}
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-6xl overflow-hidden rounded-[32px] border border-white/10 bg-[#17181a] shadow-2xl"
+        className="w-full max-w-6xl overflow-hidden rounded-[32px] border border-gray-300/60 dark:border-white/10 bg-[#17181a] shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-white/5 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-emerald-500/10 px-6 py-5">
           <div className="flex items-center gap-3">
@@ -828,38 +1046,351 @@ export default function SettingsModal({
                       className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-white/25 focus:border-emerald-500/40"
                     />
                   </div>
-                  <div>
-                    <label className="mb-2 block text-xs font-medium text-white/70">
-                      Modèle
-                    </label>
-                    <div className="mt-2 grid gap-2 md:grid-cols-2">
-                      {LOCAL_MODEL_PRESETS.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => setLocalSettings((current) => ({ ...current, localModel: preset.id }))}
-                          className={cn(
-                            "rounded-2xl border p-4 text-left transition-all",
-                            normalizedLocalSettings.localModel === preset.id
-                              ? "border-emerald-500/35 bg-emerald-500/12 text-white"
-                              : "border-white/10 bg-black/15 text-white/60 hover:bg-white/8",
-                          )}
-                        >
-                          <p className="text-sm font-semibold">{preset.label}</p>
-                          <p className="mt-1 text-xs text-white/45">{preset.description}</p>
-                        </button>
-                      ))}
+                  {/* ── Sélection du modèle ── */}
+                  <div className="space-y-3">
+                    {/* Header modèles */}
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-white/70">
+                        Modèle local
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => void loadInstalledModels()}
+                        className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-white/50 transition-all hover:bg-white/10 hover:text-white"
+                      >
+                        <RefreshCw size={11} className={cn(isLoadingOllamaModels && "animate-spin")} />
+                        {isLoadingOllamaModels ? "Scan..." : `Détecter (${installedModels.length} installé${installedModels.length > 1 ? "s" : ""})`}
+                      </button>
                     </div>
+
+                    {/* Panneau specs PC */}
+                    <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Specs détectées</p>
+                        <span className={cn(
+                          "rounded-full px-1.5 py-0.5 text-[9px] font-semibold",
+                          pcSpecsSource === "python" ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
+                        )}>
+                          {pcSpecsSource === "python" ? "✓ Via QGIS (précis)" : "⚠ Via navigateur (limité)"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-white/40">RAM totale</span>
+                          <span className="ml-auto text-[11px] font-bold text-white">
+                            {pcRamCapped ? `≥${pcRamGb}` : `${pcRamGb}`} Go
+                          </span>
+                          {pcRamCapped && <span className="text-[9px] text-amber-400/70" title="Plafonné par le navigateur">⚠</span>}
+                        </div>
+                        {pcRamAvailableGb > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-white/40">RAM libre</span>
+                            <span className="ml-auto text-[11px] font-bold text-emerald-300">{pcRamAvailableGb} Go</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-white/40">CPU</span>
+                          <span className="ml-auto text-[11px] font-bold text-white">{pcCoresFull} cœurs</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-white/40">VRAM GPU</span>
+                          <span className="ml-auto text-[11px] font-bold text-white">
+                            {pcVramGb > 0 ? `${pcVramGb} Go${pcGpuCuda ? " CUDA" : ""}` : "Intégré / N/D"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-white/40">Niveau</span>
+                          <span className={cn(
+                            "ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-bold",
+                            pcTier === "high" ? "bg-emerald-500/20 text-emerald-300" :
+                            pcTier === "mid" ? "bg-blue-500/20 text-blue-300" :
+                            pcTier === "low" ? "bg-amber-500/20 text-amber-300" :
+                            "bg-red-500/20 text-red-300"
+                          )}>
+                            {pcTier === "high" ? "🚀 Gaming+" : pcTier === "mid" ? "⚙ Mid-range" : pcTier === "low" ? "💻 Standard" : "⚠ Limité"}
+                          </span>
+                        </div>
+                      </div>
+                      {pcGpuLabel && (
+                        <div className="text-[10px] text-white/30 truncate border-t border-white/5 pt-1.5">
+                          GPU : {pcGpuLabel}{pcVramGb === 0 ? " (intégré)" : ""}
+                        </div>
+                      )}
+                      {pcRamCapped && (
+                        <p className="text-[9px] text-amber-400/60 border-t border-white/5 pt-1">
+                          ⚠ RAM plafonnée à 8 Go par le navigateur. Lance QGIS pour obtenir les vraies valeurs.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Filtres modèles — multi-sélection */}
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-white/25">Filtres (cumulables)</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { id: "compatible", label: "✅ Compatibles", color: "emerald" },
+                          { id: "installed", label: "📦 Installés", color: "sky" },
+                          { id: "lightweight", label: "⚡ Léger", color: "yellow" },
+                          { id: "standard", label: "⚖ Standard", color: "blue" },
+                          { id: "code", label: "💻 Code/GIS", color: "violet" },
+                          { id: "reasoning", label: "🧠 Raisonnement", color: "pink" },
+                          { id: "advanced", label: "🚀 Avancé", color: "orange" },
+                          { id: "fr", label: "🇫🇷 Français", color: "blue" },
+                          { id: "pyqgis", label: "🗺 PyQGIS", color: "green" },
+                          { id: "ultra-léger", label: "🪶 Ultra-léger", color: "teal" },
+                          { id: "nouveau", label: "✨ Nouveau", color: "purple" },
+                          { id: "CoT", label: "🔗 CoT", color: "rose" },
+                        ].map((f) => {
+                          const active = modelFilters.includes(f.id);
+                          return (
+                            <button
+                              key={f.id}
+                              type="button"
+                              onClick={() => toggleModelFilter(f.id)}
+                              className={cn(
+                                "rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition-all",
+                                active
+                                  ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-200"
+                                  : "border-white/10 bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/70",
+                              )}
+                            >
+                              {f.label}
+                            </button>
+                          );
+                        })}
+                        {modelFilters.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setModelFilters([])}
+                            className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/20"
+                          >
+                            ✕ Réinitialiser
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Grille des modèles */}
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {LOCAL_MODEL_PRESETS
+                        .filter((p) => {
+                          if (modelFilters.length === 0) return true;
+                          return modelFilters.every((f) => {
+                            if (f === "compatible") return getModelCompat(p) !== "bad";
+                            if (f === "installed") return isInstalled(p.id);
+                            if (f === "lightweight" || f === "standard" || f === "code" || f === "reasoning" || f === "advanced") return p.category === f;
+                            return p.tags?.includes(f) ?? false;
+                          });
+                        })
+                        .map((preset) => {
+                          const selected = normalizedLocalSettings.localModel === preset.id;
+                          const installed = isInstalled(preset.id);
+                          const installing = installingModel === preset.id;
+                          const compat = getModelCompat(preset);
+                          return (
+                            <div
+                              key={preset.id}
+                              className={cn(
+                                "group relative rounded-2xl border p-3 transition-all",
+                                selected
+                                  ? "border-emerald-500/40 bg-emerald-500/12 shadow-md shadow-emerald-500/10"
+                                  : compat === "bad"
+                                    ? "border-red-500/20 bg-red-500/5 hover:border-red-500/30"
+                                    : compat === "warn"
+                                      ? "border-amber-500/20 bg-amber-500/5 hover:border-amber-500/30"
+                                      : "border-white/10 bg-black/15 hover:border-white/20 hover:bg-white/5",
+                              )}
+                            >
+                              {/* Header de la carte */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                    {installed && (
+                                      <span className="inline-flex items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+                                        <CheckCircle2 size={8} /> Installé
+                                      </span>
+                                    )}
+                                    {compat === "bad" && (
+                                      <span className="inline-flex items-center gap-0.5 rounded-full border border-red-500/35 bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold text-red-300">
+                                        ⚠ RAM insuffisante ({preset.ramMinGb}Go min)
+                                      </span>
+                                    )}
+                                    {compat === "warn" && !selected && (
+                                      <span className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/35 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">
+                                        ~ Lent ({preset.ramMinGb}Go recommandé)
+                                      </span>
+                                    )}
+                                    {preset.vram && (
+                                      <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] text-white/40">
+                                        {preset.vram}
+                                      </span>
+                                    )}
+                                    {preset.tags?.map((tag) => (
+                                      <span key={tag} className={cn(
+                                        "rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
+                                        tag === "nouveau"
+                                          ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                                          : "border-blue-500/20 bg-blue-500/10 text-blue-300/70",
+                                      )}>
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <p className={cn("text-[13px] font-semibold leading-tight", selected ? "text-white" : "text-white/80")}>
+                                    {preset.label}
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] leading-relaxed text-white/35">{preset.description}</p>
+                                </div>
+                              </div>
+                              {/* Avertissement compatibilité si sélectionné */}
+                              {selected && compat !== "ok" && (
+                                <div className={cn(
+                                  "mt-2 rounded-xl border px-2.5 py-1.5 text-[10px] leading-relaxed space-y-0.5",
+                                  compat === "bad"
+                                    ? "border-red-500/30 bg-red-500/10 text-red-300"
+                                    : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                                )}>
+                                  {compat === "bad" ? (
+                                    <>
+                                      <p>⚠ Ressources insuffisantes pour ce modèle :</p>
+                                      {preset.ramMinGb && pcRamGb < preset.ramMinGb && (
+                                        <p>· RAM : {pcRamGb} Go détectés / {preset.ramMinGb} Go requis</p>
+                                      )}
+                                      {preset.vramMinGb && preset.vramMinGb > 0 && pcVramGb > 0 && pcVramGb < preset.vramMinGb && (
+                                        <p>· VRAM : {pcVramGb} Go détectés / {preset.vramMinGb} Go requis</p>
+                                      )}
+                                      <p>Le modèle risque de crasher ou de ne pas démarrer.</p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p>~ Ressources un peu justes — les réponses seront lentes :</p>
+                                      {preset.ramMinGb && pcRamGb < preset.ramMinGb && (
+                                        <p>· RAM : {pcRamGb} Go / {preset.ramMinGb} Go recommandés</p>
+                                      )}
+                                      {preset.vramMinGb && preset.vramMinGb > 0 && pcVramGb > 0 && pcVramGb < preset.vramMinGb && (
+                                        <p>· VRAM : {pcVramGb} Go / {preset.vramMinGb} Go recommandés</p>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Progression d'installation */}
+                              {installing && installProgress && (
+                                <div className="mt-2 space-y-1">
+                                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                                    <div
+                                      className="h-full rounded-full bg-emerald-400 transition-all duration-300"
+                                      style={{ width: `${installProgress.percent ?? 0}%` }}
+                                    />
+                                  </div>
+                                  <p className="text-[10px] text-white/40">
+                                    {installProgress.status}
+                                    {installProgress.percent != null && ` — ${installProgress.percent}%`}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Boutons action */}
+                              <div className="mt-2.5 flex gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setLocalSettings((current) => ({ ...current, localModel: preset.id }))}
+                                  className={cn(
+                                    "flex-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition-all",
+                                    selected
+                                      ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-200"
+                                      : "border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white",
+                                  )}
+                                >
+                                  {selected ? "✓ Sélectionné" : "Utiliser"}
+                                </button>
+                                {!installed && !installing && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleInstallModel(preset.id)}
+                                    disabled={!!installingModel}
+                                    className="flex items-center gap-1 rounded-xl border border-blue-500/30 bg-blue-500/15 px-2 py-1.5 text-[11px] font-semibold text-blue-300 transition-all hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                                    title={`Télécharger ${preset.id}`}
+                                  >
+                                    <Download size={11} />
+                                    Installer
+                                  </button>
+                                )}
+                                {installing && (
+                                  <button
+                                    type="button"
+                                    onClick={() => abortInstallRef.current?.abort()}
+                                    className="flex items-center gap-1 rounded-xl border border-red-500/30 bg-red-500/15 px-2 py-1.5 text-[11px] font-semibold text-red-300 transition-all hover:bg-red-500/25"
+                                  >
+                                    <X size={11} />
+                                    Stop
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    {/* Erreur d'installation */}
+                    {installError && (
+                      <div className="rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-[11px] text-red-300">
+                        <strong>Erreur :</strong> {installError}
+                      </div>
+                    )}
+
+                    {/* Modèle personnalisé */}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold text-white/60">
+                        <Package size={12} />
+                        Modèle personnalisé (ollama pull)
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customModelInput}
+                          onChange={(e) => setCustomModelInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && customModelInput.trim()) {
+                              void handleInstallModel(customModelInput.trim());
+                            }
+                          }}
+                          placeholder="ex: llama3.2:1b, mistral:latest..."
+                          className="flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[12px] text-white outline-none placeholder:text-white/25 focus:border-emerald-500/40"
+                        />
+                        <button
+                          type="button"
+                          disabled={!customModelInput.trim() || !!installingModel}
+                          onClick={() => {
+                            const m = customModelInput.trim();
+                            if (m) void handleInstallModel(m);
+                          }}
+                          className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-2 text-[12px] font-semibold text-emerald-200 transition-all hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Download size={13} />
+                          Pull
+                        </button>
+                      </div>
+                      {installingModel && installingModel === customModelInput.trim() && installProgress && (
+                        <div className="mt-2 space-y-1">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                            <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${installProgress.percent ?? 0}%` }} />
+                          </div>
+                          <p className="text-[10px] text-white/40">{installProgress.status}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bouton wizard auto-détection */}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        safeLog("[SettingsModal] Ollama auto-config button clicked");
-                        safeLog("[SettingsModal] Opening Ollama wizard...");
                         setShowOllamaWizard(true);
                       }}
-                      className="mt-3 w-full flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/12 px-4 py-3 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/16 transition-all"
+                      className="w-full flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/12 px-4 py-3 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/16 transition-all"
                     >
                       <Cpu size={16} />
                       Détecter et configurer automatiquement
@@ -902,12 +1433,15 @@ export default function SettingsModal({
                     </a>
                   </div>
                   <div>
+                    <div className="mb-1.5 flex items-center gap-2">
+                      {renderKeyStatusBadge(openrouterKeyStatus)}
+                    </div>
                     <SecretInput
                       value={normalizedLocalSettings.openrouterApiKey}
                       placeholder={
                         openRouterKeySource === "env"
                           ? maskSecret(envOpenRouterApiKey)
-                          : "Saisir une clé API OpenRouter"
+                          : "sk-or-v1-... (clé OpenRouter)"
                       }
                       visible={showOpenRouterKey}
                       onChange={(value) =>
@@ -919,43 +1453,109 @@ export default function SettingsModal({
                       onPaste={() => void onPasteApiKey("openrouter")}
                       onToggle={() => setShowOpenRouterKey((current) => !current)}
                     />
+                    <p className="mt-1.5 text-[10px] text-white/35">Stockée chiffrée en localStorage. Format attendu : sk-or-v1-[64 hex]</p>
                   </div>
-                  <div>
-                    <label className="mb-2 block text-xs font-medium text-white/70">
-                      Endpoint OpenRouter
-                    </label>
-                    <input
-                      type="text"
-                      value={normalizedLocalSettings.openrouterEndpoint}
-                      onChange={(e) => setLocalSettings((current) => ({ ...current, openrouterEndpoint: e.target.value }))}
-                      placeholder="https://openrouter.ai/api/v1"
-                      className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-white/25 focus:border-purple-500/40"
-                    />
+                  {/* État du crédit inline */}
+                  <div className="rounded-2xl border border-purple-500/15 bg-purple-500/5 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Activity size={13} className="text-purple-300" />
+                        <span className="text-xs font-semibold text-purple-200">Crédit & Quota</span>
+                        {openRouterKeyInfoUpdatedAt && (
+                          <span className="text-[10px] text-white/30">
+                            · mis à jour {new Date(openRouterKeyInfoUpdatedAt).toLocaleTimeString()}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void refreshOpenRouterKeyInfo()}
+                        disabled={isLoadingOpenRouterKeyInfo || !canLoadOpenRouterKeyInfo}
+                        className="flex items-center gap-1 rounded-lg border border-purple-500/25 bg-purple-500/10 px-2 py-1 text-[10px] font-semibold text-purple-200 transition-all hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {isLoadingOpenRouterKeyInfo
+                          ? <Loader2 size={10} className="animate-spin" />
+                          : <RefreshCw size={10} />
+                        }
+                        Vérifier
+                      </button>
+                    </div>
+                    {openRouterKeyInfoError ? (
+                      <div className="mt-2 flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/8 px-2.5 py-1.5">
+                        <AlertCircle size={11} className="text-red-400 shrink-0" />
+                        <span className="text-[11px] text-red-300">{openRouterKeyInfoError}</span>
+                      </div>
+                    ) : openRouterKeyInfo ? (
+                      <div className="mt-2 flex items-center gap-4">
+                        <div className="text-xs">
+                          <span className="text-white/40">Limite </span>
+                          <strong className="text-white">${openRouterKeyInfo.limit?.toFixed(2) ?? "∞"}</strong>
+                        </div>
+                        <div className="text-xs">
+                          <span className="text-white/40">Utilisé </span>
+                          <strong className="text-white">${openRouterKeyInfo.usage?.toFixed(4) ?? "0"}</strong>
+                        </div>
+                        {openRouterKeyInfo.limit && openRouterKeyInfo.usage !== undefined && (
+                          <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                (openRouterKeyInfo.usage / openRouterKeyInfo.limit) > 0.8
+                                  ? "bg-red-400"
+                                  : (openRouterKeyInfo.usage / openRouterKeyInfo.limit) > 0.5
+                                    ? "bg-amber-400"
+                                    : "bg-emerald-400"
+                              )}
+                              style={{ width: `${Math.min(100, (openRouterKeyInfo.usage / openRouterKeyInfo.limit) * 100).toFixed(1)}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-white/35">
+                        {canLoadOpenRouterKeyInfo ? "Cliquez sur Vérifier pour lire votre solde." : "Entrez votre clé API pour vérifier le crédit."}
+                      </p>
+                    )}
                   </div>
-                  <div>
-                    <label className="mb-2 block text-xs font-medium text-white/70">
-                      Nom de l'application
-                    </label>
-                    <input
-                      type="text"
-                      value={normalizedLocalSettings.openrouterAppName}
-                      onChange={(e) => setLocalSettings((current) => ({ ...current, openrouterAppName: e.target.value }))}
-                      placeholder="GeoAI QGIS"
-                      className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-white/25 focus:border-purple-500/40"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-xs font-medium text-white/70">
-                      Referer HTTP
-                    </label>
-                    <input
-                      type="text"
-                      value={normalizedLocalSettings.openrouterReferer}
-                      onChange={(e) => setLocalSettings((current) => ({ ...current, openrouterReferer: e.target.value }))}
-                      placeholder="https://votre-app.example"
-                      className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-white/25 focus:border-purple-500/40"
-                    />
-                  </div>
+
+                  <details className="group">
+                    <summary className="cursor-pointer text-[11px] font-medium text-white/35 hover:text-white/60 transition-colors list-none flex items-center gap-1.5">
+                      <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+                      Paramètres avancés (endpoint, referer…)
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-white/55">Endpoint API</label>
+                        <input
+                          type="text"
+                          value={normalizedLocalSettings.openrouterEndpoint}
+                          onChange={(e) => setLocalSettings((current) => ({ ...current, openrouterEndpoint: e.target.value }))}
+                          placeholder="https://openrouter.ai/api/v1"
+                          className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none transition-all placeholder:text-white/25 focus:border-purple-500/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-white/55">Nom de l'application</label>
+                        <input
+                          type="text"
+                          value={normalizedLocalSettings.openrouterAppName}
+                          onChange={(e) => setLocalSettings((current) => ({ ...current, openrouterAppName: e.target.value }))}
+                          placeholder="GeoSylva AI"
+                          className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none transition-all placeholder:text-white/25 focus:border-purple-500/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-white/55">Referer HTTP</label>
+                        <input
+                          type="text"
+                          value={normalizedLocalSettings.openrouterReferer}
+                          onChange={(e) => setLocalSettings((current) => ({ ...current, openrouterReferer: e.target.value }))}
+                          placeholder="https://votre-app.example"
+                          className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none transition-all placeholder:text-white/25 focus:border-purple-500/40"
+                        />
+                      </div>
+                    </div>
+                  </details>
                 </div>,
                 "purple"
               )}
@@ -1083,40 +1683,45 @@ export default function SettingsModal({
                       normalizedLocalSettings.openrouterPlannerModel,
                       (value) => setLocalSettings((current) => ({ ...current, openrouterPlannerModel: value })),
                       "Planner",
-                      "Premier niveau de planification, rapide et léger.",
-                      "fuchsia"
+                      "Analyse la demande et produit un plan d'exécution structuré. Choisir un modèle rapide et bon en raisonnement.",
+                      "fuchsia",
+                      "planner"
                     )}
 
                     {normalizedLocalSettings.openrouterAgentMode === "multi" && renderModelSelector(
                       normalizedLocalSettings.openrouterDeepPlannerModel,
                       (value) => setLocalSettings((current) => ({ ...current, openrouterDeepPlannerModel: value })),
                       "Planner profond",
-                      "Reprend le premier plan et renforce CRS, préconditions, sorties et risques.",
-                      "blue"
+                      "Raffine le plan : vérifie les CRS, préconditions, risques et sorties. Peut être le même que le Planner.",
+                      "blue",
+                      "planner"
                     )}
 
                     {normalizedLocalSettings.openrouterAgentMode === "multi" && renderModelSelector(
                       normalizedLocalSettings.openrouterReviewerModel,
                       (value) => setLocalSettings((current) => ({ ...current, openrouterReviewerModel: value })),
                       "Reviewer",
-                      "Passe en revue la stratégie avant restitution ou avant exécution.",
-                      "emerald"
+                      "Valide la cohérence du plan avant exécution. Doit être fiable pour ne pas bloquer le flux.",
+                      "emerald",
+                      "reviewer"
                     )}
 
                     {normalizedLocalSettings.openrouterUseRetriever && renderModelSelector(
                       normalizedLocalSettings.openrouterRetrieverModel,
                       (value) => setLocalSettings((current) => ({ ...current, openrouterRetrieverModel: value })),
-                      "Retriever",
-                      "Modèle d'embeddings pour la recherche sémantique dans le contexte.",
-                      "cyan"
+                      "Retriever (embeddings)",
+                      "Génère les embeddings pour la recherche sémantique dans le contexte QGIS.",
+                      "cyan",
+                      "retriever"
                     )}
 
                     {renderModelSelector(
                       normalizedLocalSettings.openrouterExecutorModel,
                       (value) => setLocalSettings((current) => ({ ...current, openrouterExecutorModel: value })),
                       "Executor",
-                      "Modèle qui génère les scripts PyQGIS et réponses opérationnelles.",
-                      "orange"
+                      "Exécute le plan validé : appelle les outils QGIS, génère les scripts PyQGIS. Doit supporter le tool-calling.",
+                      "orange",
+                      "executor"
                     )}
                   </div>
                 </div>,
@@ -1134,6 +1739,104 @@ export default function SettingsModal({
           {activeTab === "execution" && (
             <div className="space-y-4">
               {renderAccordionSection(
+                "generation-params",
+                "Paramètres de Génération",
+                <Activity size={20} />,
+                <div className="space-y-5">
+                  <p className="text-xs leading-relaxed text-white/55">
+                    Ces paramètres s'appliquent à tous les providers (Gemini, Ollama, OpenRouter) pour contrôler la créativité et la longueur des réponses.
+                  </p>
+
+                  {/* Température */}
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="text-xs font-medium text-white/70">Température</label>
+                      <span className="rounded-lg border border-white/10 bg-black/20 px-2 py-0.5 text-xs font-mono text-white">
+                        {normalizedLocalSettings.temperature.toFixed(2)}
+                      </span>
+                    </div>
+                    <input
+                      type="range" min="0" max="2" step="0.05"
+                      value={normalizedLocalSettings.temperature}
+                      onChange={(e) => setLocalSettings((c) => ({ ...c, temperature: parseFloat(e.target.value) }))}
+                      className="w-full accent-indigo-400"
+                    />
+                    <div className="mt-1 flex justify-between text-[10px] text-white/35">
+                      <span>0 — Déterministe</span>
+                      <span>0.7 — Équilibré</span>
+                      <span>2 — Créatif</span>
+                    </div>
+                  </div>
+
+                  {/* Top-P */}
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="text-xs font-medium text-white/70">Top-P (nucleus sampling)</label>
+                      <span className="rounded-lg border border-white/10 bg-black/20 px-2 py-0.5 text-xs font-mono text-white">
+                        {normalizedLocalSettings.topP.toFixed(2)}
+                      </span>
+                    </div>
+                    <input
+                      type="range" min="0.01" max="1" step="0.01"
+                      value={normalizedLocalSettings.topP}
+                      onChange={(e) => setLocalSettings((c) => ({ ...c, topP: parseFloat(e.target.value) }))}
+                      className="w-full accent-indigo-400"
+                    />
+                    <div className="mt-1 flex justify-between text-[10px] text-white/35">
+                      <span>0.01 — Focused</span>
+                      <span>0.95</span>
+                      <span>1.0 — Tout le vocab</span>
+                    </div>
+                  </div>
+
+                  {/* Max Tokens */}
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="text-xs font-medium text-white/70">Max tokens de réponse</label>
+                      <span className="rounded-lg border border-white/10 bg-black/20 px-2 py-0.5 text-xs font-mono text-white">
+                        {normalizedLocalSettings.maxTokens.toLocaleString()}
+                      </span>
+                    </div>
+                    <input
+                      type="range" min="256" max="32768" step="256"
+                      value={normalizedLocalSettings.maxTokens}
+                      onChange={(e) => setLocalSettings((c) => ({ ...c, maxTokens: parseInt(e.target.value) }))}
+                      className="w-full accent-indigo-400"
+                    />
+                    <div className="mt-1 flex justify-between text-[10px] text-white/35">
+                      <span>256</span>
+                      <span>8 192 (défaut)</span>
+                      <span>32 768</span>
+                    </div>
+                  </div>
+
+                  {/* Streaming */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-white">Streaming des réponses</p>
+                        <p className="mt-1 text-xs text-white/55">Affiche le texte au fur et à mesure de la génération. Désactiver pour des réponses plus stables.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setLocalSettings((c) => ({ ...c, streamingEnabled: !c.streamingEnabled }))}
+                        className={cn(
+                          "mt-1 h-6 w-11 flex-shrink-0 rounded-full p-1 transition-colors",
+                          normalizedLocalSettings.streamingEnabled ? "bg-indigo-500" : "bg-white/10",
+                        )}
+                      >
+                        <div className={cn(
+                          "h-4 w-4 rounded-full bg-white transition-transform shadow-sm",
+                          normalizedLocalSettings.streamingEnabled ? "translate-x-5" : "translate-x-0",
+                        )} />
+                      </button>
+                    </div>
+                  </div>
+                </div>,
+                "indigo"
+              )}
+
+              {renderAccordionSection(
                 "pyqgis-auto",
                 "Scripts PyQGIS Automatiques",
                 <Workflow size={20} />,
@@ -1142,63 +1845,41 @@ export default function SettingsModal({
                     Contrôle l'exécution automatique et la réparation des scripts PyQGIS générés par l'IA.
                   </p>
                   
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <label className="mb-3 block text-xs font-medium text-white/70">
-                      Exécution automatique
-                    </label>
-                    <select
-                      value={normalizedLocalSettings.autoExecutePythonScripts ? "true" : "false"}
-                      onChange={(e) =>
-                        setLocalSettings((current) => ({
-                          ...current,
-                          autoExecutePythonScripts: e.target.value === "true",
-                        }))
-                      }
-                      className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition-all focus:border-indigo-500/40"
-                    >
-                      <option value="false">Désactivé (validation requise)</option>
-                      <option value="true">Activé (exécution immédiate)</option>
-                    </select>
-                  </div>
+                  <Toggle
+                    checked={normalizedLocalSettings.autoExecutePythonScripts}
+                    label="Exécution automatique des scripts PyQGIS"
+                    description="Exécute immédiatement les scripts générés sans demander de confirmation. ⚠ Peut modifier votre projet QGIS sans avertissement. Recommandé uniquement en environnement de test."
+                    onChange={(v) => setLocalSettings((c) => ({ ...c, autoExecutePythonScripts: v }))}
+                  />
 
                   {normalizedLocalSettings.autoExecutePythonScripts && (
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <label className="mb-3 block text-xs font-medium text-white/70">
-                        Auto-réparation
-                      </label>
-                      <select
-                        value={normalizedLocalSettings.autoRepairPythonScripts ? "true" : "false"}
-                        onChange={(e) =>
-                          setLocalSettings((current) => ({
-                            ...current,
-                            autoRepairPythonScripts: e.target.value === "true",
-                          }))
-                        }
-                        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition-all focus:border-indigo-500/40"
-                      >
-                        <option value="false">Désactivée</option>
-                        <option value="true">Activée (répare automatiquement)</option>
-                      </select>
-                      {normalizedLocalSettings.autoRepairPythonScripts && (
-                        <div className="mt-3">
-                          <label className="mb-2 block text-xs font-medium text-white/70">
-                            Tentatives max
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="5"
-                            value={normalizedLocalSettings.autoRepairMaxAttempts}
-                            onChange={(e) =>
-                              setLocalSettings((current) => ({
-                                ...current,
-                                autoRepairMaxAttempts: parseInt(e.target.value, 10),
-                              }))
-                            }
-                            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-white/25 focus:border-indigo-500/40"
-                          />
-                        </div>
-                      )}
+                    <Toggle
+                      checked={normalizedLocalSettings.autoRepairPythonScripts}
+                      label="Auto-réparation des erreurs"
+                      description="Si un script échoue, l'IA tente automatiquement de le corriger et de le ré-exécuter. Limite les boucles infinies via un compteur de tentatives."
+                      onChange={(v) => setLocalSettings((c) => ({ ...c, autoRepairPythonScripts: v }))}
+                    />
+                  )}
+
+                  {normalizedLocalSettings.autoExecutePythonScripts && normalizedLocalSettings.autoRepairPythonScripts && (
+                    <div>
+                      <div className="mb-2 flex items-center justify-between">
+                        <label className="text-xs font-medium text-white/70">Tentatives de réparation max</label>
+                        <span className="rounded-lg border border-white/10 bg-black/20 px-2 py-0.5 text-xs font-mono text-white">
+                          {normalizedLocalSettings.autoRepairMaxAttempts}
+                        </span>
+                      </div>
+                      <input
+                        type="range" min="1" max="5" step="1"
+                        value={normalizedLocalSettings.autoRepairMaxAttempts}
+                        onChange={(e) => setLocalSettings((c) => ({ ...c, autoRepairMaxAttempts: parseInt(e.target.value, 10) }))}
+                        className="w-full accent-indigo-400"
+                      />
+                      <div className="mt-1 flex justify-between text-[10px] text-white/35">
+                        <span>1 — Rapide</span>
+                        <span>3 — Équilibré</span>
+                        <span>5 — Persistant</span>
+                      </div>
                     </div>
                   )}
                 </div>,
@@ -1286,6 +1967,15 @@ export default function SettingsModal({
                         ? "Automatique"
                         : "Manuelle"}
                     </strong>
+                  </div>
+                  <div className="mt-1 rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-xs text-white/65">
+                    <div className="font-semibold text-white/85 mb-2">Paramètres de génération</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <div className="flex items-center justify-between"><span>Température</span><strong className="text-white font-mono">{normalizedLocalSettings.temperature.toFixed(2)}</strong></div>
+                      <div className="flex items-center justify-between"><span>Top-P</span><strong className="text-white font-mono">{normalizedLocalSettings.topP.toFixed(2)}</strong></div>
+                      <div className="flex items-center justify-between"><span>Max tokens</span><strong className="text-white font-mono">{normalizedLocalSettings.maxTokens.toLocaleString()}</strong></div>
+                      <div className="flex items-center justify-between"><span>Streaming</span><strong className="text-white">{normalizedLocalSettings.streamingEnabled ? "On" : "Off"}</strong></div>
+                    </div>
                   </div>
                 </div>,
                 "blue"
@@ -1474,36 +2164,69 @@ export default function SettingsModal({
                     Affiche les événements de debug récents pour aider à identifier les problèmes.
                   </p>
                   
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 font-semibold text-white">
-                      <Activity size={16} />
-                      {debugEvents.length} événements
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 font-semibold text-white">
+                        <Activity size={16} />
+                        {debugEvents.length} événements
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const formatted = formatDebugEventsForClipboard(debugEvents);
+                            void navigator.clipboard.writeText(formatted);
+                            toast.success("Logs copiés");
+                          }}
+                          className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-semibold text-cyan-100 transition-all hover:bg-cyan-500/16"
+                        >
+                          <Copy size={12} className="inline mr-1" />Copier
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const blob = new Blob([formatDebugEventsForClipboard(debugEvents)], { type: "text/plain" });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a"); a.href = url; a.download = `geosylva-logs-${Date.now()}.txt`; a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                          className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1.5 text-xs font-semibold text-blue-100 transition-all hover:bg-blue-500/16"
+                        >
+                          <Download size={12} className="inline mr-1" />Export
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { clearDebugEvents(); setDebugEvents([]); toast.success("Logs effacés"); }}
+                          className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-100 transition-all hover:bg-red-500/16"
+                        >
+                          <Trash2 size={12} className="inline mr-1" />Effacer
+                        </button>
+                      </div>
                     </div>
+                    {/* Filtre niveau + recherche */}
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const formatted = formatDebugEventsForClipboard(debugEvents);
-                          void navigator.clipboard.writeText(formatted);
-                          toast.success("Logs copiés dans le presse-papier");
-                        }}
-                        className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition-all hover:bg-cyan-500/16"
-                      >
-                        <Copy size={14} className="inline mr-1" />
-                        Copier
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          clearDebugEvents();
-                          setDebugEvents([]);
-                          toast.success("Logs effacés");
-                        }}
-                        className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-100 transition-all hover:bg-red-500/16"
-                      >
-                        <Trash2 size={14} className="inline mr-1" />
-                        Effacer
-                      </button>
+                      <div className="flex gap-1">
+                        {(["all", "error", "warning", "info"] as const).map(lvl => (
+                          <button key={lvl} type="button"
+                            onClick={() => setLogLevelFilter(lvl)}
+                            className={cn(
+                              "rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide border transition-all",
+                              logLevelFilter === lvl
+                                ? lvl === "error" ? "border-red-500/40 bg-red-500/15 text-red-200"
+                                  : lvl === "warning" ? "border-yellow-500/40 bg-yellow-500/15 text-yellow-200"
+                                  : lvl === "info" ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-200"
+                                  : "border-white/20 bg-white/10 text-white"
+                                : "border-white/10 bg-transparent text-white/40 hover:text-white/60"
+                            )}
+                          >{lvl}</button>
+                        ))}
+                      </div>
+                      <input
+                        value={logSearch}
+                        onChange={e => setLogSearch(e.target.value)}
+                        placeholder="Rechercher..."
+                        className="flex-1 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white placeholder:text-white/25 outline-none focus:border-cyan-500/30"
+                      />
                     </div>
                   </div>
 
@@ -1514,33 +2237,48 @@ export default function SettingsModal({
                     </div>
                   ) : (
                     <div className="max-h-96 space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-3">
-                      {debugEvents.slice(-50).reverse().map((event, index) => (
-                        <div
-                          key={index}
-                          className={`rounded-xl border p-3 text-xs ${
-                            event.level === "error"
-                              ? "border-red-500/30 bg-red-500/10 text-red-100"
-                              : event.level === "warning"
-                                ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-100"
-                                : "border-white/10 bg-white/5 text-white/80"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="font-semibold uppercase tracking-wider opacity-70">
-                              {event.level}
-                            </span>
-                            <span className="text-[10px] opacity-50">
-                              {new Date(event.createdAt).toLocaleTimeString()}
-                            </span>
+                      {(() => {
+                        const filtered = debugEvents
+                          .filter(e => logLevelFilter === "all" || e.level === logLevelFilter)
+                          .filter(e => !logSearch || e.message.toLowerCase().includes(logSearch.toLowerCase()) || (e.details ?? "").toLowerCase().includes(logSearch.toLowerCase()))
+                          .slice(-100)
+                          .reverse();
+                        if (filtered.length === 0) return (
+                          <div className="py-6 text-center text-xs text-white/40">Aucun événement correspondant</div>
+                        );
+                        return filtered.map((event, index) => (
+                          <div
+                            key={`${event.createdAt}-${index}`}
+                            className={`rounded-xl border p-3 text-xs ${
+                              event.level === "error"
+                                ? "border-red-500/30 bg-red-500/10 text-red-100"
+                                : event.level === "warning"
+                                  ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-100"
+                                  : "border-white/10 bg-white/5 text-white/80"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className={cn(
+                                "font-semibold uppercase tracking-wider text-[10px] px-1.5 py-0.5 rounded",
+                                event.level === "error" ? "bg-red-500/20 text-red-300" :
+                                event.level === "warning" ? "bg-yellow-500/20 text-yellow-300" :
+                                "bg-white/10 text-white/50"
+                              )}>
+                                {event.level}
+                              </span>
+                              <span className="text-[10px] opacity-50">
+                                {new Date(event.createdAt).toLocaleTimeString()}
+                              </span>
+                            </div>
+                            <p className="font-medium">{event.message}</p>
+                            {event.details && (
+                              <pre className="mt-2 max-h-32 overflow-auto rounded-lg bg-black/30 p-2 text-[10px] font-mono opacity-80">
+                                {event.details}
+                              </pre>
+                            )}
                           </div>
-                          <p className="font-medium">{event.message}</p>
-                          {event.details && (
-                            <pre className="mt-2 max-h-32 overflow-auto rounded-lg bg-black/30 p-2 text-[10px] font-mono opacity-80">
-                              {event.details}
-                            </pre>
-                          )}
-                        </div>
-                      ))}
+                        ));
+                      })()}
                     </div>
                   )}
                 </div>,
@@ -1551,7 +2289,7 @@ export default function SettingsModal({
         </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/5 bg-white dark:bg-[#131314] px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] bg-[#131314] px-6 py-4">
           <button
             type="button"
             onClick={onReset}

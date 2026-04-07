@@ -1,5 +1,4 @@
 import { toast } from "sonner";
-import { safeLog } from "./security";
 
 interface OllamaModel {
   name: string;
@@ -21,90 +20,27 @@ interface SystemSpecs {
 }
 
 export async function detectOllama(): Promise<boolean> {
-  safeLog("[Ollama Detect] ===========================================");
-  safeLog("[Ollama Detect] Starting detection...");
-  safeLog("[Ollama Detect] Target URL: http://localhost:11434/api/tags");
-  safeLog("[Ollama Detect] Timeout: 2000ms");
-  
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-    
-    safeLog("[Ollama Detect] Fetching...");
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
     const response = await fetch("http://localhost:11434/api/tags", {
       method: "GET",
       signal: controller.signal,
     });
-    
     clearTimeout(timeoutId);
-    
-    safeLog("[Ollama Detect] Response received");
-    safeLog("[Ollama Detect] Status:", response.status);
-    safeLog("[Ollama Detect] OK:", response.ok);
-    safeLog("[Ollama Detect] StatusText:", response.statusText);
-    safeLog("[Ollama Detect] Headers:", Object.fromEntries(response.headers.entries()));
-    
-    if (response.ok) {
-      safeLog("[Ollama Detect] ✅ SUCCESS - Ollama is running!");
-    } else {
-      safeLog("[Ollama Detect] ❌ FAILED - Response not OK");
-    }
-    
     return response.ok;
-  } catch (error) {
-    safeLog("[Ollama Detect] ❌ ERROR - Exception caught");
-    safeLog("[Ollama Detect] Error type:", error?.constructor?.name);
-    safeLog("[Ollama Detect] Error message:", error?.message);
-    safeLog("[Ollama Detect] Error details:", error);
-    
-    if (error?.name === 'AbortError') {
-      safeLog("[Ollama Detect] Request timed out (2s)");
-    }
-    
+  } catch {
     return false;
   }
 }
 
 export async function getOllamaModels(): Promise<OllamaModel[]> {
-  safeLog("[Ollama Models] ===========================================");
-  safeLog("[Ollama Models] Fetching available models...");
-  safeLog("[Ollama Models] Target URL: http://localhost:11434/api/tags");
-  
   try {
-    safeLog("[Ollama Models] Fetching...");
     const response = await fetch("http://localhost:11434/api/tags");
-    
-    safeLog("[Ollama Models] Response received");
-    safeLog("[Ollama Models] Status:", response.status);
-    safeLog("[Ollama Models] OK:", response.ok);
-    
-    if (!response.ok) {
-      safeLog("[Ollama Models] ❌ FAILED - Response not OK:", response.statusText);
-      return [];
-    }
-    
-    safeLog("[Ollama Models] Parsing JSON...");
+    if (!response.ok) return [];
     const data = await response.json();
-    safeLog("[Ollama Models] Raw data received:", JSON.stringify(data).substring(0, 200) + "...");
-    
-    const models = data.models || [];
-    safeLog("[Ollama Models] Number of models found:", models.length);
-    
-    if (models.length > 0) {
-      safeLog("[Ollama Models] Model details:");
-      models.forEach((m, i) => {
-        safeLog(`[Ollama Models]   ${i + 1}. ${m.name} | Size: ${m.size} | Quant: ${m.details.quantization}`);
-      });
-    } else {
-      safeLog("[Ollama Models] ⚠️ No models found - Ollama might be running but no models downloaded");
-    }
-    
-    return models;
-  } catch (error) {
-    safeLog("[Ollama Models] ❌ ERROR - Exception caught");
-    safeLog("[Ollama Models] Error type:", error?.constructor?.name);
-    safeLog("[Ollama Models] Error message:", error?.message);
-    safeLog("[Ollama Models] Error details:", error);
+    return data.models || [];
+  } catch {
     return [];
   }
 }
@@ -139,63 +75,45 @@ export function selectBestModel(
 ): OllamaModel | null {
   if (models.length === 0) return null;
 
-  // Priorité des modèles par ordre de préférence
+  // Priorité par famille (modèles récents et performants en premier)
   const modelPriority = [
-    "qwen2.5", // Meilleur rapport qualité/performances
-    "qwen2",
+    "gemma4",    // Google Gemma 4 — meilleur rapport qualité/taille 2025
+    "qwen3",     // Qwen3 — excellent suivi instructions, multilingue
+    "qwen2.5",
+    "gemma3",
+    "llama3.3",
     "llama3.2",
     "llama3.1",
     "llama3",
-    "mistral",
+    "phi4",
+    "phi3.5",
     "phi3",
-    "gemma2",
+    "mistral",
+    "qwen2",
     "deepseek",
+    "gemma2",
   ];
 
-  // Filtrer par quantization selon la RAM
+  // Filtrer les modèles trop lourds pour la RAM disponible
   const suitableModels = models.filter((model) => {
-    const quant = model.details.quantization;
-    
-    // Handle undefined quantization
-    if (!quant) {
-      console.log("[Ollama Select] Model has no quantization, accepting:", model.name);
-      return true;
-    }
-    
-    // Pour PC avec moins de 8GB RAM, préférer Q4_K_M ou Q4_K_S
-    if (specs.ram < 8) {
-      return quant.includes("Q4") || quant.includes("q4");
-    }
-    
-    // Pour 8-16GB, Q4 ou Q5
-    if (specs.ram < 16) {
-      return quant.includes("Q4") || quant.includes("Q5") || 
-             quant.includes("q4") || quant.includes("q5");
-    }
-    
-    // Pour 16GB+, tout est OK
-    return true;
+    const sizeGb = model.size / 1e9;
+    // Garder une marge de 2 Go pour le système
+    const maxSizeGb = Math.max(1, specs.ram - 2);
+    return sizeGb <= maxSizeGb;
   });
 
-  // Trier par priorité
-  const sortedModels = [...suitableModels].sort((a, b) => {
-    const aPriority = modelPriority.findIndex((p) => a.name.includes(p));
-    const bPriority = modelPriority.findIndex((p) => b.name.includes(p));
-    
-    // Si aucun n'est dans la liste, garder l'ordre original
+  const pool = suitableModels.length > 0 ? suitableModels : models;
+
+  const sorted = [...pool].sort((a, b) => {
+    const aPriority = modelPriority.findIndex((p) => a.name.toLowerCase().includes(p));
+    const bPriority = modelPriority.findIndex((p) => b.name.toLowerCase().includes(p));
     if (aPriority === -1 && bPriority === -1) return 0;
     if (aPriority === -1) return 1;
     if (bPriority === -1) return -1;
-    
     return aPriority - bPriority;
   });
 
-  // Préférer les modèles plus petits pour les PCs moins puissants
-  if (specs.ram < 8 || specs.cores < 4) {
-    sortedModels.sort((a, b) => a.size - b.size);
-  }
-
-  return sortedModels[0] || null;
+  return sorted[0] || null;
 }
 
 export async function autoConfigureOllama(): Promise<{
@@ -203,16 +121,8 @@ export async function autoConfigureOllama(): Promise<{
   model?: string;
   error?: string;
 }> {
-  safeLog("[Ollama Auto-Config] ===========================================");
-  safeLog("[Ollama Auto-Config] Starting auto-configuration...");
-  safeLog("[Ollama Auto-Config] Step 1/4: Detecting Ollama...");
-  
-  // 1. Détecter Ollama
   const ollamaAvailable = await detectOllama();
-  safeLog("[Ollama Auto-Config] Step 1 result - Ollama available:", ollamaAvailable);
-  
   if (!ollamaAvailable) {
-    safeLog("[Ollama Auto-Config] ❌ FAILED - Ollama not detected");
     return {
       success: false,
       error: "Ollama n'est pas détecté. Veuillez l'installer et le lancer.",
@@ -220,50 +130,30 @@ export async function autoConfigureOllama(): Promise<{
   }
 
   toast.info("Ollama détecté, recherche du meilleur modèle...");
-  safeLog("[Ollama Auto-Config] Step 2/4: Fetching available models...");
 
-  // 2. Récupérer les modèles disponibles
-  const models = await getOllamaModels();
-  safeLog("[Ollama Auto-Config] Step 2 result - Models count:", models.length);
-  
+  const [models, specs] = await Promise.all([getOllamaModels(), getSystemSpecs()]);
+
   if (models.length === 0) {
-    safeLog("[Ollama Auto-Config] ❌ FAILED - No models available");
     return {
       success: false,
       error: "Aucun modèle Ollama disponible. Veuillez en télécharger un.",
     };
   }
 
-  // 3. Détecter les specs du système
-  safeLog("[Ollama Auto-Config] Step 3/4: Detecting system specs...");
-  const specs = await getSystemSpecs();
-  safeLog("[Ollama Auto-Config] Step 3 result - System specs:", specs);
-  
   toast.info(
-    `Système détecté: ${specs.ram}GB RAM, ${specs.cores} cœurs${specs.gpu ? ", GPU disponible" : ""}`
+    `Système: ${specs.ram} Go RAM, ${specs.cores} cœurs${specs.gpu ? ", GPU" : ""}`
   );
 
-  // 4. Sélectionner le meilleur modèle
-  safeLog("[Ollama Auto-Config] Step 4/4: Selecting best model...");
   const bestModel = selectBestModel(models, specs);
-  safeLog("[Ollama Auto-Config] Step 4 result - Best model:", bestModel?.name);
-  
   if (!bestModel) {
-    safeLog("[Ollama Auto-Config] ❌ FAILED - No suitable model found");
     return {
       success: false,
       error: "Aucun modèle adapté à votre système trouvé.",
     };
   }
 
-  toast.success(`Modèle sélectionné: ${bestModel.name}`);
-  safeLog("[Ollama Auto-Config] ✅ SUCCESS - Configuration complete!");
-  safeLog("[Ollama Auto-Config] Selected model:", bestModel.name);
-
-  return {
-    success: true,
-    model: bestModel.name,
-  };
+  toast.success(`Modèle sélectionné : ${bestModel.name}`);
+  return { success: true, model: bestModel.name };
 }
 
 export function getRecommendedModelDownload(): {
@@ -272,44 +162,50 @@ export function getRecommendedModelDownload(): {
   command: string;
   size: string;
 } {
-  const specs = {
-    ram: (navigator as any).deviceMemory || 8,
-    cores: navigator.hardwareConcurrency || 4,
-    gpu: detectGPU(),
-  };
+  const ram = (navigator as any).deviceMemory || 8;
+  const cores = navigator.hardwareConcurrency || 4;
 
-  if (specs.ram < 6) {
+  if (ram < 5) {
     return {
-      model: "qwen2.5:3b",
-      reason: "Modèle ultra-léger adapté aux PC avec moins de 6GB RAM",
-      command: "ollama pull qwen2.5:3b",
-      size: "~2 GB",
+      model: "gemma4:2b",
+      reason: "Gemma 4 ultra-léger (Google) — idéal pour PC avec moins de 5 Go RAM",
+      command: "ollama pull gemma4:2b",
+      size: "~1.7 Go",
     };
   }
 
-  if (specs.ram < 12 || specs.cores < 6) {
+  if (ram < 9 || cores < 6) {
     return {
-      model: "qwen2.5:7b",
-      reason: "Modèle équilibré pour les PC standards (8-12GB RAM)",
-      command: "ollama pull qwen2.5:7b",
-      size: "~4.7 GB",
+      model: "gemma4:4b",
+      reason: "Gemma 4 4B (Google) — excellent rapport qualité/taille pour 6-8 Go RAM",
+      command: "ollama pull gemma4:4b",
+      size: "~3.3 Go",
     };
   }
 
-  if (specs.ram < 24) {
+  if (ram < 16) {
     return {
-      model: "qwen2.5:14b",
-      reason: "Modèle performant pour les PC avec 16GB+ RAM",
-      command: "ollama pull qwen2.5:14b",
-      size: "~9 GB",
+      model: "qwen3:8b",
+      reason: "Qwen3 8B — très bon suivi d'instructions, multilingue, pour 10-16 Go RAM",
+      command: "ollama pull qwen3:8b",
+      size: "~5.2 Go",
+    };
+  }
+
+  if (ram < 28) {
+    return {
+      model: "gemma4:12b",
+      reason: "Gemma 4 12B (Google) — multimodal et puissant pour les workstations 16-28 Go",
+      command: "ollama pull gemma4:12b",
+      size: "~9 Go",
     };
   }
 
   return {
-    model: "qwen2.5:32b",
-    reason: "Modèle haute qualité pour les workstations puissantes (32GB+ RAM)",
-    command: "ollama pull qwen2.5:32b",
-    size: "~20 GB",
+    model: "qwen3:30b-a3b",
+    reason: "Qwen3 30B MoE — qualité maximale avec architecture MoE efficace, pour 32 Go+",
+    command: "ollama pull qwen3:30b-a3b",
+    size: "~19 Go",
   };
 }
 
@@ -319,6 +215,8 @@ export interface PullProgress {
   total?: number;
   completed?: number;
   percent?: number;
+  speedBps?: number;
+  etaSeconds?: number;
 }
 
 export async function pullOllamaModel(
@@ -345,6 +243,10 @@ export async function pullOllamaModel(
 
     const decoder = new TextDecoder();
     let buffer = "";
+    let lastCompleted = 0;
+    let lastTimestamp = Date.now();
+    // Fenêtre glissante pour lisser le calcul de vitesse
+    const speedSamples: number[] = [];
 
     while (true) {
       const { done, value } = await reader.read();
@@ -359,16 +261,46 @@ export async function pullOllamaModel(
         try {
           const data = JSON.parse(line);
           const progress: PullProgress = { status: data.status || "" };
+
           if (data.total && data.completed) {
+            const now = Date.now();
+            const deltaSec = (now - lastTimestamp) / 1000;
+            const deltaBytes = data.completed - lastCompleted;
+
+            if (deltaSec > 0.2 && deltaBytes > 0) {
+              const instantSpeed = deltaBytes / deltaSec;
+              speedSamples.push(instantSpeed);
+              if (speedSamples.length > 5) speedSamples.shift();
+              const avgSpeed = speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length;
+              progress.speedBps = avgSpeed;
+              const remaining = data.total - data.completed;
+              progress.etaSeconds = avgSpeed > 0 ? Math.round(remaining / avgSpeed) : undefined;
+              lastCompleted = data.completed;
+              lastTimestamp = now;
+            }
+
             progress.total = data.total;
             progress.completed = data.completed;
             progress.percent = Math.round((data.completed / data.total) * 100);
           }
+
           if (data.digest) progress.digest = data.digest;
+
+          // Ollama peut envoyer un champ "error" dans le stream
+          if (data.error) {
+            return { success: false, error: String(data.error) };
+          }
+
           onProgress(progress);
 
-          if (data.status === "success") {
-            return { success: true };
+          // "success" ou fin de vérification de digest = téléchargement terminé
+          if (
+            data.status === "success" ||
+            data.status === "verifying sha256 digest" ||
+            data.status === "writing manifest" ||
+            data.status === "removing any unused layers"
+          ) {
+            // On attend la fin du stream pour confirmer
           }
         } catch {
           // skip malformed JSON lines
@@ -376,12 +308,32 @@ export async function pullOllamaModel(
       }
     }
 
+    // Stream terminé proprement = succès (même sans "success" explicite)
     return { success: true };
-  } catch (error: any) {
-    if (error?.name === "AbortError") {
+  } catch (error: unknown) {
+    if ((error as Error)?.name === "AbortError") {
       return { success: false, error: "Téléchargement annulé" };
     }
-    return { success: false, error: error?.message || "Erreur inconnue" };
+    return { success: false, error: (error as Error)?.message || "Erreur inconnue" };
+  }
+}
+
+export async function deleteOllamaModel(
+  modelName: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch("http://localhost:11434/api/delete", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: modelName }),
+    });
+    if (response.status === 200 || response.status === 204) {
+      return { success: true };
+    }
+    const text = await response.text().catch(() => "");
+    return { success: false, error: `HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}` };
+  } catch (error: unknown) {
+    return { success: false, error: (error as Error)?.message || "Erreur inconnue" };
   }
 }
 

@@ -18,13 +18,13 @@ export default function PerformancePanel() {
   const getTypeColor = (type: string) => {
     switch (type) {
       case "llm_response":
-        return "text-blue-300";
+        return "text-blue-500 dark:text-blue-300";
       case "qgis_operation":
-        return "text-emerald-300";
+        return "text-emerald-500 dark:text-emerald-300";
       case "layer_refresh":
-        return "text-amber-300";
+        return "text-amber-500 dark:text-amber-300";
       default:
-        return "text-white/70";
+        return "text-gray-500 dark:text-white/70";
     }
   };
   
@@ -42,14 +42,14 @@ export default function PerformancePanel() {
   };
   
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+    <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.04] p-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-white/55">
           Performance
         </h3>
         <button
           onClick={clearMetrics}
-          className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-white/40 transition-all hover:bg-white/10 hover:text-white/60"
+          className="rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-white/40 transition-all hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-700 dark:hover:text-white/60"
         >
           Effacer
         </button>
@@ -59,9 +59,9 @@ export default function PerformancePanel() {
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
           <div className="flex items-center gap-2 mb-1">
             <Zap size={14} className="text-blue-300" />
-            <span className="text-[10px] font-medium text-blue-200/70">LLM moyen</span>
+            <span className="text-[10px] font-medium text-blue-600 dark:text-blue-200/70">LLM moyen</span>
           </div>
-          <p className="text-lg font-bold text-blue-200">
+          <p className="text-lg font-bold text-blue-600 dark:text-blue-200">
             {avgLlmTime > 0 ? formatDuration(avgLlmTime) : "-"}
           </p>
         </div>
@@ -69,9 +69,9 @@ export default function PerformancePanel() {
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
           <div className="flex items-center gap-2 mb-1">
             <Activity size={14} className="text-emerald-300" />
-            <span className="text-[10px] font-medium text-emerald-200/70">QGIS moyen</span>
+            <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-200/70">QGIS moyen</span>
           </div>
-          <p className="text-lg font-bold text-emerald-200">
+          <p className="text-lg font-bold text-emerald-600 dark:text-emerald-200">
             {avgQgisTime > 0 ? formatDuration(avgQgisTime) : "-"}
           </p>
         </div>
@@ -79,20 +79,20 @@ export default function PerformancePanel() {
       
       {recentMetrics.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[10px] font-medium text-white/35">Opérations récentes</p>
+          <p className="text-[10px] font-medium text-gray-400 dark:text-white/35">Opérations récentes</p>
           <div className="space-y-1.5 max-h-40 overflow-y-auto">
             {recentMetrics.map((metric) => (
               <div
                 key={metric.id}
-                className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-2.5 py-1.5"
+                className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-white/5 bg-white dark:bg-white/[0.02] px-2.5 py-1.5"
               >
                 <span className={getTypeColor(metric.type)}>
                   {getTypeIcon(metric.type)}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-[10px] text-white/70">
+                <span className="min-w-0 flex-1 truncate text-[10px] text-gray-600 dark:text-white/70">
                   {metric.name}
                 </span>
-                <span className="text-[10px] font-mono text-white/50">
+                <span className="text-[10px] font-mono text-gray-400 dark:text-white/50">
                   {formatDuration(metric.duration)}
                 </span>
                 {!metric.success && (
@@ -105,7 +105,7 @@ export default function PerformancePanel() {
       )}
       
       {metrics.length === 0 && (
-        <p className="text-[10px] text-white/35 text-center py-4">
+        <p className="text-[10px] text-gray-400 dark:text-white/35 text-center py-4">
           Aucune métrique disponible
         </p>
       )}

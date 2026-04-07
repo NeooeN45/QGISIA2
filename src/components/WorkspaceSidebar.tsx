@@ -198,12 +198,12 @@ function SidebarSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-gray-300 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-4">
-      <div className="mb-3">
-        <p className={cn("text-xs font-semibold uppercase tracking-[0.22em]", accentClassName)}>
+    <section className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50/80 dark:bg-white/[0.02] p-4 shadow-sm">
+      <div className="mb-3.5">
+        <p className={cn("text-[10px] font-black uppercase tracking-[0.28em]", accentClassName)}>
           {title}
         </p>
-        {description ? <p className="mt-1 text-xs text-gray-600 dark:text-white/45">{description}</p> : null}
+        {description ? <p className="mt-1 text-[11px] text-gray-500 dark:text-white/35">{description}</p> : null}
       </div>
       {children}
     </section>
@@ -228,24 +228,24 @@ function CollapsibleSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-gray-300 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 overflow-hidden">
+    <section className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50/80 dark:bg-white/[0.02] overflow-hidden shadow-sm">
       <button
         onClick={onToggle}
-        className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+        className="flex w-full items-center gap-3 p-3.5 text-left transition-all hover:bg-gray-100/80 dark:hover:bg-white/[0.04]"
       >
         <span className={cn("shrink-0", accentClassName)}>{icon}</span>
         <div className="flex-1">
-          <span className={cn("block text-xs font-semibold uppercase tracking-[0.22em]", accentClassName)}>
+          <span className={cn("block text-[10px] font-black uppercase tracking-[0.28em]", accentClassName)}>
             {title}
           </span>
-          {description && <p className="mt-0.5 text-[10px] text-gray-700 dark:text-gray-300/35">{description}</p>}
+          {description && <p className="mt-0.5 text-[10px] text-gray-500 dark:text-white/30">{description}</p>}
         </div>
         <ChevronDown
-          size={14}
-          className={cn("shrink-0 text-gray-700 dark:text-gray-300/30 transition-transform", isOpen && "rotate-180")}
+          size={13}
+          className={cn("shrink-0 text-gray-400 dark:text-white/25 transition-transform duration-200", isOpen && "rotate-180")}
         />
       </button>
-      {isOpen && <div className="border-t border-gray-300 dark:border-gray-800 p-4 pt-3">{children}</div>}
+      {isOpen && <div className="border-t border-gray-200 dark:border-white/[0.05] p-3.5 pt-3">{children}</div>}
     </section>
   );
 }
@@ -405,28 +405,25 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     );
   }, [conversationQuery, conversations]);
 
-  const filteredSources = useMemo(() => {
+  type DataSourceCategories = typeof DATA_SOURCE_CATEGORIES;
+  const filteredSources = useMemo((): Partial<DataSourceCategories> => {
     const q = serviceQuery.toLowerCase().trim();
-    if (!q) {
-      // Si pas de recherche, retourner les catégories non filtrées
-      return DATA_SOURCE_CATEGORIES as any;
-    }
-    
-    // Si recherche, filtrer les sources dans chaque catégorie
-    const filteredCategories: any = {};
-    Object.entries(DATA_SOURCE_CATEGORIES).forEach(([key, category]) => {
-      const filteredSources = category.sources.filter(
+    if (!q) return DATA_SOURCE_CATEGORIES;
+    const result: Partial<DataSourceCategories> = {};
+    (Object.keys(DATA_SOURCE_CATEGORIES) as Array<keyof DataSourceCategories>).forEach((key) => {
+      const category = DATA_SOURCE_CATEGORIES[key];
+      const matched = category.sources.filter(
         (s) =>
           s.name.toLowerCase().includes(q) ||
           s.provider?.toLowerCase().includes(q) ||
           s.description?.toLowerCase().includes(q) ||
           s.id.toLowerCase().includes(q),
       );
-      if (filteredSources.length > 0) {
-        filteredCategories[key] = { ...category, sources: filteredSources };
+      if (matched.length > 0) {
+        result[key] = { ...category, sources: matched } as DataSourceCategories[typeof key];
       }
     });
-    return filteredCategories;
+    return result;
   }, [serviceQuery]);
 
   const toggleCategory = (categoryId: string) => {
@@ -672,20 +669,23 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     <div className="space-y-4">
       <div className="relative">
         <Search
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 dark:text-gray-300/30"
-          size={15}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/25"
+          size={14}
         />
         <input
           value={conversationQuery}
           onChange={(event) => setConversationQuery(event.target.value)}
-          placeholder="Chercher une discussion..."
-          className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 py-2.5 pl-10 pr-3 text-sm text-gray-800 dark:text-gray-200 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:border-blue-500/50 dark:focus:border-blue-500/50"
+          placeholder="Rechercher une discussion..."
+          className="w-full rounded-xl border border-gray-200 dark:border-white/[0.07] bg-gray-100/80 dark:bg-white/[0.03] py-2 pl-9 pr-3 text-[13px] text-gray-700 dark:text-gray-200 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-white/25 focus:border-blue-400/50 focus:bg-white dark:focus:bg-white/[0.05] dark:focus:border-blue-500/40"
         />
       </div>
       
       {filteredConversations.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-gray-300 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/30 p-4 text-sm text-gray-600 dark:text-gray-400">
-          {conversations.length === 0 ? "Aucune discussion enregistrée." : "Aucune discussion ne correspond à la recherche."}
+        <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/[0.07] bg-gray-50/60 dark:bg-white/[0.01] p-5 text-center">
+          <MessageSquare size={20} className="mx-auto mb-2 text-gray-300 dark:text-white/20" />
+          <p className="text-[12px] text-gray-400 dark:text-white/30">
+            {conversations.length === 0 ? "Aucune discussion enregistrée" : "Aucun résultat"}
+          </p>
         </div>
       ) : (
         filteredConversations.map((conversation) => {
@@ -698,20 +698,32 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
               onClick={() => onSelectConversation(conversation.id)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onSelectConversation(conversation.id); }}
               className={cn(
-                "w-full cursor-pointer rounded-3xl border p-4 text-left transition-all",
+                "group w-full cursor-pointer rounded-2xl border p-3.5 text-left transition-all duration-200",
                 isActive
-                  ? "border-blue-500/35 bg-blue-500/12"
-                  : "border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800",
+                  ? "border-blue-500/40 bg-gradient-to-br from-blue-500/12 to-blue-600/6 shadow-md shadow-blue-500/10"
+                  : "border-gray-200 dark:border-white/[0.06] bg-white/60 dark:bg-white/[0.02] hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:border-gray-300 dark:hover:border-white/[0.10]",
               )}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-700 dark:text-gray-300">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest",
+                      conversation.mode === "plan"
+                        ? "bg-violet-500/15 text-violet-400 border border-violet-500/25"
+                        : "bg-blue-500/15 text-blue-400 border border-blue-500/25"
+                    )}>
+                      {conversation.mode === "plan" ? "Plan" : "Chat"}
+                    </span>
+                    <span className="text-[10px] text-gray-400 dark:text-white/30 tabular-nums">
+                      {conversation.messages.length} msg
+                    </span>
+                  </div>
+                  <p className={cn(
+                    "truncate text-[13px] font-semibold leading-tight",
+                    isActive ? "text-blue-700 dark:text-blue-200" : "text-gray-700 dark:text-gray-200"
+                  )}>
                     {conversation.title}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-600 dark:text-white/45">
-                    {conversation.mode === "plan" ? "Plan guidé" : "Conversation"} ·{" "}
-                    {conversation.messages.length} message(s)
                   </p>
                 </div>
                 <button
@@ -719,15 +731,19 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
                     event.stopPropagation();
                     onDeleteConversation(conversation.id);
                   }}
-                  className="rounded-2xl border border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 p-2 text-gray-600 dark:text-gray-400 transition-all hover:text-red-500"
+                  className="opacity-0 group-hover:opacity-100 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.05] p-1.5 text-gray-400 dark:text-white/30 transition-all hover:border-red-400/40 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
                   title="Supprimer"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={12} />
                 </button>
               </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-gray-700 dark:text-gray-300/40">
-                <span>{formatConversationTimestamp(conversation.updatedAt)}</span>
-                <span>{conversation.selectedLayerIds.length} couche(s) liées</span>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[10px] text-gray-400 dark:text-white/30">{formatConversationTimestamp(conversation.updatedAt)}</span>
+                {conversation.selectedLayerIds.length > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400/70">
+                    <Database size={9} />{conversation.selectedLayerIds.length} couche(s)
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -740,119 +756,138 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     <div className="space-y-4">
       <div className="relative">
         <Search
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 dark:text-gray-300/30"
-          size={15}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/25"
+          size={14}
         />
         <input
           value={layerQuery}
           onChange={(event) => setLayerQuery(event.target.value)}
-          placeholder="Chercher une couche, un CRS, un provider"
-          className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 py-2.5 pl-10 pr-3 text-sm text-gray-800 dark:text-gray-200 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:border-emerald-500/50 dark:focus:border-emerald-500/50"
+          placeholder="Nom, CRS, type..."
+          className="w-full rounded-xl border border-gray-200 dark:border-white/[0.07] bg-gray-100/80 dark:bg-white/[0.03] py-2 pl-9 pr-3 text-[13px] text-gray-700 dark:text-gray-200 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-white/25 focus:border-emerald-400/50 focus:bg-white dark:focus:bg-white/[0.05] dark:focus:border-emerald-500/40"
         />
       </div>
 
       {filteredLayers.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-gray-300 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/30 p-4 text-sm text-gray-600 dark:text-gray-400">
-          Aucune couche ne correspond à la recherche.
+        <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/[0.07] bg-gray-50/60 dark:bg-white/[0.01] p-5 text-center">
+          <Database size={20} className="mx-auto mb-2 text-gray-300 dark:text-white/20" />
+          <p className="text-[12px] text-gray-400 dark:text-white/30">
+            {layers.length === 0 ? "Aucune couche chargée" : "Aucun résultat"}
+          </p>
         </div>
       ) : (
         filteredLayers.map((layer) => {
           const isSelected = selectedLayerIds.includes(layer.id);
           const scope = layerContextById[layer.id] || "layer";
           const opacityValue = opacityDrafts[layer.id] ?? Math.round(layer.opacity * 100);
+          const isNonL93 = layer.crs && layer.crs !== "EPSG:2154" && layer.type.toLowerCase() === "vector";
+          const typeColor = layer.type.toLowerCase() === "raster"
+            ? "text-amber-500 dark:text-amber-400 border-amber-500/30 bg-amber-500/10"
+            : layer.geometryType.toLowerCase().includes("polygon")
+              ? "text-violet-500 dark:text-violet-400 border-violet-500/30 bg-violet-500/10"
+              : layer.geometryType.toLowerCase().includes("line")
+                ? "text-blue-500 dark:text-blue-400 border-blue-500/30 bg-blue-500/10"
+                : "text-emerald-500 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10";
           return (
-            <div key={layer.id} className="rounded-3xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+            <div key={layer.id} className="group rounded-2xl border border-gray-200 dark:border-white/[0.07] bg-white/70 dark:bg-white/[0.02] p-3.5 transition-all hover:border-gray-300 dark:hover:border-white/[0.11] hover:bg-white dark:hover:bg-white/[0.04]">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                       onClick={() => onToggleLayerSelection(layer.id)}
                       className={cn(
-                        "rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]",
+                        "rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-all",
                         isSelected
-                          ? "border-emerald-500/40 bg-emerald-500/12 text-emerald-200"
-                          : "border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-white/45",
+                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
+                          : "border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] text-gray-500 dark:text-white/40 hover:border-emerald-500/30 hover:text-emerald-600",
                       )}
                     >
-                      {isSelected ? "Contexte" : "Ignorée"}
+                      {isSelected ? "✓ Contexte" : "+ Cibler"}
                     </button>
-                    <span className="rounded-full border border-gray-300 dark:border-gray-800 px-2.5 py-1 text-[11px] text-gray-600 dark:text-white/45">
-                      {layer.type}
+                    <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-semibold", typeColor)}>
+                      {layer.type || "?"}  {layer.geometryType ? `· ${layer.geometryType}` : ""}
                     </span>
+                    {isNonL93 && (
+                      <span className="rounded-full border border-orange-400/30 bg-orange-400/10 px-2 py-0.5 text-[9px] font-bold text-orange-500 dark:text-orange-400">
+                        ⚠ {layer.crs}
+                      </span>
+                    )}
                   </div>
-                  <p className="mt-3 truncate text-sm font-semibold text-gray-700 dark:text-gray-300">{layer.name}</p>
-                  <p className="mt-1 text-xs text-gray-600 dark:text-white/45">
-                    {layer.geometryType} · {layer.crs || "CRS inconnu"} · {layer.provider || "provider inconnu"}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-700 dark:text-gray-300/35">
-                    {layer.featureCount ?? "n/a"} entité(s) · {layer.selectedFeatureCount} sélectionnée(s)
+                  <p className="mt-2 truncate text-[13px] font-semibold text-gray-800 dark:text-gray-100">{layer.name}</p>
+                  <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/35">
+                    {layer.featureCount != null ? `${layer.featureCount.toLocaleString("fr-FR")} entité(s)` : "n/a"}
+                    {layer.selectedFeatureCount > 0 && <span className="text-blue-500 dark:text-blue-400"> · {layer.selectedFeatureCount} sélect.</span>}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => toggleFavorite(layer.id)}
                     className={cn(
-                      "rounded-2xl border border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 p-2 transition-all",
+                      "rounded-xl border p-1.5 transition-all",
                       isFavorite(layer.id)
-                        ? "text-amber-400 hover:text-amber-300"
-                        : "text-gray-700 dark:text-gray-300/30 hover:text-amber-400/70",
+                        ? "border-amber-400/35 bg-amber-400/12 text-amber-400"
+                        : "border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] text-gray-400 dark:text-white/30 hover:text-amber-400",
                     )}
                     title={isFavorite(layer.id) ? "Retirer des favoris" : "Ajouter aux favoris"}
                   >
-                    <Star size={15} className={isFavorite(layer.id) ? "fill-current" : ""} />
+                    <Star size={13} className={isFavorite(layer.id) ? "fill-current" : ""} />
                   </button>
                   <button
                     onClick={() => void onInspectLayer(layer.id)}
-                    className="rounded-2xl border border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 p-2 text-gray-700 dark:text-gray-300/50 transition-all hover:text-white"
+                    className="rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] p-1.5 text-gray-400 dark:text-white/30 transition-all hover:border-violet-400/35 hover:text-violet-400"
                     title="Diagnostic"
                   >
-                    <FlaskConical size={15} />
+                    <FlaskConical size={13} />
                   </button>
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="mt-3 grid grid-cols-2 gap-1.5">
                 <button
                   onClick={() => void onSetLayerVisibility(layer.id, !layer.visible)}
-                  className="flex items-center justify-center gap-2 rounded-2xl border border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300/75 transition-all hover:text-white"
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-medium transition-all",
+                    layer.visible
+                      ? "border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] text-gray-600 dark:text-white/50 hover:border-gray-300 dark:hover:border-white/[0.14]"
+                      : "border-orange-400/30 bg-orange-400/10 text-orange-500 dark:text-orange-400"
+                  )}
                 >
-                  {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                  {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
                   {layer.visible ? "Visible" : "Masquée"}
                 </button>
                 <button
                   onClick={() => void onZoomToLayer(layer.id)}
-                  className="flex items-center justify-center gap-2 rounded-2xl border border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300/75 transition-all hover:text-white"
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-medium text-gray-600 dark:text-white/50 transition-all hover:border-blue-400/35 hover:text-blue-500 dark:hover:text-blue-400"
                 >
-                  <Crosshair size={14} />
-                  Zoom
+                  <Crosshair size={12} />
+                  Centrer
                 </button>
               </div>
 
               {layer.type.toLowerCase() === "vector" ? (
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                   <button
                     onClick={() => void onApplyParcelStylePreset(layer.id, "cadastre")}
-                    className="rounded-2xl border border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300/75 transition-all hover:text-white"
+                    className="rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-medium text-gray-600 dark:text-white/50 transition-all hover:border-violet-400/30 hover:text-violet-500 dark:hover:text-violet-400"
                   >
                     Style parcelle
                   </button>
                   <button
                     onClick={() => void onSetLayerLabels(layer.id, "", true)}
-                    className="rounded-2xl border border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300/75 transition-all hover:text-white"
+                    className="rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-medium text-gray-600 dark:text-white/50 transition-all hover:border-cyan-400/30 hover:text-cyan-500 dark:hover:text-cyan-400"
                   >
-                    Etiquettes
+                    Étiquettes
                   </button>
                 </div>
               ) : null}
 
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                 <button
                   onClick={() => void onSetLayerContextScope(layer.id, "layer")}
                   className={cn(
-                    "rounded-2xl border px-3 py-2 text-xs font-medium transition-all",
+                    "rounded-xl border px-2.5 py-1.5 text-[11px] font-medium transition-all",
                     scope === "layer"
-                      ? "border-emerald-500/35 bg-emerald-500/12 text-emerald-100"
-                      : "border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300/50 hover:text-white",
+                      ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
+                      : "border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] text-gray-500 dark:text-white/40 hover:border-emerald-400/30 hover:text-emerald-600",
                   )}
                 >
                   Couche entière
@@ -860,20 +895,20 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
                 <button
                   onClick={() => void onSetLayerContextScope(layer.id, "selection")}
                   className={cn(
-                    "rounded-2xl border px-3 py-2 text-xs font-medium transition-all",
+                    "rounded-xl border px-2.5 py-1.5 text-[11px] font-medium transition-all",
                     scope === "selection"
-                      ? "border-emerald-500/35 bg-emerald-500/12 text-emerald-100"
-                      : "border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300/50 hover:text-white",
+                      ? "border-blue-500/40 bg-blue-500/15 text-blue-600 dark:text-blue-300"
+                      : "border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] text-gray-500 dark:text-white/40 hover:border-blue-400/30 hover:text-blue-600",
                   )}
                 >
-                  Sélection active
+                  Sélection
                 </button>
               </div>
 
-              <div className="mt-4">
-                <div className="mb-2 flex items-center justify-between text-xs text-gray-600 dark:text-white/45">
-                  <span>Opacité</span>
-                  <span>{opacityValue}%</span>
+              <div className="mt-3">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-white/30">Opacité</span>
+                  <span className="text-[11px] font-bold text-gray-600 dark:text-white/50 tabular-nums">{opacityValue}%</span>
                 </div>
                 <input
                   type="range"
@@ -910,7 +945,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const handleAddCatalogSource = async () => {
-    const item = CARTOGRAPHIC_CATALOG.find((c) => c.id === selectedCatalogId);
+    const item = ALL_DATA_SOURCES.find((c) => c.id === selectedCatalogId);
     if (!item) return;
     await onAddRemoteService(item);
   };
@@ -924,12 +959,52 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     }
   };
 
+  const OVERPASS_TEMPLATES = [
+    { label: "Routes", query: '[out:json][timeout:25];\narea[name="Rennes"]->.a;\n(way[highway](area.a););\nout geom;', layerName: "Routes_OSM" },
+    { label: "Bâtiments", query: '[out:json][timeout:25];\narea[name="Rennes"]->.a;\n(way[building](area.a););\nout geom;', layerName: "Batiments_OSM" },
+    { label: "Eau", query: '[out:json][timeout:25];\narea[name="Bretagne"]->.a;\n(way[waterway](area.a);relation[waterway](area.a););\nout geom;', layerName: "Cours_eau_OSM" },
+    { label: "Forêts", query: '[out:json][timeout:25];\narea[name="Bretagne"]->.a;\n(way[landuse=forest](area.a);way[natural=wood](area.a););\nout geom;', layerName: "Forets_OSM" },
+    { label: "Fontaines", query: '[out:json][timeout:25];\nnode(48.85,2.34,48.86,2.35)[amenity=drinking_water];\nout body;', layerName: "Fontaines_OSM" },
+    { label: "Sentiers", query: '[out:json][timeout:25];\narea[name="Bretagne"]->.a;\n(way[highway=footway](area.a);way[highway=path](area.a););\nout geom;', layerName: "Sentiers_OSM" },
+  ];
+
   const renderServicesTab = () => (
     <div className="space-y-4">
+      {/* ── Accès rapides ── */}
+      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gradient-to-br from-emerald-500/5 to-cyan-500/5 p-3">
+        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-300/70">
+          Accès rapides
+        </p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {[
+            { id: "osm-standard", label: "OSM", icon: "🗺" },
+            { id: "geopf-wms-raster", label: "IGN Photo", icon: "🛰" },
+            { id: "geopf-wmts-planign", label: "IGN Plan", icon: "📍" },
+            { id: "carto-dark", label: "Dark", icon: "🌑" },
+            { id: "esri-world-imagery", label: "Satellite", icon: "🌍" },
+            { id: "ign-scan25", label: "Topo 1:25k", icon: "⛰" },
+          ].map(({ id, label, icon }) => {
+            const item = ALL_DATA_SOURCES.find((c) => c.id === id);
+            if (!item) return null;
+            return (
+              <button
+                key={id}
+                onClick={() => void onAddRemoteService(item)}
+                title={item.name}
+                className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white/70 dark:bg-white/[0.03] px-1.5 py-2 text-center transition-all hover:border-emerald-500/30 hover:bg-emerald-500/8 hover:shadow-sm"
+              >
+                <span className="text-base leading-none">{icon}</span>
+                <span className="text-[9px] font-semibold text-gray-600 dark:text-gray-300 leading-tight">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ── Sources officielles ── */}
       <CollapsibleSection
         title="Sources officielles"
-        accentClassName="text-emerald-300/80"
+        accentClassName="text-emerald-600 dark:text-emerald-300/80"
         icon={<TreePine size={14} />}
         isOpen={expandedSections["sources"] ?? true}
         onToggle={() => toggleSection("sources")}
@@ -944,7 +1019,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
           />
         </div>
         <div className="space-y-3">
-          {Object.entries(filteredSources).map(([categoryId, category]: [string, any]) => (
+          {(Object.entries(filteredSources) as Array<[keyof DataSourceCategories, { name: string; description: string; sources: import("../lib/catalog").CatalogItem[] }]>).map(([categoryId, category]) => (
             <div key={categoryId} className="rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900">
               <button
                 onClick={() => toggleCategory(categoryId)}
@@ -962,12 +1037,22 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
               {expandedCategories[categoryId] && (
                 <div className="space-y-2 p-3 pt-1">
                   <p className="text-[11px] text-gray-700 dark:text-gray-300/40 italic">{category.description}</p>
-                  {category.sources.map((source: any) => (
+                  {category.sources.map((source) => (
                     <div key={source.id} className="rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-200 dark:bg-gray-800 p-3">
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-100">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-200">
                           {source.serviceType}
                         </span>
+                        {source.requiresKey && (
+                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                            🔑 Clé API
+                          </span>
+                        )}
+                        {source.reliable && (
+                          <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:text-green-300">
+                            ✓ Fiable
+                          </span>
+                        )}
                         <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-300">{source.name}</p>
                       </div>
                       <p className="mt-1 text-xs text-gray-700 dark:text-gray-300/40">{source.provider} — {source.description}</p>
@@ -975,7 +1060,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
                         onClick={() => void onAddRemoteService(source)}
                         className="mt-2 rounded-xl border border-emerald-500/25 bg-emerald-500/12 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-emerald-500/18"
                       >
-                        Ajouter
+                        {source.requiresKey ? "🔑 Configurer clé" : "Ajouter"}
                       </button>
                     </div>
                   ))}
@@ -990,7 +1075,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       <CollapsibleSection
         title="Inventaire forestier"
         description="Créez une grille d'inventaire et ses centroïdes pour des relevés terrain"
-        accentClassName="text-emerald-300/80"
+        accentClassName="text-emerald-600 dark:text-emerald-300/80"
         icon={<Crosshair size={14} />}
         isOpen={expandedSections["inventory"] ?? false}
         onToggle={() => toggleSection("inventory")}
@@ -1016,39 +1101,89 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       {/* ── Fonds de carte ── */}
       <SidebarSection
         title="Fonds de carte"
-        description="Ajoutez un fond de carte pour navigation et contexte."
-        accentClassName="text-cyan-300/80"
+        description="Accès rapide aux fonds de carte les plus utilisés."
+        accentClassName="text-cyan-600 dark:text-cyan-300/80"
       >
         <div className="space-y-3">
-          <select
-            value={selectedCatalogId}
-            onChange={(e) => setSelectedCatalogId(e.target.value)}
-            className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-cyan-500/40"
-          >
-            {CARTOGRAPHIC_CATALOG.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name} — {item.provider}
-              </option>
-            ))}
-          </select>
-          {(() => {
-            const sel = CARTOGRAPHIC_CATALOG.find((c) => c.id === selectedCatalogId);
-            return sel ? (
-              <div className="rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-600 dark:text-white/45">
-                <span className="mr-2 inline-block rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
-                  {sel.serviceType}
-                </span>
-                {sel.description}
-              </div>
-            ) : null;
-          })()}
-          <button
-            onClick={() => void handleAddCatalogSource()}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/25 bg-cyan-500/12 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-cyan-500/18"
-          >
-            <Map size={15} />
-            Ajouter à la carte
-          </button>
+          {/* Accès rapide — 6 basemaps fiables en grille */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              { id: "osm-standard", label: "OSM", sublabel: "Standard", color: "emerald" },
+              { id: "geopf-wms-raster", label: "IGN", sublabel: "Ortho", color: "blue" },
+              { id: "geopf-wmts-planign", label: "IGN", sublabel: "Plan V2", color: "sky" },
+              { id: "carto-dark", label: "Carto", sublabel: "Dark", color: "violet" },
+              { id: "carto-positron", label: "Carto", sublabel: "Light", color: "slate" },
+              { id: "esri-world-imagery", label: "Esri", sublabel: "Imagery", color: "orange" },
+            ].map(({ id, label, sublabel, color }) => {
+              const item = ALL_DATA_SOURCES.find((c) => c.id === id);
+              if (!item) return null;
+              return (
+                <button
+                  key={id}
+                  onClick={() => void onAddRemoteService(item)}
+                  title={item.name}
+                  className={cn(
+                    "flex flex-col items-center gap-0.5 rounded-xl border px-1 py-2 text-center transition-all hover:shadow-md",
+                    color === "emerald" && "border-emerald-500/25 bg-emerald-500/8 hover:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+                    color === "blue" && "border-blue-500/25 bg-blue-500/8 hover:bg-blue-500/15 text-blue-700 dark:text-blue-300",
+                    color === "sky" && "border-sky-500/25 bg-sky-500/8 hover:bg-sky-500/15 text-sky-700 dark:text-sky-300",
+                    color === "violet" && "border-violet-500/25 bg-violet-500/8 hover:bg-violet-500/15 text-violet-700 dark:text-violet-300",
+                    color === "slate" && "border-gray-400/25 bg-gray-100 dark:bg-gray-800/40 hover:bg-gray-200 dark:hover:bg-gray-700/40 text-gray-700 dark:text-gray-300",
+                    color === "orange" && "border-orange-500/25 bg-orange-500/8 hover:bg-orange-500/15 text-orange-700 dark:text-orange-300",
+                  )}
+                >
+                  <Map size={14} />
+                  <span className="text-[10px] font-bold leading-none">{label}</span>
+                  <span className="text-[9px] text-gray-500 dark:text-gray-400 leading-none">{sublabel}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Sélecteur étendu — tout le catalogue */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Autres sources ({ALL_DATA_SOURCES.filter(s => ["XYZ","WMS","WMTS","ArcGISMapServer"].includes(s.serviceType)).length})
+            </p>
+            <select
+              value={selectedCatalogId}
+              onChange={(e) => setSelectedCatalogId(e.target.value)}
+              className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-cyan-500/40"
+            >
+              {ALL_DATA_SOURCES
+                .filter(s => ["XYZ","WMS","WMTS","ArcGISMapServer"].includes(s.serviceType))
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} — {item.provider}
+                  </option>
+                ))}
+            </select>
+            {(() => {
+              const sel = ALL_DATA_SOURCES.find((c) => c.id === selectedCatalogId);
+              return sel ? (
+                <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-600 dark:text-white/45">
+                  <div className="flex flex-wrap gap-1 mb-1">
+                    <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-700 dark:text-cyan-200">
+                      {sel.serviceType}
+                    </span>
+                    {sel.requiresKey && (
+                      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                        🔑 Clé API requise
+                      </span>
+                    )}
+                  </div>
+                  {sel.description}
+                </div>
+              ) : null;
+            })()}
+            <button
+              onClick={() => void handleAddCatalogSource()}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/25 bg-cyan-500/12 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-cyan-500/18"
+            >
+              <Map size={15} />
+              Ajouter à la carte
+            </button>
+          </div>
         </div>
       </SidebarSection>
 
@@ -1056,7 +1191,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       <SidebarSection
         title="Cadastre"
         description="Chargez les parcelles cadastrales d'une commune."
-        accentClassName="text-emerald-300/80"
+        accentClassName="text-emerald-600 dark:text-emerald-300/80"
       >
         <div className="space-y-3">
           <div className="relative">
@@ -1085,7 +1220,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             >
               <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-emerald-500/20 via-transparent to-transparent transition-transform duration-700 group-hover:translate-x-full" />
               <div className="relative flex flex-col items-center gap-1.5">
-                <Map size={20} className="text-emerald-300" />
+                <Map size={20} className="text-emerald-600 dark:text-emerald-300" />
                 <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">Contours</span>
                 <span className="text-[9px] text-gray-700 dark:text-gray-300/50">Limites communales</span>
               </div>
@@ -1096,7 +1231,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             >
               <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-orange-500/20 via-transparent to-transparent transition-transform duration-700 group-hover:translate-x-full" />
               <div className="relative flex flex-col items-center gap-1.5">
-                <MapPin size={20} className="text-orange-300" />
+                <MapPin size={20} className="text-orange-500 dark:text-orange-300" />
                 <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">Parcelles</span>
                 <span className="text-[9px] text-gray-700 dark:text-gray-300/50">Cadastre complet</span>
               </div>
@@ -1105,7 +1240,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
 
           {/* Info Tip */}
           <div className="flex items-start gap-2 rounded-xl border border-emerald-500/10 bg-emerald-500/5 p-2.5">
-            <Info size={12} className="mt-0.5 shrink-0 text-emerald-300" />
+            <Info size={12} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-300" />
             <p className="text-[10px] text-gray-700 dark:text-gray-300/50 leading-relaxed">
               Les parcelles seront chargées avec le style par défaut et la carte sera centrée dessus automatiquement.
             </p>
@@ -1117,7 +1252,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       <CollapsibleSection
         title="Images satellites"
         description="Cherchez des images Sentinel-2 (Copernicus) ou Landsat (NASA)"
-        accentClassName="text-sky-300/80"
+        accentClassName="text-sky-600 dark:text-sky-300/80"
         icon={<Globe size={14} />}
         isOpen={expandedSections["satellite"] ?? false}
         onToggle={() => toggleSection("satellite")}
@@ -1125,7 +1260,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
         <div className="space-y-4">
           {/* Copernicus */}
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-300/70">Copernicus Sentinel-2</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300/70">Copernicus Sentinel-2</p>
             <p className="text-[10px] text-gray-700 dark:text-gray-300/35">Images haute résolution (10m) pour l'Europe et le monde</p>
             <input value={copernicusCollection} onChange={(e) => setCopernicusCollection(e.target.value)} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-sky-500/40" placeholder="Collection (ex: SENTINEL-2)" />
             <div className="grid grid-cols-2 gap-2">
@@ -1140,7 +1275,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
 
           {/* NASA */}
           <div className="border-t border-gray-300 dark:border-gray-700 pt-3 space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-300/70">NASA Landsat</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300/70">NASA Landsat</p>
             <p className="text-[10px] text-gray-700 dark:text-gray-300/35">Images Landsat 8/9 pour le monde entier</p>
             <input value={nasaCollection} onChange={(e) => setNasaCollection(e.target.value)} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-indigo-500/40" placeholder="Collection (ex: HLSS30.v2.0)" />
             <div className="grid grid-cols-2 gap-2">
@@ -1159,7 +1294,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       <CollapsibleSection
         title="Calculs raster"
         description="Fusionnez des images, calculez des indices (NDVI), créez des MNH"
-        accentClassName="text-rose-300/80"
+        accentClassName="text-rose-600 dark:text-rose-300/80"
         icon={<WandSparkles size={14} />}
         isOpen={expandedSections["raster-tools"] ?? false}
         onToggle={() => toggleSection("raster-tools")}
@@ -1225,13 +1360,28 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       <CollapsibleSection
         title="OpenStreetMap"
         description="Extrayez des données OSM (bâtiments, routes, eau...) avec Overpass"
-        accentClassName="text-orange-300/80"
+        accentClassName="text-orange-600 dark:text-orange-300/80"
         icon={<Link2 size={14} />}
         isOpen={expandedSections["overpass"] ?? false}
         onToggle={() => toggleSection("overpass")}
       >
         <div className="space-y-3">
           <p className="text-[10px] text-gray-700 dark:text-gray-300/35">Overpass QL est un langage de requête pour extraire des données OpenStreetMap</p>
+          <div>
+            <p className="mb-1.5 text-[9px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Templates rapides</p>
+            <div className="flex flex-wrap gap-1">
+              {OVERPASS_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.label}
+                  type="button"
+                  onClick={() => { setOverpassQuery(tpl.query); setOverpassLayerName(tpl.layerName); }}
+                  className="rounded-full border border-orange-500/25 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-700 dark:text-orange-300 transition-all hover:bg-orange-500/20"
+                >
+                  {tpl.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <select value={overpassEndpoint} onChange={(e) => setOverpassEndpoint(e.target.value)} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-orange-500/40">
             {OVERPASS_ENDPOINTS.map((ep) => (<option key={ep} value={ep}>{ep}</option>))}
           </select>
@@ -1250,7 +1400,7 @@ out geom;" />
       <CollapsibleSection
         title="Service personnalisé"
         description="Ajoutez votre propre serveur WMS, WMTS, WFS ou WCS"
-        accentClassName="text-cyan-300/80"
+        accentClassName="text-cyan-600 dark:text-cyan-300/80"
         icon={<Server size={14} />}
         isOpen={expandedSections["custom"] ?? false}
         onToggle={() => toggleSection("custom")}
@@ -1272,7 +1422,7 @@ out geom;" />
       <CollapsibleSection
         title="Fichiers locaux"
         description="Chargez des fichiers GeoTIFF ou autres rasters depuis votre ordinateur"
-        accentClassName="text-amber-300/80"
+        accentClassName="text-amber-600 dark:text-amber-300/80"
         icon={<Layers3 size={14} />}
         isOpen={expandedSections["raster"] ?? false}
         onToggle={() => toggleSection("raster")}
@@ -1292,7 +1442,7 @@ out geom;" />
       <SidebarSection
         title="Projection du projet"
         description="Changez le CRS du projet QGIS."
-        accentClassName="text-violet-300/80"
+        accentClassName="text-violet-600 dark:text-violet-300/80"
       >
         <div className="space-y-3">
           <select
@@ -1320,7 +1470,7 @@ out geom;" />
       <CollapsibleSection
         title="Performance"
         description="Temps de réponse LLM et QGIS"
-        accentClassName="text-amber-300/80"
+        accentClassName="text-amber-600 dark:text-amber-300/80"
         icon={<WandSparkles size={14} />}
         isOpen={expandedSections["performance"] ?? false}
         onToggle={() => toggleSection("performance")}
@@ -1333,23 +1483,23 @@ out geom;" />
   return (
     <aside
       className={cn(
-        "flex h-full shrink-0 flex-col border-r border-gray-300 dark:border-gray-800 bg-white dark:bg-[#101113]/95 backdrop-blur-xl transition-[width] duration-300",
+        "flex h-full shrink-0 flex-col border-r border-gray-200 dark:border-white/[0.05] sidebar-bg backdrop-blur-2xl transition-[width] duration-300 shadow-[2px_0_32px_rgba(0,0,0,0.18)]",
         isOpen ? "w-[396px]" : "w-[100px]",
       )}
     >
-      <div className="flex items-center justify-between border-b border-gray-300 dark:border-gray-700 px-4 py-3.5">
+      <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.05] bg-gradient-to-r from-transparent via-transparent to-transparent px-4 py-4">
         {isOpen ? (
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-gray-700 dark:text-gray-300/30">
-              GeoSylva
+            <p className="text-[9px] font-black uppercase tracking-[0.35em] bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              GeoSylva AI
             </p>
-            <h2 className="mt-0.5 text-[13px] font-semibold text-gray-700 dark:text-gray-300/80">
+            <h2 className="mt-0.5 text-[13px] font-bold text-gray-800 dark:text-gray-100">
               Workspace QGIS
             </h2>
           </div>
         ) : (
-          <div className="mx-auto rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 p-2 text-gray-700 dark:text-gray-300/70">
-            <Layers3 size={16} />
+          <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/15 border border-emerald-500/25">
+            <Sparkles size={16} className="text-emerald-400" />
           </div>
         )}
         {/* Sidebar toggle button désactivé */}
@@ -1366,61 +1516,74 @@ out geom;" />
         </button> */}
       </div>
 
-      <div className={cn("flex gap-1.5 px-4 py-3", !isOpen && "flex-col px-3 gap-3")}>
+      <div className={cn("flex gap-1.5 px-3 py-2.5", !isOpen && "flex-col px-2 gap-2")}>
         {[
-          { id: "history" as SidebarTab, label: "Historique", Icon: MessageSquare, active: "border-blue-500/30 bg-blue-500/10 text-gray-700 dark:text-gray-300 shadow-sm shadow-blue-500/5" },
-          { id: "layers" as SidebarTab, label: "Couches", Icon: Database, active: "border-emerald-500/30 bg-emerald-500/10 text-gray-700 dark:text-gray-300 shadow-sm shadow-emerald-500/5" },
-          { id: "services" as SidebarTab, label: "Services", Icon: Network, active: "border-cyan-500/30 bg-cyan-500/10 text-gray-700 dark:text-gray-300 shadow-sm shadow-cyan-500/5" },
-        ].map(({ id, label, Icon, active }) => (
+          { id: "history" as SidebarTab, label: "Historique", Icon: MessageSquare, badge: conversations.length,
+            active: "border-blue-500/40 bg-gradient-to-br from-blue-500/15 to-blue-600/8 text-blue-600 dark:text-blue-300 shadow-md shadow-blue-500/10" },
+          { id: "layers" as SidebarTab, label: "Couches", Icon: Database, badge: layers.length,
+            active: "border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 to-emerald-600/8 text-emerald-600 dark:text-emerald-300 shadow-md shadow-emerald-500/10" },
+          { id: "services" as SidebarTab, label: "Services", Icon: Network, badge: null,
+            active: "border-cyan-500/40 bg-gradient-to-br from-cyan-500/15 to-cyan-600/8 text-cyan-600 dark:text-cyan-300 shadow-md shadow-cyan-500/10" },
+        ].map(({ id, label, Icon, badge, active }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
             className={cn(
-              "flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-[13px] font-medium transition-all relative overflow-hidden",
+              "relative flex items-center gap-2 rounded-2xl border px-3 py-2 text-[12px] font-semibold transition-all duration-200",
+              isOpen ? "flex-1" : "w-full justify-center py-3",
               activeTab === id
                 ? active
-                : "border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-white/45 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-white/70",
+                : "border-gray-200 dark:border-white/[0.06] bg-gray-100/60 dark:bg-white/[0.03] text-gray-500 dark:text-white/35 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-700 dark:hover:text-white/60",
             )}
             title={label}
           >
-            <Icon size={cn(isOpen ? 15 : 22)} className={cn(!isOpen && "text-gray-700 dark:text-gray-300/80")} />
-            {isOpen ? <span>{label}</span> : null}
+            <Icon size={isOpen ? 14 : 20} />
+            {isOpen && <span>{label}</span>}
+            {isOpen && badge !== null && badge > 0 && (
+              <span className={cn(
+                "ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                activeTab === id ? "bg-white/20" : "bg-gray-200 dark:bg-white/10 text-gray-500 dark:text-white/40"
+              )}>{badge}</span>
+            )}
           </button>
         ))}
       </div>
 
-      <div className={cn("px-4", !isOpen && "px-3")}>
+      <div className={cn("px-3 pb-2", !isOpen && "px-2")}>
         {activeTab === "history" ? (
           <button
             onClick={() => void onCreateConversation()}
             className={cn(
-              "flex items-center justify-center rounded-2xl border transition-all",
-              "border-blue-500/30 bg-blue-500/12 text-blue-100 hover:bg-blue-500/18 hover:shadow-lg hover:shadow-blue-500/20",
-              !isOpen ? "h-16 w-16" : "w-full gap-2 px-3 py-3 text-sm font-semibold",
+              "group relative flex items-center justify-center rounded-2xl border transition-all duration-200 overflow-hidden",
+              "border-blue-500/35 bg-gradient-to-r from-blue-600/15 to-blue-500/10 text-blue-600 dark:text-blue-300 hover:from-blue-600/25 hover:to-blue-500/18 hover:shadow-lg hover:shadow-blue-500/20",
+              !isOpen ? "h-12 w-full" : "w-full gap-2 px-4 py-2.5 text-[13px] font-bold",
             )}
           >
-            <Plus size={cn(isOpen ? 16 : 24)} />
+            <Plus size={isOpen ? 15 : 20} />
+            {isOpen && "Nouvelle discussion"}
           </button>
         ) : activeTab === "layers" ? (
           <button
             onClick={() => void onRefreshLayers()}
             className={cn(
-              "flex items-center justify-center rounded-2xl border transition-all",
-              "border-emerald-500/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/16 hover:shadow-lg hover:shadow-emerald-500/20",
-              !isOpen ? "h-16 w-16" : "w-full gap-2 px-3 py-3 text-sm font-semibold",
+              "flex items-center justify-center rounded-2xl border transition-all duration-200",
+              "border-emerald-500/35 bg-gradient-to-r from-emerald-600/15 to-emerald-500/10 text-emerald-600 dark:text-emerald-300 hover:from-emerald-600/25 hover:to-emerald-500/18 hover:shadow-lg hover:shadow-emerald-500/20",
+              !isOpen ? "h-12 w-full" : "w-full gap-2 px-4 py-2.5 text-[13px] font-bold",
             )}
           >
-            <RefreshCw size={cn(isOpen ? 16 : 24)} className={cn(isRefreshingLayers && "animate-spin")} />
+            <RefreshCw size={isOpen ? 15 : 20} className={cn(isRefreshingLayers && "animate-spin")} />
+            {isOpen && "Rafraîchir les couches"}
           </button>
         ) : (
           <div
             className={cn(
               "flex items-center justify-center rounded-2xl border",
-              "border-cyan-500/20 bg-cyan-500/10 text-cyan-100",
-              !isOpen ? "h-16 w-16" : "w-full gap-2 px-3 py-3 text-sm font-semibold",
+              "border-cyan-500/30 bg-gradient-to-r from-cyan-600/12 to-cyan-500/8 text-cyan-600 dark:text-cyan-300",
+              !isOpen ? "h-12 w-full" : "w-full gap-2 px-4 py-2.5 text-[13px] font-bold",
             )}
           >
-            <Link2 size={cn(isOpen ? 16 : 24)} />
+            <Link2 size={isOpen ? 15 : 20} />
+            {isOpen && "Sources connectées"}
           </div>
         )}
       </div>
@@ -1470,7 +1633,7 @@ out geom;" />
                 ))}
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4">
+        <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-3">
           {activeTab === "history"
             ? renderHistoryTab()
             : activeTab === "layers"

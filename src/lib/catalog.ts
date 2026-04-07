@@ -25,6 +25,8 @@ export interface RemoteServiceConfig {
   version?: string;
   zMin?: number;
   zMax?: number;
+  requiresKey?: boolean;
+  reliable?: boolean;
 }
 
 export interface CatalogItem extends RemoteServiceConfig {
@@ -107,15 +109,16 @@ export const CARTOGRAPHIC_CATALOG: CatalogItem[] = [
   },
   {
     id: "mundialis-topo-wms",
-    name: "Mundialis Topo",
+    name: "Mundialis Topo (WMS)",
     provider: "Mundialis",
     serviceType: "WMS",
-    url: "https://ows.mundialis.de/osm/service?",
-    description: "Fond topographique public WMS stable pour test et fond métier.",
-    layerName: "TOPO-WMS",
+    url: "https://ows.terrestris.de/osm/service",
+    description: "Fond topographique WMS public (terrestris/Mundialis).",
+    layerName: "OSM-WMS",
     format: "image/png",
     crs: "EPSG:3857",
     attribution: "Mundialis, OpenStreetMap contributors",
+    reliable: true,
   },
   {
     id: "osm-standard",
@@ -133,11 +136,12 @@ export const CARTOGRAPHIC_CATALOG: CatalogItem[] = [
     name: "Carto Dark Matter",
     provider: "Carto",
     serviceType: "XYZ",
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
     description: "Fond sombre pour visualisation analytique.",
     zMin: 0,
     zMax: 20,
     attribution: "OpenStreetMap, CARTO",
+    reliable: true,
   },
   {
     id: "esri-world-imagery",
@@ -171,12 +175,12 @@ export const CARTOGRAPHIC_CATALOG: CatalogItem[] = [
   },
   {
     id: "gebco-wms",
-    name: "GEBCO Bathymétrie",
+    name: "GEBCO Bathymétrie (WMS)",
     provider: "GEBCO",
     serviceType: "WMS",
-    url: "https://wms.gebco.net/mapserv",
-    description: "Bathymétrie mondiale via WMS.",
-    layerName: "gebco_latest",
+    url: "https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv",
+    description: "Bathymétrie mondiale via WMS GEBCO.",
+    layerName: "GEBCO_LATEST",
     format: "image/png",
     crs: "EPSG:4326",
     attribution: "GEBCO",
@@ -199,4 +203,14 @@ export function getCatalogItemById(itemId: string): CatalogItem | null {
   return [...CARTOGRAPHIC_CATALOG, ...ADDITIONAL_DATA_SOURCES].find((item) => item.id === itemId) || null;
 }
 
-export const ALL_DATA_SOURCES: CatalogItem[] = [...CARTOGRAPHIC_CATALOG, ...ADDITIONAL_DATA_SOURCES];
+// Concatène CARTOGRAPHIC_CATALOG + ADDITIONAL_DATA_SOURCES en dédupliquant par ID
+// (CARTOGRAPHIC_CATALOG a priorité — ses IDs écrasent les éventuels doublons d'additional-sources)
+const _seenIds = new Set(CARTOGRAPHIC_CATALOG.map((s) => s.id));
+export const ALL_DATA_SOURCES: CatalogItem[] = [
+  ...CARTOGRAPHIC_CATALOG,
+  ...ADDITIONAL_DATA_SOURCES.filter((s) => {
+    if (_seenIds.has(s.id)) return false;
+    _seenIds.add(s.id);
+    return true;
+  }),
+];

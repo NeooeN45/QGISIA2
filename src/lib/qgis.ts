@@ -6,6 +6,7 @@ import {
 } from "./catalog";
 
 const QGIS_RESULT_TIMEOUT_MS = 5000;
+const QGIS_SCRIPT_TIMEOUT_MS = 120_000;
 
 type QgisCallback<T> = (value: T) => void;
 
@@ -843,6 +844,7 @@ function normalizeInventoryGridResult(
 export async function callQgisWithResult<T>(
   invoker: (callback: QgisCallback<T>) => T | void,
   fallback: T,
+  timeoutMs: number = QGIS_RESULT_TIMEOUT_MS,
 ): Promise<T> {
   return new Promise((resolve) => {
     let settled = false;
@@ -852,7 +854,7 @@ export async function callQgisWithResult<T>(
         settled = true;
         resolve(fallback);
       }
-    }, QGIS_RESULT_TIMEOUT_MS);
+    }, timeoutMs);
 
     const callback = (value: T) => {
       if (!settled) {
@@ -885,6 +887,34 @@ function callQgisCommand(command: () => unknown): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+export interface SystemSpecs {
+  source: "python_psutil" | "browser_fallback";
+  ram_total_gb: number;
+  ram_available_gb: number;
+  cpu_logical: number;
+  cpu_physical: number;
+  processor: string;
+  platform: string;
+  gpu_name: string;
+  gpu_vram_gb: number;
+  gpu_has_cuda: boolean;
+}
+
+export async function getSystemSpecs(): Promise<SystemSpecs | null> {
+  if (!isHttpBridgeEnabled()) return null;
+  try {
+    const baseUrl = window.location.origin;
+    const url = new URL("/api/qgis/getSystemSpecs", baseUrl);
+    const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!response.ok) return null;
+    const data = (await response.json()) as SystemSpecs & { ok?: boolean };
+    if (!data.ok) return null;
+    return data;
+  } catch {
+    return null;
   }
 }
 
@@ -1025,6 +1055,7 @@ export async function runScript(
   const result = await callQgisWithResult<string>(
     (callback) => bridgeMethod(script, callback),
     "",
+    QGIS_SCRIPT_TIMEOUT_MS,
   );
 
   return typeof result === "string" && result.length > 0 ? result : null;
@@ -1041,6 +1072,7 @@ export async function runScriptDetailed(
     const result = await callQgisWithResult<string>(
       (callback) => bridge.runScriptDetailed?.(script, requireConfirmation, callback),
       "",
+      QGIS_SCRIPT_TIMEOUT_MS,
     );
 
     if (!result) {

@@ -1775,6 +1775,28 @@ class ThreadedAssetServer:
                     body.get("script", ""),
                     bool(body.get("requireConfirmation", True)),
                 )
+            elif route == "/api/qgis/getSystemSpecs":
+                # Retourne les vraies specs système (RAM, CPU, GPU) via psutil + nvidia-smi
+                if system_capabilities is not None:
+                    info = system_capabilities.system_info
+                    gpu = info.get("gpu", {})
+                    self._send_json(handler, 200, {
+                        "ok": True,
+                        "ram_total_gb": info.get("ram_total_gb", 0),
+                        "ram_available_gb": info.get("ram_available_gb", 0),
+                        "cpu_logical": info.get("cpu_count", 0),
+                        "cpu_physical": info.get("cpu_physical_count", 0),
+                        "processor": info.get("processor", ""),
+                        "platform": info.get("platform", ""),
+                        "gpu_name": gpu.get("gpu_name") or "",
+                        "gpu_vram_gb": gpu.get("gpu_memory_gb") or 0,
+                        "gpu_has_cuda": gpu.get("supports_cuda", False),
+                        "source": "python_psutil",
+                    })
+                    return True
+                else:
+                    self._send_json(handler, 200, {"ok": False, "source": "unavailable"})
+                    return True
             else:
                 return False
         except Exception as exc:

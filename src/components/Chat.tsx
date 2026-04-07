@@ -198,16 +198,16 @@ export default function Chat(props: ChatProps) {
       appendDebugEvent({
         level: "warning",
         source: "settings",
-        title: "Enregistrement des parametres refuse",
+        title: "Parametres sauvegardés avec avertissements",
         message: issues[0],
         details: issues.join("\n"),
       });
-      toast.error(issues[0]);
-      return;
+      toast.warning(`⚠ ${issues[0]}`);
     }
 
     onUpdateSettings(nextSettings);
     setShowSettings(false);
+    toast.success("Paramètres sauvegardés");
   };
 
   const handleResetSettings = () => {
@@ -523,6 +523,10 @@ export default function Chat(props: ChatProps) {
       </Suspense>
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Ambient glow effects around the chat zone */}
+        <div className="pointer-events-none absolute -left-20 top-1/4 h-96 w-96 rounded-full bg-blue-500/[0.04] blur-3xl" />
+        <div className="pointer-events-none absolute -right-20 top-1/2 h-80 w-80 rounded-full bg-emerald-500/[0.04] blur-3xl" />
+        <div className="pointer-events-none absolute bottom-40 left-1/2 -translate-x-1/2 h-60 w-[600px] rounded-full bg-violet-500/[0.03] blur-3xl" />
         <ChatHeader
           activeConversation={activeConversation}
           conversationMode={conversationMode}
@@ -552,11 +556,11 @@ export default function Chat(props: ChatProps) {
 
                 {isLoading && (
                   <div className="flex gap-4 md:gap-6">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#333537] bg-[#1e1f20] shadow-lg">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-gray-200 dark:border-[#333537] bg-gray-100 dark:bg-[#1e1f20] shadow-lg">
                       <Sparkles size={20} className="animate-pulse text-blue-400" />
                     </div>
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2 rounded-[28px] border border-[#333537]/40 bg-[#1e1f20]/60 p-5 backdrop-blur-sm">
+                      <div className="flex items-center gap-2 rounded-[28px] border border-gray-200 dark:border-[#333537]/40 bg-white dark:bg-[#1e1f20]/60 p-5 shadow-sm dark:backdrop-blur-sm">
                         <div className="h-2 w-2 animate-bounce rounded-full bg-blue-400 [animation-delay:-0.3s]" />
                         <div className="h-2 w-2 animate-bounce rounded-full bg-cyan-400 [animation-delay:-0.15s]" />
                         <div className="h-2 w-2 animate-bounce rounded-full bg-emerald-400" />

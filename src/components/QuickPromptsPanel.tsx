@@ -32,7 +32,7 @@ export default function QuickPromptsPanel({ onSelectPrompt }: QuickPromptsPanelP
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-white/55">
         Analyses forestières rapides
       </p>
       <div className="grid grid-cols-2 gap-2">
@@ -43,12 +43,12 @@ export default function QuickPromptsPanel({ onSelectPrompt }: QuickPromptsPanelP
             className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-3 text-left transition-all hover:scale-[1.02] ${getCategoryColor(prompt.category)}`}
           >
             <div className="flex items-start gap-2">
-              <span className="shrink-0 mt-0.5 text-white/60 group-hover:text-white/90 transition-colors">
+              <span className="shrink-0 mt-0.5 text-gray-400 dark:text-white/60 group-hover:text-gray-700 dark:group-hover:text-white/90 transition-colors">
                 {ICON_MAP[prompt.iconName] || <Zap size={16} />}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-white truncate">{prompt.title}</p>
-                <p className="mt-0.5 text-[10px] text-white/45 line-clamp-2">{prompt.description}</p>
+                <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{prompt.title}</p>
+                <p className="mt-0.5 text-[10px] text-gray-500 dark:text-white/45 line-clamp-2">{prompt.description}</p>
               </div>
             </div>
           </button>

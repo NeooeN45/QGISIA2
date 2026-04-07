@@ -35,12 +35,28 @@ export interface AppSettings {
   autoRepairPythonScripts: boolean;
   autoRepairMaxAttempts: number;
   theme: ThemeMode;
+  // Paramètres de génération
+  temperature: number;
+  maxTokens: number;
+  topP: number;
+  streamingEnabled: boolean;
+  // Paramètres avancés modèle local
+  repeatPenalty: number;
+  contextWindow: number;
+  numGpu: number;
+  keepAlive: string;
+  systemPromptOverride: string;
 }
 
 export interface ModelPreset {
   id: string;
   label: string;
   description: string;
+  category?: string;
+  vram?: string;
+  ramMinGb?: number;
+  vramMinGb?: number;
+  tags?: string[];
 }
 
 export interface OpenRouterStackPreset {
@@ -83,60 +99,416 @@ export const GEMINI_MODEL_PRESETS: ModelPreset[] = [
   {
     id: "gemini-2.5-flash",
     label: "Gemini 2.5 Flash",
-    description: "Rapide et polyvalent pour le chat courant.",
+    description: "Rapide et polyvalent — recommandé pour GeoSylva.",
+    tags: ["recommandé"],
   },
   {
     id: "gemini-2.5-flash-lite",
     label: "Gemini 2.5 Flash-Lite",
-    description: "Le plus economique pour les usages frequents.",
+    description: "Le plus économique, idéal pour les usages fréquents.",
+    tags: ["économique"],
+  },
+  {
+    id: "gemini-2.5-flash-thinking",
+    label: "Gemini 2.5 Flash Thinking",
+    description: "Raisonnement chaîné (CoT) — meilleur pour plans complexes multi-étapes.",
+    tags: ["CoT", "nouveau"],
   },
   {
     id: "gemini-2.5-pro",
     label: "Gemini 2.5 Pro",
-    description: "Le plus solide pour raisonnement et code complexes.",
+    description: "Raisonnement profond, code complexe, 2M contexte.",
+    tags: ["puissant"],
+  },
+  {
+    id: "gemini-2.0-flash",
+    label: "Gemini 2.0 Flash",
+    description: "Génération précédente — stable et rapide.",
+  },
+  {
+    id: "gemini-2.0-flash-lite",
+    label: "Gemini 2.0 Flash-Lite",
+    description: "Très léger, usage basique et économique.",
+  },
+  {
+    id: "gemini-1.5-pro",
+    label: "Gemini 1.5 Pro",
+    description: "Long contexte (2M tokens), compatible function calling.",
+    tags: ["long ctx"],
   },
 ];
 
 export const LOCAL_MODEL_PRESETS: ModelPreset[] = [
+  // ── Ultra-léger (CPU only / ≤ 4 Go RAM) ────────────────────────
+  {
+    id: "smollm2:1.7b",
+    label: "SmolLM2 1.7B",
+    description: "HuggingFace, le plus léger — fonctionne sur n'importe quel PC.",
+    category: "lightweight",
+    vram: "1.5 Go+",
+    ramMinGb: 3,
+    vramMinGb: 0,
+    tags: ["ultra-léger"],
+  },
+  {
+    id: "llama3.2:1b",
+    label: "Llama 3.2 1B",
+    description: "Meta ultra-compact, test rapide et machines très limitées.",
+    category: "lightweight",
+    vram: "1 Go+",
+    ramMinGb: 3,
+    vramMinGb: 0,
+    tags: ["ultra-léger"],
+  },
+  {
+    id: "gemma4:2b",
+    label: "Gemma 4 2B",
+    description: "Google Gemma 4 ultra-léger — multimodal, idéal pour PC ≤ 4 Go RAM.",
+    category: "lightweight",
+    vram: "2 Go+",
+    ramMinGb: 3,
+    vramMinGb: 2,
+    tags: ["rapide", "nouveau"],
+  },
+  {
+    id: "llama3.2:3b",
+    label: "Llama 3.2 3B",
+    description: "Meta, très léger, bon compromis vitesse/qualité pour PC modeste.",
+    category: "lightweight",
+    vram: "2 Go+",
+    ramMinGb: 4,
+    vramMinGb: 2,
+    tags: ["rapide"],
+  },
+  {
+    id: "phi3.5:3.8b",
+    label: "Phi 3.5 Mini 3.8B",
+    description: "Microsoft, excellent suivi d'instructions malgré sa petite taille.",
+    category: "lightweight",
+    vram: "3 Go+",
+    ramMinGb: 5,
+    vramMinGb: 3,
+    tags: ["rapide"],
+  },
   {
     id: DEFAULT_LOCAL_MODEL,
-    label: "Qwen3 4B Instruct 2507",
-    description: "Léger et rapide, bon compromis pour 8 Go de VRAM.",
+    label: "Qwen3 4B",
+    description: "Léger et rapide, excellent suivi d'instructions en français.",
+    category: "lightweight",
+    vram: "3 Go+",
+    ramMinGb: 4,
+    vramMinGb: 3,
+    tags: ["fr", "rapide"],
   },
+  {
+    id: "gemma4:4b",
+    label: "Gemma 4 4B",
+    description: "Google Gemma 4 multimodal, excellent suivi d'instructions complexes.",
+    category: "lightweight",
+    vram: "4 Go+",
+    ramMinGb: 6,
+    vramMinGb: 4,
+    tags: ["rapide", "nouveau"],
+  },
+  {
+    id: "gemma3:4b",
+    label: "Gemma 3 4B",
+    description: "Google Gemma 3 — polyvalent et stable pour les machines modestes.",
+    category: "lightweight",
+    vram: "4 Go+",
+    ramMinGb: 6,
+    vramMinGb: 4,
+    tags: ["rapide"],
+  },
+  {
+    id: "mistral:7b-instruct-q4",
+    label: "Mistral 7B Q4 (quantisé)",
+    description: "Mistral 7B en 4-bit — bon français, tourne sur 6 Go RAM.",
+    category: "lightweight",
+    vram: "4 Go+",
+    ramMinGb: 6,
+    vramMinGb: 4,
+    tags: ["fr", "rapide"],
+  },
+  // ── Standard (6-12 Go RAM / 5-8 Go VRAM) ──────────────────────
   {
     id: "qwen3:8b",
     label: "Qwen3 8B",
-    description: "Meilleure qualité de raisonnement, nécessite ~6 Go VRAM.",
-  },
-  {
-    id: "qwen2.5-coder:7b",
-    label: "Qwen2.5 Coder 7B",
-    description: "Spécialisé code et PyQGIS, excellent pour les scripts.",
+    description: "Excellent raisonnement et français, meilleur modèle de la gamme 8B.",
+    category: "standard",
+    vram: "6 Go+",
+    ramMinGb: 8,
+    vramMinGb: 6,
+    tags: ["fr"],
   },
   {
     id: "mistral:7b-instruct",
     label: "Mistral 7B Instruct",
     description: "Très bon en français, solide pour le dialogue GIS.",
+    category: "standard",
+    vram: "5 Go+",
+    ramMinGb: 7,
+    vramMinGb: 5,
+    tags: ["fr"],
   },
   {
-    id: "phi4:14b",
-    label: "Phi-4 14B",
-    description: "Raisonnement avancé, idéal si 12+ Go VRAM disponibles.",
+    id: "llama3.1:8b",
+    label: "Llama 3.1 8B",
+    description: "Meta, équilibré et fiable, excellente base généraliste.",
+    category: "standard",
+    vram: "6 Go+",
+    ramMinGb: 8,
+    vramMinGb: 6,
   },
   {
-    id: "gemma3:12b",
-    label: "Gemma 3 12B",
-    description: "Google, très polyvalent, bon suivi d'instructions.",
+    id: "llama3.2:8b",
+    label: "Llama 3.2 8B",
+    description: "Meta dernière génération 8B — multimodal et polyvalent.",
+    category: "standard",
+    vram: "6 Go+",
+    ramMinGb: 8,
+    vramMinGb: 6,
+    tags: ["nouveau"],
+  },
+  {
+    id: "qwen2.5:7b",
+    label: "Qwen2.5 7B",
+    description: "Alibaba Qwen2.5 — excellent français et code sur 8 Go.",
+    category: "standard",
+    vram: "5 Go+",
+    ramMinGb: 7,
+    vramMinGb: 5,
+    tags: ["fr"],
+  },
+  {
+    id: "mistral-small:22b",
+    label: "Mistral Small 22B",
+    description: "Mistral Small 22B — qualité enterprise, bon compromis taille/perf.",
+    category: "standard",
+    vram: "14 Go+",
+    ramMinGb: 16,
+    vramMinGb: 14,
+    tags: ["fr"],
+  },
+  {
+    id: "mistral-nemo:12b",
+    label: "Mistral Nemo 12B",
+    description: "Mistral + NVIDIA, excellent en français et en code.",
+    category: "standard",
+    vram: "9 Go+",
+    ramMinGb: 12,
+    vramMinGb: 9,
+    tags: ["fr"],
+  },
+  // ── Code & GIS (spécialisés) ──────────────────────────────────
+  {
+    id: "qwen2.5-coder:7b",
+    label: "Qwen2.5 Coder 7B",
+    description: "Spécialisé code et PyQGIS, excellent pour les scripts.",
+    category: "code",
+    vram: "5 Go+",
+    ramMinGb: 7,
+    vramMinGb: 5,
+    tags: ["pyqgis"],
+  },
+  {
+    id: "qwen2.5-coder:14b",
+    label: "Qwen2.5 Coder 14B",
+    description: "Version plus puissante du coder Qwen, meilleure pour les pipelines complexes.",
+    category: "code",
+    vram: "10 Go+",
+    ramMinGb: 14,
+    vramMinGb: 10,
+    tags: ["pyqgis"],
+  },
+  {
+    id: "codellama:7b",
+    label: "Code Llama 7B",
+    description: "Meta, spécialisé code Python, léger et efficace.",
+    category: "code",
+    vram: "5 Go+",
+    ramMinGb: 7,
+    vramMinGb: 5,
+    tags: ["pyqgis"],
+  },
+  {
+    id: "codellama:13b",
+    label: "Code Llama 13B",
+    description: "Meta, spécialisé code, bon pour Python et scripts QGIS.",
+    category: "code",
+    vram: "10 Go+",
+    ramMinGb: 14,
+    vramMinGb: 10,
+    tags: ["pyqgis"],
   },
   {
     id: "deepseek-coder-v2:16b",
     label: "DeepSeek Coder V2 16B",
     description: "Le plus fort en code pur, demande 12+ Go VRAM.",
+    category: "code",
+    vram: "12 Go+",
+    ramMinGb: 18,
+    vramMinGb: 12,
+    tags: ["pyqgis"],
   },
   {
-    id: "llama3.1:8b",
-    label: "Llama 3.1 8B",
-    description: "Meta, équilibré et fiable, bonne base généraliste.",
+    id: "devstral:24b",
+    label: "Devstral 24B",
+    description: "Mistral code, excellente architecture pour agents autonomes.",
+    category: "code",
+    vram: "16 Go+",
+    ramMinGb: 24,
+    vramMinGb: 16,
+    tags: ["agent"],
+  },
+  // ── Raisonnement ──────────────────────────────────────────────
+  {
+    id: "deepseek-r1:7b",
+    label: "DeepSeek R1 7B",
+    description: "Raisonnement chaîné (CoT), idéal pour plans complexes.",
+    category: "reasoning",
+    vram: "5 Go+",
+    ramMinGb: 8,
+    vramMinGb: 5,
+    tags: ["CoT"],
+  },
+  {
+    id: "deepseek-r1:14b",
+    label: "DeepSeek R1 14B",
+    description: "Version plus puissante, meilleur raisonnement multi-étapes.",
+    category: "reasoning",
+    vram: "10 Go+",
+    ramMinGb: 16,
+    vramMinGb: 10,
+    tags: ["CoT"],
+  },
+  {
+    id: "deepseek-r1:32b",
+    label: "DeepSeek R1 32B",
+    description: "Raisonnement très avancé, comparable GPT-o1 sur benchmarks.",
+    category: "reasoning",
+    vram: "20 Go+",
+    ramMinGb: 24,
+    vramMinGb: 20,
+    tags: ["CoT"],
+  },
+  {
+    id: "qwq:32b",
+    label: "QwQ 32B",
+    description: "Raisonnement avancé type o1, nécessite beaucoup de VRAM.",
+    category: "reasoning",
+    vram: "20 Go+",
+    ramMinGb: 32,
+    vramMinGb: 20,
+    tags: ["CoT"],
+  },
+  {
+    id: "phi4-reasoning:14b",
+    label: "Phi-4 Reasoning 14B",
+    description: "Microsoft Phi-4 spécialisé raisonnement — efficace sur 12 Go.",
+    category: "reasoning",
+    vram: "10 Go+",
+    ramMinGb: 14,
+    vramMinGb: 10,
+    tags: ["CoT", "nouveau"],
+  },
+  // ── Avancé (12+ Go VRAM) ─────────────────────────────────────
+  {
+    id: "phi4:14b",
+    label: "Phi-4 14B",
+    description: "Raisonnement avancé Microsoft, idéal si 12+ Go VRAM disponibles.",
+    category: "advanced",
+    vram: "10 Go+",
+    ramMinGb: 14,
+    vramMinGb: 10,
+  },
+  {
+    id: "gemma4:9b",
+    label: "Gemma 4 9B",
+    description: "Google Gemma 4 — excellent compromis qualité/ressources, multimodal.",
+    category: "advanced",
+    vram: "7 Go+",
+    ramMinGb: 10,
+    vramMinGb: 7,
+    tags: ["nouveau"],
+  },
+  {
+    id: "gemma4:12b",
+    label: "Gemma 4 12B",
+    description: "Google Gemma 4 — très bon suivi d'instructions complexes, multimodal.",
+    category: "advanced",
+    vram: "9 Go+",
+    ramMinGb: 12,
+    vramMinGb: 9,
+    tags: ["nouveau"],
+  },
+  {
+    id: "gemma3:12b",
+    label: "Gemma 3 12B",
+    description: "Google Gemma 3 — polyvalent, excellent suivi d'instructions.",
+    category: "advanced",
+    vram: "9 Go+",
+    ramMinGb: 12,
+    vramMinGb: 9,
+  },
+  {
+    id: "qwen3:14b",
+    label: "Qwen3 14B",
+    description: "Excellente qualité générale pour machines bien équipées.",
+    category: "advanced",
+    vram: "10 Go+",
+    ramMinGb: 14,
+    vramMinGb: 10,
+    tags: ["fr"],
+  },
+  {
+    id: "qwen2.5:14b",
+    label: "Qwen2.5 14B",
+    description: "Alibaba, très bon français, code et raisonnement sur 14 Go.",
+    category: "advanced",
+    vram: "10 Go+",
+    ramMinGb: 14,
+    vramMinGb: 10,
+    tags: ["fr"],
+  },
+  {
+    id: "deepseek-v3:8b",
+    label: "DeepSeek V3 8B",
+    description: "DeepSeek V3 distillé — qualité avancée sur machines 8 Go.",
+    category: "advanced",
+    vram: "6 Go+",
+    ramMinGb: 10,
+    vramMinGb: 6,
+    tags: ["nouveau"],
+  },
+  {
+    id: "llama3.3:70b",
+    label: "Llama 3.3 70B",
+    description: "Le meilleur open-source de Meta, nécessite une machine très puissante.",
+    category: "advanced",
+    vram: "40 Go+",
+    ramMinGb: 48,
+    vramMinGb: 40,
+  },
+  {
+    id: "qwen3:30b-a3b",
+    label: "Qwen3 30B MoE",
+    description: "Architecture MoE, qualité 30B avec seulement 3B de paramètres actifs.",
+    category: "advanced",
+    vram: "20 Go+",
+    ramMinGb: 20,
+    vramMinGb: 20,
+    tags: ["fr", "nouveau"],
+  },
+  {
+    id: "gemma4:27b",
+    label: "Gemma 4 27B",
+    description: "Google Gemma 4 grande taille — raisonnement et code avancés.",
+    category: "advanced",
+    vram: "20 Go+",
+    ramMinGb: 28,
+    vramMinGb: 20,
+    tags: ["nouveau"],
   },
 ];
 
@@ -343,6 +715,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoRepairPythonScripts: true,
   autoRepairMaxAttempts: 2,
   theme: "dark",
+  temperature: 0.7,
+  maxTokens: 8192,
+  topP: 0.95,
+  streamingEnabled: true,
+  repeatPenalty: 1.1,
+  contextWindow: 8192,
+  numGpu: -1,
+  keepAlive: "10m",
+  systemPromptOverride: "",
 };
 
 function toProvider(value: string | null): AiProvider | undefined {
@@ -436,6 +817,21 @@ function loadSettingsFromUrl(): Partial<AppSettings> {
   return overrides;
 }
 
+// ─── Validation de format des clés ───────────────────────────────────────────
+export type ApiKeyStatus = "valid" | "invalid_format" | "empty";
+
+export function validateGeminiKeyFormat(key: string): ApiKeyStatus {
+  if (!key.trim()) return "empty";
+  // Les clés Gemini font en général 39 caractères, commencent par "AIza"
+  return /^AIza[0-9A-Za-z_-]{35}$/.test(key.trim()) ? "valid" : "invalid_format";
+}
+
+export function validateOpenRouterKeyFormat(key: string): ApiKeyStatus {
+  if (!key.trim()) return "empty";
+  // Les clés OpenRouter commencent par "sk-or-v1-" ou "sk-or-"
+  return /^sk-or(-v1)?-[0-9a-fA-F]{64}$/.test(key.trim()) ? "valid" : "invalid_format";
+}
+
 export function getConfiguredGeminiApiKey(): string {
   const env = import.meta.env as Record<string, string | undefined>;
   return (env.VITE_GEMINI_API_KEY || "").trim();
@@ -501,14 +897,21 @@ export function applyOpenRouterStackPreset(
 
 export function normalizeSettings(input: AppSettings): AppSettings {
   const provider = input.provider;
-  const googleApiKey = (input.googleApiKey || input.apiKey || "").trim();
+  const googleApiKey = (
+    input.googleApiKey ||
+    (provider === "google" ? input.apiKey : "") ||
+    ""
+  ).trim();
   const googleModel = (input.googleModel || DEFAULT_GOOGLE_MODEL).trim();
   const localModel =
     (input.localModel || (provider === "local" ? input.model : "") || DEFAULT_LOCAL_MODEL)
       .trim();
   const localEndpoint = (input.localEndpoint || DEFAULT_LOCAL_ENDPOINT).trim();
-  const openrouterApiKey =
-    (input.openrouterApiKey || (provider === "openrouter" ? input.apiKey : "") || "").trim();
+  const openrouterApiKey = (
+    input.openrouterApiKey ||
+    (provider === "openrouter" ? input.apiKey : "") ||
+    ""
+  ).trim();
   const openrouterEndpoint =
     (input.openrouterEndpoint || DEFAULT_OPENROUTER_ENDPOINT).trim();
   const openrouterPlannerModel =
@@ -592,6 +995,33 @@ export function normalizeSettings(input: AppSettings): AppSettings {
       input.theme === "dark" || input.theme === "light" || input.theme === "auto"
         ? input.theme
         : DEFAULT_SETTINGS.theme,
+    temperature: typeof input.temperature === "number"
+      ? Math.max(0, Math.min(2, input.temperature))
+      : DEFAULT_SETTINGS.temperature,
+    maxTokens: typeof input.maxTokens === "number"
+      ? Math.max(256, Math.min(65536, Math.round(input.maxTokens)))
+      : DEFAULT_SETTINGS.maxTokens,
+    topP: typeof input.topP === "number"
+      ? Math.max(0.01, Math.min(1, input.topP))
+      : DEFAULT_SETTINGS.topP,
+    streamingEnabled: input.streamingEnabled !== undefined
+      ? Boolean(input.streamingEnabled)
+      : DEFAULT_SETTINGS.streamingEnabled,
+    repeatPenalty: typeof input.repeatPenalty === "number"
+      ? Math.max(0.5, Math.min(2, input.repeatPenalty))
+      : DEFAULT_SETTINGS.repeatPenalty,
+    contextWindow: typeof input.contextWindow === "number"
+      ? Math.max(512, Math.min(131072, Math.round(input.contextWindow)))
+      : DEFAULT_SETTINGS.contextWindow,
+    numGpu: typeof input.numGpu === "number"
+      ? Math.max(-1, Math.round(input.numGpu))
+      : DEFAULT_SETTINGS.numGpu,
+    keepAlive: typeof input.keepAlive === "string" && input.keepAlive.trim()
+      ? input.keepAlive.trim()
+      : DEFAULT_SETTINGS.keepAlive,
+    systemPromptOverride: typeof input.systemPromptOverride === "string"
+      ? input.systemPromptOverride
+      : DEFAULT_SETTINGS.systemPromptOverride,
   };
 
   return normalized;
