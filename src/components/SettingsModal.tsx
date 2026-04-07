@@ -29,7 +29,7 @@ import OllamaSetupWizard from "./OllamaSetupWizard";
 import { toast } from "sonner";
 
 import { cn } from "@/src/lib/utils";
-import { getOllamaModels, pullOllamaModel, type PullProgress } from "../lib/ollama-auto-detect";
+import { getOllamaModels, pullOllamaModel, deleteOllamaModel, type PullProgress } from "../lib/ollama-auto-detect";
 
 import {
   applyOpenRouterStackPreset,
@@ -387,6 +387,7 @@ export default function SettingsModal({
   const [installProgress, setInstallProgress] = useState<PullProgress | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [customModelInput, setCustomModelInput] = useState("");
+  const [deletingModel, setDeletingModel] = useState<string | null>(null);
   const [modelFilters, setModelFilters] = useState<string[]>([]);
   const toggleModelFilter = (id: string) => {
     setModelFilters((prev) =>
@@ -435,6 +436,22 @@ export default function SettingsModal({
       abortInstallRef.current = null;
     }
   }, [installingModel]);
+
+  const handleDeleteModel = useCallback(async (modelName: string) => {
+    if (deletingModel) return;
+    setDeletingModel(modelName);
+    try {
+      const res = await deleteOllamaModel(modelName);
+      if (res.success) {
+        setInstalledModels((prev) => prev.filter((m) => m !== modelName));
+        toast.success(`Modèle ${modelName} désinstallé`);
+      } else {
+        toast.error(`Erreur : ${res.error ?? "inconnu"}`);
+      }
+    } finally {
+      setDeletingModel(null);
+    }
+  }, [deletingModel]);
 
   const isInstalled = useCallback((modelId: string) => {
     if (installedModels.includes(modelId)) return true;
@@ -1295,18 +1312,52 @@ export default function SettingsModal({
                               )}
 
                               {/* Progression d'installation */}
-                              {installing && installProgress && (
-                                <div className="mt-2 space-y-1">
+                              {installing && (
+                                <div className="mt-2 space-y-1.5">
                                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                                     <div
-                                      className="h-full rounded-full bg-emerald-400 transition-all duration-300"
-                                      style={{ width: `${installProgress.percent ?? 0}%` }}
+                                      className={cn(
+                                        "h-full rounded-full transition-all duration-300",
+                                        installProgress?.percent != null ? "bg-emerald-400" : "animate-pulse bg-emerald-400/50"
+                                      )}
+                                      style={{ width: `${installProgress?.percent ?? 5}%` }}
                                     />
                                   </div>
-                                  <p className="text-[10px] text-white/40">
-                                    {installProgress.status}
-                                    {installProgress.percent != null && ` — ${installProgress.percent}%`}
-                                  </p>
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-[10px] text-white/40 truncate max-w-[60%]">
+                                      {installProgress?.status === "pulling manifest" ? "Récupération des métadonnées…" :
+                                       installProgress?.status === "verifying sha256 digest" ? "Vérification…" :
+                                       installProgress?.status === "writing manifest" ? "Écriture…" :
+                                       installProgress?.status === "removing any unused layers" ? "Nettoyage…" :
+                                       installProgress?.status === "success" ? "✓ Terminé" :
+                                       installProgress?.status?.startsWith("pulling") ? "Téléchargement…" :
+                                       installProgress?.status ?? "Préparation…"}
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                      {installProgress?.percent != null && (
+                                        <span className="text-[10px] font-semibold text-emerald-300">{installProgress.percent}%</span>
+                                      )}
+                                      {installProgress?.speedBps != null && (
+                                        <span className="text-[9px] text-white/30">
+                                          {installProgress.speedBps > 1e6
+                                            ? `${(installProgress.speedBps / 1e6).toFixed(1)} MB/s`
+                                            : `${(installProgress.speedBps / 1e3).toFixed(0)} KB/s`}
+                                        </span>
+                                      )}
+                                      {installProgress?.etaSeconds != null && installProgress.etaSeconds > 0 && (
+                                        <span className="text-[9px] text-white/30">
+                                          {installProgress.etaSeconds > 60
+                                            ? `${Math.floor(installProgress.etaSeconds / 60)}min ${installProgress.etaSeconds % 60}s`
+                                            : `${installProgress.etaSeconds}s`}
+                                        </span>
+                                      )}
+                                      {installProgress?.total != null && installProgress.completed != null && (
+                                        <span className="text-[9px] text-white/25">
+                                          {(installProgress.completed / 1e9).toFixed(1)}/{(installProgress.total / 1e9).toFixed(1)} Go
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                               )}
 
@@ -1336,6 +1387,18 @@ export default function SettingsModal({
                                     Installer
                                   </button>
                                 )}
+                                {installed && !installing && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleDeleteModel(preset.id)}
+                                    disabled={!!deletingModel || !!installingModel}
+                                    className="flex items-center gap-1 rounded-xl border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-[11px] font-semibold text-red-400/80 transition-all hover:bg-red-500/20 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                    title={`Désinstaller ${preset.id}`}
+                                  >
+                                    {deletingModel === preset.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                                    {deletingModel === preset.id ? "…" : "Désinstaller"}
+                                  </button>
+                                )}
                                 {installing && (
                                   <button
                                     type="button"
@@ -1343,7 +1406,7 @@ export default function SettingsModal({
                                     className="flex items-center gap-1 rounded-xl border border-red-500/30 bg-red-500/15 px-2 py-1.5 text-[11px] font-semibold text-red-300 transition-all hover:bg-red-500/25"
                                   >
                                     <X size={11} />
-                                    Stop
+                                    Annuler
                                   </button>
                                 )}
                               </div>
@@ -1354,8 +1417,48 @@ export default function SettingsModal({
 
                     {/* Erreur d'installation */}
                     {installError && (
-                      <div className="rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-[11px] text-red-300">
-                        <strong>Erreur :</strong> {installError}
+                      <div className="rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-[11px] text-red-300 flex items-start gap-2">
+                        <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                        <span><strong>Erreur :</strong> {installError}</span>
+                      </div>
+                    )}
+
+                    {/* Modèles installés hors presets */}
+                    {installedModels.filter((m) => !LOCAL_MODEL_PRESETS.some((p) => isInstalled(p.id) && (p.id === m || m.startsWith(p.id.split(":")[0])))).length > 0 && (
+                      <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3 space-y-2">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Autres modèles installés</p>
+                        <div className="space-y-1.5">
+                          {installedModels
+                            .filter((m) => !LOCAL_MODEL_PRESETS.some((p) => p.id === m || m.startsWith(p.id.split(":")[0])))
+                            .map((m) => (
+                              <div key={m} className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[12px] font-semibold text-white/80 truncate">{m}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setLocalSettings((c) => ({ ...c, localModel: m }))}
+                                  className={cn(
+                                    "rounded-lg border px-2 py-0.5 text-[10px] font-semibold transition-all",
+                                    normalizedLocalSettings.localModel === m
+                                      ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-200"
+                                      : "border-white/10 bg-white/5 text-white/40 hover:text-white hover:bg-white/10",
+                                  )}
+                                >
+                                  {normalizedLocalSettings.localModel === m ? "✓ Actif" : "Utiliser"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDeleteModel(m)}
+                                  disabled={!!deletingModel || !!installingModel}
+                                  className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-400/80 transition-all hover:bg-red-500/20 hover:text-red-300 disabled:opacity-40"
+                                >
+                                  {deletingModel === m ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                                  {deletingModel === m ? "…" : "Désinstaller"}
+                                </button>
+                              </div>
+                            ))}
+                        </div>
                       </div>
                     )}
 
