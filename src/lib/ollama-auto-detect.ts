@@ -66,7 +66,9 @@ export async function getSystemSpecs(): Promise<SystemSpecs> {
 function detectGPU(): { gpu: boolean; vram: number } {
   try {
     const canvas = document.createElement("canvas");
-    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    const gl = canvas.getContext("webgl2", { powerPreference: "high-performance" }) || 
+               canvas.getContext("webgl", { powerPreference: "high-performance" }) ||
+               canvas.getContext("experimental-webgl", { powerPreference: "high-performance" });
     if (!gl) return { gpu: false, vram: 0 };
 
     const debugInfo = (gl as WebGLRenderingContext).getExtension("WEBGL_debug_renderer_info");
@@ -91,6 +93,7 @@ function detectGPU(): { gpu: boolean; vram: number } {
         else if (r.includes("RTX 4070") || r.includes("RTX 3060") || r.includes("RX 6700 XT")) vram = 12;
         else if (r.includes("RTX 3080")) vram = 10;
         else if (r.includes("RTX 4060") || r.includes("RTX 3070") || r.includes("RX 6600") || r.includes("RX 7600")) vram = 8;
+        else if (r.includes("RTX 3050 TI") || r.includes("RTX 3050 LAPTOP") || r.includes("RTX 3050 MOBILE")) vram = 4;
         else if (r.includes("RTX 3050") || r.includes("RTX 2060") || r.includes("GTX 1660") || r.includes("GTX 1060")) vram = 6;
         else if (r.includes("GTX 1650") || r.includes("GTX 1050 TI")) vram = 4;
         else if (r.includes("RADEON 7") || r.includes("VEGA 20")) vram = 16;
