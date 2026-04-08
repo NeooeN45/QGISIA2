@@ -32,7 +32,7 @@ export interface OpenRouterKeyInfo {
 }
 
 interface GenerateOpenRouterReplyInput {
-  conversationMode: "chat" | "plan";
+  conversationMode: "chat" | "plan" | "free";
   latestUserMessage: string;
   layerContext: string;
   prompt: string;
@@ -986,6 +986,7 @@ async function runChatCompletion(
 }
 
 function shouldUseDeepPlanner(input: GenerateOpenRouterReplyInput): boolean {
+  if (input.conversationMode === "free") return false;
   return (
     input.conversationMode === "plan" ||
     input.latestUserMessage.length > 320 ||
@@ -1062,6 +1063,8 @@ export async function generateOpenRouterReply(
         "Respecte strictement le schéma JSON. ",
         input.conversationMode === "plan"
           ? "Mode PLAN : 3-7 étapes détaillées, pas d'exécution directe. Explique chaque étape."
+          : input.conversationMode === "free"
+          ? "Mode LIBRE : discussion générale, pas d'outils SIG."
           : "Mode ACTION : 3-5 étapes concrètes et ordonnées pour l'executor.",
       ].join("\n"),
     },

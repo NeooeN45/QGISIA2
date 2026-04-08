@@ -6,7 +6,7 @@ export interface ChatMessage {
   feedback?: "like" | "dislike" | null;
 }
 
-export type ConversationMode = "chat" | "plan";
+export type ConversationMode = "chat" | "plan" | "free";
 export type LayerContextScope = "layer" | "selection";
 
 export interface LayerContextConfig {

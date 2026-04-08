@@ -247,17 +247,19 @@ export default function ChatInput({
                   }
                 }}
                 placeholder={
-                  selectedLayers.length > 0
-                    ? conversationMode === "plan"
-                      ? `Décrivez le plan à préparer pour ${selectedLayers
-                          .map((layer) => layer.name)
-                          .join(", ")}...`
-                      : `Posez votre question en restant focalisé sur ${selectedLayers
-                          .map((layer) => layer.name)
-                          .join(", ")}...`
-                    : conversationMode === "plan"
-                      ? "Décrivez le traitement à planifier..."
-                      : "Décrivez votre tâche SIG ou demandez un script..."
+                  conversationMode === "free"
+                    ? "Posez n'importe quelle question, discutez librement..."
+                    : selectedLayers.length > 0
+                      ? conversationMode === "plan"
+                        ? `Décrivez le plan à préparer pour ${selectedLayers
+                            .map((layer) => layer.name)
+                            .join(", ")}...`
+                        : `Posez votre question en restant focalisé sur ${selectedLayers
+                            .map((layer) => layer.name)
+                            .join(", ")}...`
+                      : conversationMode === "plan"
+                        ? "Décrivez le traitement à planifier..."
+                        : "Décrivez votre tâche SIG ou demandez un script..."
                 }
                 rows={1}
                 className="chat-scrollbar max-h-56 flex-1 resize-none border-none bg-transparent px-2 py-3 text-base font-medium text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#8e918f]"
@@ -379,9 +381,13 @@ export default function ChatInput({
               {selectedLayers.length} couche(s) ciblée(s)
             </div>
           )}
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
-            <Sparkles size={12} className="text-emerald-400" />
-            {conversationMode === "plan" ? "Mode plan" : "Mode action"}
+          <div className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${
+            conversationMode === "free"
+              ? "border-violet-500/20 bg-violet-500/8 text-violet-400"
+              : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-muted)]"
+          }`}>
+            <Sparkles size={12} className={conversationMode === "free" ? "text-violet-400" : "text-emerald-400"} />
+            {conversationMode === "plan" ? "Mode plan" : conversationMode === "free" ? "Mode libre" : "Mode action"}
           </div>
         </div>
       </div>

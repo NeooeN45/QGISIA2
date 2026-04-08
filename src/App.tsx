@@ -190,7 +190,19 @@ function buildModelPrompt(
   const transcript = buildRecentTranscript(conversation);
 
   const modeInstruction =
-    conversation.mode === "plan"
+    conversation.mode === "free"
+      ? [
+          "Tu es GeoSylva AI, un assistant conversationnel polyvalent. Reponds en francais.",
+          "MODE : Discussion libre — pas de QGIS, pas de SIG, pas de scripts. Contenu general uniquement.",
+          "ROLE : assistant intelligent, curieux et utile sur tout sujet : sciences, histoire, programmation, nature, foresterie, ecologie, mathematiques, culture, etc.",
+          "REGLES :",
+          "- Reponds de facon naturelle et conversationnelle, sans jargon technique SIG.",
+          "- Sois precis, factuel et nuance. Admets l'incertitude si necessaire.",
+          "- Tu peux partager des opinions argumentees si demande.",
+          "- Pas de blocs de code PyQGIS, pas d'outils bridge, pas de references QGIS.",
+          "- Longueur adaptee : courte pour les questions simples, detaillee pour les sujets complexes.",
+        ].join("\n")
+      : conversation.mode === "plan"
       ? [
           "Tu es l'agent planificateur de GeoSylva AI QGIS. Reponds en francais.",
           "ROLE : analyser la demande et produire un plan d'execution detaille et realiste.",
@@ -217,6 +229,15 @@ function buildModelPrompt(
           "- N'affirme jamais un proprietaire de parcelle sans source publique explicite.",
           "FORMATS : outil bridge → liste les appels dans l'ordre | PyQGIS → un seul bloc complet.",
         ].join("\n");
+
+  if (conversation.mode === "free") {
+    return [
+      modeInstruction,
+      "",
+      "Historique récent de la conversation :",
+      transcript,
+    ].join("\n\n");
+  }
 
   return [
     modeInstruction,
@@ -398,7 +419,7 @@ async function maybeAutoExecuteAssistantPythonScript(input: {
     workspaceSnapshot,
   } = input;
 
-  if (!settings.autoExecutePythonScripts || conversation.mode === "plan") {
+  if (!settings.autoExecutePythonScripts || conversation.mode === "plan" || conversation.mode === "free") {
     return assistantContent;
   }
 

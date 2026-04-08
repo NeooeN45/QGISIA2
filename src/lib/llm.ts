@@ -563,16 +563,23 @@ export async function generateAssistantReply(
   const { settings } = input;
 
   if (settings.provider === "local") {
-    const routed = await tryHandleLocalIntent(
-      input.latestUserMessage,
-      input.conversation.mode,
-    );
-    if (routed.handled && routed.response) {
-      return routed.response;
+    if (input.conversation.mode !== "free") {
+      const routed = await tryHandleLocalIntent(
+        input.latestUserMessage,
+        input.conversation.mode,
+      );
+      if (routed.handled && routed.response) {
+        return routed.response;
+      }
     }
+
+    const freeSystemPrompt = input.conversation.mode === "free"
+      ? "Tu es GeoSylva AI, un assistant conversationnel polyvalent. Reponds en francais de facon naturelle et utile sur tout sujet. Pas de SIG, pas de QGIS, pas de scripts."
+      : undefined;
 
     return generateLocalReply(settings, input.prompt, {
       signal: input.signal,
+      system: freeSystemPrompt,
     });
   }
 
