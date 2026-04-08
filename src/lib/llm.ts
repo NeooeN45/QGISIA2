@@ -2,6 +2,7 @@ import { ChatConversation } from "./chat-history";
 import { appendDebugEvent } from "./debug-log";
 import { buildGeminiConfig, getGeminiChat } from "./gemini";
 import { tryHandleLocalIntent } from "./local-intent-router";
+import { getSystemSpecs } from "./qgis";
 import { generateOpenRouterReply } from "./openrouter";
 import { buildOpenRouterHeaders } from "./openrouter-headers";
 import { QGIS_TOOLS_REFERENCE_SHORT } from "./qgis-tools-reference";
@@ -286,12 +287,42 @@ async function generateLocalReply(
     ? deriveOllamaChatEndpoint(settings.localEndpoint)
     : settings.localEndpoint;
 
+  let contextWindow = settings.contextWindow ?? 0;
+  
+  if (contextWindow <= 0) {
+    try {
+      const specs = await getSystemSpecs();
+      if (specs && specs.source === "python_psutil") {
+        const totalRam = specs.ram_total_gb;
+        const totalVram = specs.gpu_vram_gb;
+        
+        // Si la machine a beaucoup de VRAM ou RAM, on peut se permettre 8k
+        if (totalVram >= 8 || totalRam >= 16) {
+          contextWindow = 8192;
+        } 
+        // Machine moyenne
+        else if (totalVram >= 4 || totalRam >= 8) {
+          contextWindow = 4096;
+        } 
+        // Petite machine
+        else {
+          contextWindow = 2048;
+        }
+      } else {
+        // Fallback conservateur par défaut
+        contextWindow = 4096;
+      }
+    } catch {
+      contextWindow = 4096;
+    }
+  }
+
   const genParams = {
     temperature: settings.temperature ?? 0.7,
     top_p: settings.topP ?? 0.95,
     num_predict: settings.maxTokens ?? 8192,
     repeat_penalty: settings.repeatPenalty ?? 1.1,
-    num_ctx: settings.contextWindow ?? 4096,
+    num_ctx: contextWindow,
     num_gpu: settings.numGpu ?? -1,
   };
 

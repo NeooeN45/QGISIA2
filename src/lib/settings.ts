@@ -751,8 +751,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   topP: 0.95,
   streamingEnabled: true,
   repeatPenalty: 1.1,
-  contextWindow: 4096,
-  numGpu: -1,
+  contextWindow: 0, // 0 signifie "Auto" selon la RAM du PC
+  numGpu: -1, // -1 signifie "Auto" pour Ollama
   keepAlive: "1h",
   systemPromptOverride: "",
 };
@@ -1042,7 +1042,7 @@ export function normalizeSettings(input: AppSettings): AppSettings {
       ? Math.max(0.5, Math.min(2, input.repeatPenalty))
       : DEFAULT_SETTINGS.repeatPenalty,
     contextWindow: typeof input.contextWindow === "number"
-      ? Math.max(512, Math.min(131072, Math.round(input.contextWindow)))
+      ? (input.contextWindow === 0 ? 0 : Math.max(512, Math.min(131072, Math.round(input.contextWindow))))
       : DEFAULT_SETTINGS.contextWindow,
     numGpu: typeof input.numGpu === "number"
       ? Math.max(-1, Math.round(input.numGpu))
