@@ -291,11 +291,11 @@ async function generateLocalReply(
     top_p: settings.topP ?? 0.95,
     num_predict: settings.maxTokens ?? 8192,
     repeat_penalty: settings.repeatPenalty ?? 1.1,
-    num_ctx: settings.contextWindow ?? 8192,
+    num_ctx: settings.contextWindow ?? 4096,
     num_gpu: settings.numGpu ?? -1,
   };
 
-  const keepAlive = settings.keepAlive ?? "10m";
+  const keepAlive = settings.keepAlive ?? "1h";
 
   const body = useChat
     ? {

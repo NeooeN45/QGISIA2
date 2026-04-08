@@ -751,9 +751,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   topP: 0.95,
   streamingEnabled: true,
   repeatPenalty: 1.1,
-  contextWindow: 8192,
+  contextWindow: 4096,
   numGpu: -1,
-  keepAlive: "10m",
+  keepAlive: "1h",
   systemPromptOverride: "",
 };
 
