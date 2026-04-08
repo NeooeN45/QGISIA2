@@ -275,8 +275,14 @@ export default function SettingsModal({
   // ── Specs système : fallback navigateur + vraies valeurs Python si QGIS connecté ──
 
   // Fallback navigateur (limité par confidentialité)
-  const browserRamRaw = (navigator as unknown as Record<string, unknown>).deviceMemory as number | undefined;
+  let browserRamRaw = (navigator as unknown as Record<string, unknown>).deviceMemory as number | undefined;
   const browserCores = navigator.hardwareConcurrency || 4;
+  
+  // Si le navigateur plafonne à 8 mais qu'on a beaucoup de cœurs ou un gros GPU, on sait qu'on a plus de RAM
+  if (browserRamRaw === 8) {
+    if (browserCores >= 16) browserRamRaw = 32;
+    else if (browserCores >= 8) browserRamRaw = 16;
+  }
 
   // Lecture GPU via WebGL (heuristique)
   const webglGpu = (() => {
@@ -291,14 +297,23 @@ export default function SettingsModal({
       let vram = vramMatch ? parseInt(vramMatch[1], 10) : 0;
       if (!vram) {
         const r = raw.toUpperCase();
-        if (r.includes("RTX 4090") || r.includes("RTX 3090") || r.includes("RX 7900")) vram = 24;
-        else if (r.includes("RTX 4080") || r.includes("RTX 3080")) vram = 16;
-        else if (r.includes("RTX 4070") || r.includes("RTX 3070") || r.includes("RX 6800")) vram = 12;
-        else if (r.includes("RTX 4060") || r.includes("RTX 3060") || r.includes("RX 6700")) vram = 8;
-        else if (r.includes("RTX 3050") || r.includes("RTX 2060") || r.includes("RX 6600")) vram = 6;
-        else if (r.includes("GTX 1660") || r.includes("GTX 1070") || r.includes("RX 580")) vram = 6;
-        else if (r.includes("GTX 1060") || r.includes("GTX 1050") || r.includes("RX 570")) vram = 4;
-        else if (r.includes("INTEL") || r.includes("UHD") || r.includes("IRIS")) vram = 0;
+        // NVIDIA High-End
+        if (r.includes("RTX 4090") || r.includes("RTX 3090") || r.includes("RX 7900 XTX")) vram = 24;
+        else if (r.includes("RX 7900 XT")) vram = 20;
+        else if (r.includes("RTX 4080") || r.includes("RTX 3080") || r.includes("RX 6800 XT") || r.includes("RX 7800")) vram = 16;
+        else if (r.includes("RTX 4070") || r.includes("RTX 3060") || r.includes("RX 6700 XT")) vram = 12; // 3060 est souvent 12Go
+        else if (r.includes("RTX 3080")) vram = 10;
+        else if (r.includes("RTX 4060") || r.includes("RTX 3070") || r.includes("RX 6600") || r.includes("RX 7600")) vram = 8;
+        else if (r.includes("RTX 3050") || r.includes("RTX 2060") || r.includes("GTX 1660") || r.includes("GTX 1060")) vram = 6;
+        else if (r.includes("GTX 1650") || r.includes("GTX 1050 TI")) vram = 4;
+        // AMD
+        else if (r.includes("RADEON 7") || r.includes("VEGA 20")) vram = 16;
+        // Apple M-series (Unified memory, we estimate based on typical base models)
+        else if (r.includes("APPLE M3 MAX") || r.includes("APPLE M2 MAX")) vram = 36; // 36-128GB unified
+        else if (r.includes("APPLE M3 PRO") || r.includes("APPLE M2 PRO")) vram = 18; // 18-36GB unified
+        else if (r.includes("APPLE M3") || r.includes("APPLE M2") || r.includes("APPLE M1")) vram = 8; // 8-24GB unified
+        // iGPU Intel/AMD
+        else if (r.includes("INTEL") || r.includes("UHD") || r.includes("IRIS") || r.includes("RADEON GRAPHICS")) vram = 0;
       }
       return { label, vram };
     } catch { return { label: "", vram: 0 }; }
@@ -1152,9 +1167,9 @@ export default function SettingsModal({
                           GPU : {pcGpuLabel}{pcVramGb === 0 ? " (intégré)" : ""}
                         </div>
                       )}
-                      {pcRamCapped && (
-                        <p className="text-[9px] text-amber-400/60 border-t border-white/5 pt-1">
-                          ⚠ RAM plafonnée à 8 Go par le navigateur. Lance QGIS pour obtenir les vraies valeurs.
+                      {pcSpecsSource === "browser" && (
+                        <p className="text-[9px] text-amber-400/60 border-t border-white/5 pt-1 mt-1">
+                          ⚠ Valeurs estimées par le navigateur. Lance QGIS pour détecter les specs exactes.
                         </p>
                       )}
                     </div>

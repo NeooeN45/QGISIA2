@@ -17,6 +17,7 @@ interface SystemSpecs {
   ram: number; // in GB
   cores: number;
   gpu: boolean;
+  vram?: number;
 }
 
 export async function detectOllama(): Promise<boolean> {
@@ -50,22 +51,61 @@ export async function getSystemSpecs(): Promise<SystemSpecs> {
   const cores = navigator.hardwareConcurrency || 4;
   
   // Estimation RAM via navigator.deviceMemory (Chrome only)
-  // Valeur en GB, typiquement 2, 4, 8
-  const ram = (navigator as any).deviceMemory || 8;
+  let ram = (navigator as any).deviceMemory || 8;
+  if (ram === 8) {
+    if (cores >= 16) ram = 32;
+    else if (cores >= 8) ram = 16;
+  }
   
   // Détection GPU basique via WebGL
-  const gpu = detectGPU();
+  const gpuInfo = detectGPU();
   
-  return { ram, cores, gpu };
+  return { ram, cores, gpu: gpuInfo.gpu, vram: gpuInfo.vram };
 }
 
-function detectGPU(): boolean {
+function detectGPU(): { gpu: boolean; vram: number } {
   try {
     const canvas = document.createElement("canvas");
     const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
-    return !!gl;
+    if (!gl) return { gpu: false, vram: 0 };
+
+    const debugInfo = (gl as WebGLRenderingContext).getExtension("WEBGL_debug_renderer_info");
+    if (debugInfo) {
+      const renderer = (gl as WebGLRenderingContext).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL).toLowerCase();
+      
+      const isDedicated = renderer.includes("nvidia") || 
+            renderer.includes("amd") || 
+            renderer.includes("radeon") || 
+            renderer.includes("geforce") || 
+            renderer.includes("rtx") ||
+            renderer.includes("apple m");
+            
+      let vram = 0;
+      const vramMatch = /(\d+)\s*(?:gb|go)/i.exec(renderer);
+      if (vramMatch) vram = parseInt(vramMatch[1], 10);
+      else {
+        const r = renderer.toUpperCase();
+        if (r.includes("RTX 4090") || r.includes("RTX 3090") || r.includes("RX 7900 XTX")) vram = 24;
+        else if (r.includes("RX 7900 XT")) vram = 20;
+        else if (r.includes("RTX 4080") || r.includes("RTX 3080") || r.includes("RX 6800 XT") || r.includes("RX 7800")) vram = 16;
+        else if (r.includes("RTX 4070") || r.includes("RTX 3060") || r.includes("RX 6700 XT")) vram = 12;
+        else if (r.includes("RTX 3080")) vram = 10;
+        else if (r.includes("RTX 4060") || r.includes("RTX 3070") || r.includes("RX 6600") || r.includes("RX 7600")) vram = 8;
+        else if (r.includes("RTX 3050") || r.includes("RTX 2060") || r.includes("GTX 1660") || r.includes("GTX 1060")) vram = 6;
+        else if (r.includes("GTX 1650") || r.includes("GTX 1050 TI")) vram = 4;
+        else if (r.includes("RADEON 7") || r.includes("VEGA 20")) vram = 16;
+        else if (r.includes("APPLE M3 MAX") || r.includes("APPLE M2 MAX")) vram = 36;
+        else if (r.includes("APPLE M3 PRO") || r.includes("APPLE M2 PRO")) vram = 18;
+        else if (r.includes("APPLE M3") || r.includes("APPLE M2") || r.includes("APPLE M1")) vram = 8;
+        else if (r.includes("INTEL") || r.includes("UHD") || r.includes("IRIS")) vram = 0;
+        else if (isDedicated) vram = 4; // fallback dédié
+      }
+            
+      return { gpu: isDedicated, vram };
+    }
+    return { gpu: false, vram: 0 };
   } catch {
-    return false;
+    return { gpu: false, vram: 0 };
   }
 }
 
