@@ -1166,6 +1166,7 @@ export default function SettingsModal({
                         {[
                           { id: "compatible", label: "✅ Compatibles", color: "emerald" },
                           { id: "installed", label: "📦 Installés", color: "sky" },
+                          { id: "libre", label: "💬 Discussion libre", color: "violet" },
                           { id: "lightweight", label: "⚡ Léger", color: "yellow" },
                           { id: "standard", label: "⚖ Standard", color: "blue" },
                           { id: "code", label: "💻 Code/GIS", color: "violet" },
