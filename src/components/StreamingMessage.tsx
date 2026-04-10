@@ -66,97 +66,58 @@ export default function StreamingMessage({ className }: StreamingMessageProps) {
       )}
     >
       <div className="flex gap-4 md:gap-6">
-        {/* Avatar QGISAI+ avec animation de transition */}
-        <motion.div 
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-gray-200 dark:border-[#333537] bg-gray-100 dark:bg-[#1e1f20] shadow-lg relative overflow-hidden"
-          animate={isStreaming ? {
-            boxShadow: [
-              "0 0 0 0 rgba(16, 185, 129, 0)",
-              "0 0 0 4px rgba(16, 185, 129, 0.2)",
-              "0 0 0 0 rgba(16, 185, 129, 0)",
-            ]
-          } : {}}
-          transition={{ duration: 1.5, repeat: Infinity }}
-        >
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-teal-500 opacity-20"
-            animate={{ opacity: isStreaming ? [0.2, 0.4, 0.2] : 0.2 }}
-            transition={{ duration: 2, repeat: Infinity }}
-          />
-          <motion.div
-            animate={{ 
-              scale: isStreaming ? [1, 1.1, 1] : 1,
-              rotate: isStreaming ? [0, 5, -5, 0] : 0,
-            }}
-            transition={{ duration: 2, repeat: Infinity }}
-          >
-            {isStreaming ? (
-              <Sparkles size={20} className="text-emerald-400" />
-            ) : (
-              <CheckCircle2 size={20} className="text-emerald-400" />
-            )}
-          </motion.div>
-        </motion.div>
+        {/* Avatar QGISAI+ - simplifié */}
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-gray-200 dark:border-[#333537] bg-gray-100 dark:bg-[#1e1f20] shadow-lg">
+          <Sparkles size={20} className="text-emerald-400" />
+        </div>
 
         {/* Contenu du message */}
         <div className="flex-1 min-w-0">
           <div className="rounded-[28px] border border-gray-200 dark:border-[#333537]/40 bg-white dark:bg-[#1e1f20]/60 p-5 shadow-sm dark:backdrop-blur-sm">
-            {/* Header avec statut et métriques */}
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100 dark:border-white/5">
-              <div className="flex items-center gap-2">
-                {isStreaming ? (
-                  <>
+            {/* Header avec statut - disparaît quand streaming terminé */}
+            <AnimatePresence>
+              {isStreaming && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100 dark:border-white/5"
+                >
+                  <div className="flex items-center gap-2">
                     <Loader2 size={14} className="text-emerald-400 animate-spin" />
                     <span className="text-xs font-medium text-emerald-500">
                       Génération en cours...
                     </span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 size={14} className="text-emerald-400" />
-                    <span className="text-xs font-medium text-emerald-500">
-                      Réponse complète
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {tokensPerSecond > 0 && (
+                      <span className="text-xs text-gray-400 font-mono">
+                        {tokensPerSecond} tok/s
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-400">
+                      {streamedText.length} caractères
                     </span>
-                  </>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-3">
-                {tokensPerSecond > 0 && isStreaming && (
-                  <span className="text-xs text-gray-400 font-mono">
-                    {tokensPerSecond} tok/s
-                  </span>
-                )}
-                {chunkCount > 0 && (
-                  <span className="text-xs text-gray-400">
-                    {streamedText.length} caractères
-                  </span>
-                )}
-              </div>
-            </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            {/* Barre de progression du streaming */}
+            {/* Barre de progression simple */}
             <AnimatePresence>
               {isStreaming && (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   className="mb-3"
                 >
                   <div className="h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 relative"
-                      initial={{ width: "95%" }}
-                      animate={{ width: `${combinedProgress}%` }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
-                        animate={{ x: ["-100%", "100%"] }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      />
-                    </motion.div>
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
+                      style={{ width: `${combinedProgress}%` }}
+                    />
                   </div>
                 </motion.div>
               )}
@@ -179,40 +140,19 @@ export default function StreamingMessage({ className }: StreamingMessageProps) {
               </div>
             </div>
 
-            {/* Footer avec animation pulse */}
+            {/* Footer simple - disparaît quand streaming terminé */}
             <AnimatePresence>
               {isStreaming && (
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-white/5"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-white/5 overflow-hidden"
                 >
-                  <div className="flex gap-1">
-                    {[...Array(3)].map((_, i) => (
-                      <motion.div
-                        key={i}
-                        className="w-1.5 h-1.5 rounded-full bg-emerald-400"
-                        animate={{
-                          scale: [1, 1.3, 1],
-                          opacity: [0.4, 1, 0.4],
-                        }}
-                        transition={{
-                          duration: 0.8,
-                          repeat: Infinity,
-                          delay: i * 0.15,
-                        }}
-                      />
-                    ))}
-                  </div>
+                  <Loader2 size={14} className="text-emerald-400 animate-spin" />
                   <span className="text-xs text-gray-400">
-                    QGISAI+ écrit...
+                    En cours...
                   </span>
-                  {chunkCount > 0 && (
-                    <span className="text-xs text-gray-400 ml-auto">
-                      {chunkCount} chunks reçus
-                    </span>
-                  )}
                 </motion.div>
               )}
             </AnimatePresence>

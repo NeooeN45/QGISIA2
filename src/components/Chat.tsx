@@ -139,8 +139,6 @@ export default function Chat(props: ChatProps) {
   
   // Subscription réactive au streaming pour transition fluide
   const isStreaming = useStreamingStore((s) => s.isStreaming);
-  const streamedText = useStreamingStore((s) => s.streamedText);
-  const hasStreamedContent = streamedText.length > 0;
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -581,31 +579,34 @@ export default function Chat(props: ChatProps) {
                 
                 {/* Transition fluide sans vide - les deux sont dans le DOM */}
                 <div className="relative">
-                  {/* ThinkingIndicator : visible tant qu'on n'a pas de contenu streamé */}
+                  {/* ThinkingIndicator : visible seulement pendant le chargement initial */}
                   <motion.div
                     initial={false}
                     animate={{ 
-                      opacity: (isLoading || (isStreaming && !hasStreamedContent)) ? 1 : 0,
-                      position: (isLoading || (isStreaming && !hasStreamedContent)) ? "relative" : "absolute",
+                      opacity: isLoading && !isStreaming ? 1 : 0,
                     }}
-                    transition={{ duration: 0.08, ease: "linear" }}
+                    transition={{ duration: 0.05 }}
                     style={{ 
-                      pointerEvents: (isLoading || (isStreaming && !hasStreamedContent)) ? "auto" : "none",
+                      pointerEvents: isLoading && !isStreaming ? "auto" : "none",
+                      position: isLoading && !isStreaming ? "relative" : "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
                     }}
                   >
                     <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
                   </motion.div>
 
-                  {/* StreamingMessage : visible dès qu'il y a du streaming ou du contenu */}
+                  {/* StreamingMessage : visible seulement pendant le streaming */}
                   <motion.div
                     initial={false}
                     animate={{ 
-                      opacity: (isStreaming || hasStreamedContent) ? 1 : 0,
-                      position: (isStreaming || hasStreamedContent) ? "relative" : "absolute",
+                      opacity: isStreaming ? 1 : 0,
                     }}
-                    transition={{ duration: 0.08, ease: "linear" }}
+                    transition={{ duration: 0.05 }}
                     style={{ 
-                      pointerEvents: (isStreaming || hasStreamedContent) ? "auto" : "none",
+                      pointerEvents: isStreaming ? "auto" : "none",
+                      position: isStreaming ? "relative" : "absolute",
                       top: 0,
                       left: 0,
                       right: 0,
