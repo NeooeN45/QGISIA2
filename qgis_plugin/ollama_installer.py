@@ -48,15 +48,178 @@ class OllamaInstaller:
     def is_running(self) -> bool:
         """Vérifie si le service Ollama est en cours d'exécution"""
         try:
+            # Essayer d'abord via l'API HTTP (plus rapide)
+            import urllib.request
+            import socket
+            try:
+                req = urllib.request.Request("http://localhost:11434/api/tags", method="GET")
+                with urllib.request.urlopen(req, timeout=2) as response:
+                    return response.status == 200
+            except (urllib.error.URLError, socket.timeout):
+                pass
+            
+            # Fallback via commande ollama
             result = subprocess.run(
                 ["ollama", "list"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=5
             )
             return result.returncode == 0
         except Exception:
             return False
+    
+    def start_ollama(self) -> Dict:
+        """
+        Tente de démarrer le service Ollama
+        
+        Returns:
+            Dict avec success (bool), message (str), error (str optionnel)
+        """
+        if not self.is_installed():
+            return {
+                "success": False,
+                "message": "Ollama n'est pas installé",
+                "error": "INSTALLATION_REQUIRED"
+            }
+        
+        if self.is_running():
+            return {
+                "success": True,
+                "message": "Ollama est déjà en cours d'exécution"
+            }
+        
+        try:
+            platform_name = platform.system()
+            
+            if platform_name == "Windows":
+                # Sur Windows, tenter de lancer Ollama via le menu démarrer ou le chemin par défaut
+                ollama_exe_paths = [
+                    os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe"),
+                    os.path.expandvars(r"%ProgramFiles%\Ollama\ollama.exe"),
+                    os.path.expandvars(r"%ProgramFiles(x86)%\Ollama\ollama.exe"),
+                    r"C:\Users\" + os.getlogin() + r"\AppData\Local\Programs\Ollama\ollama.exe",
+                ]
+                
+                ollama_path = None
+                for path in ollama_exe_paths:
+                    if os.path.exists(path):
+                        ollama_path = path
+                        break
+                
+                if ollama_path:
+                    # Lancer Ollama en arrière-plan (serveur)
+                    subprocess.Popen(
+                        [ollama_path, "serve"],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True
+                    )
+                else:
+                    # Tenter de lancer via la commande générique
+                    subprocess.Popen(
+                        ["ollama", "serve"],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True
+                    )
+            else:
+                # macOS et Linux
+                subprocess.Popen(
+                    ["ollama", "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
+            
+            # Attendre que le service démarre (max 10 secondes)
+            import time
+            for i in range(20):
+                time.sleep(0.5)
+                if self.is_running():
+                    self.logger.info("Ollama démarré avec succès")
+                    return {
+                        "success": True,
+                        "message": "Ollama a été démarré avec succès"
+                    }
+            
+            # Si on arrive ici, le service n'a pas démarré dans le temps imparti
+            return {
+                "success": False,
+                "message": "Le démarrage d'Ollama a pris trop de temps",
+                "error": "STARTUP_TIMEOUT"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Erreur lors du démarrage d'Ollama: {e}")
+            return {
+                "success": False,
+                "message": f"Erreur lors du démarrage: {str(e)}",
+                "error": "STARTUP_ERROR"
+            }
+    
+    def ensure_running(self, auto_start: bool = True) -> Dict:
+        """
+        Vérifie qu'Ollama est en cours d'exécution et tente de le démarrer si nécessaire
+        
+        Args:
+            auto_start: Si True, tente de démarrer Ollama automatiquement
+        
+        Returns:
+            Dict avec status (running, started, error), message, et error_code
+        """
+        # Vérifier si déjà en cours d'exécution
+        if self.is_running():
+            return {
+                "status": "running",
+                "installed": True,
+                "message": "Ollama est en cours d'exécution",
+                "can_proceed": True
+            }
+        
+        # Vérifier si installé
+        if not self.is_installed():
+            instructions = self.get_installation_instructions()
+            return {
+                "status": "not_installed",
+                "installed": False,
+                "message": "Ollama n'est pas installé sur ce système",
+                "can_proceed": False,
+                "installation": instructions,
+                "error_code": "INSTALLATION_REQUIRED"
+            }
+        
+        # Tenter de démarrer si auto_start est activé
+        if auto_start:
+            self.logger.info("Tentative de démarrage automatique d'Ollama...")
+            start_result = self.start_ollama()
+            
+            if start_result["success"]:
+                return {
+                    "status": "started",
+                    "installed": True,
+                    "message": start_result["message"],
+                    "can_proceed": True
+                }
+            else:
+                return {
+                    "status": "start_failed",
+                    "installed": True,
+                    "message": start_result["message"],
+                    "can_proceed": False,
+                    "error_code": start_result.get("error", "STARTUP_ERROR")
+                }
+        
+        # Installé mais pas en cours d'exécution et auto_start désactivé
+        return {
+            "status": "not_running",
+            "installed": True,
+            "message": "Ollama est installé mais n'est pas en cours d'exécution",
+            "can_proceed": False,
+            "error_code": "NOT_RUNNING"
+        }
     
     def get_installation_instructions(self) -> Dict:
         """Retourne les instructions d'installation pour la plateforme actuelle"""

@@ -1581,6 +1581,63 @@ class QgisBridge(BridgeQObject):
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
+    @BridgeSlot(result=str)
+    def startOllama(self):
+        """Démarre le service Ollama s'il est installé mais pas en cours d'exécution"""
+        if ollama_installer is None:
+            return json.dumps({"success": False, "error": "Module ollama_installer non disponible"})
+        
+        try:
+            result = ollama_installer.start_ollama()
+            return json.dumps(result)
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
+
+    @BridgeSlot(bool, result=str)
+    def ensureOllamaRunning(self, auto_start=True):
+        """
+        Vérifie qu'Ollama est en cours d'exécution et tente de le démarrer automatiquement si nécessaire
+        
+        Args:
+            auto_start: Si True, tente de démarrer Ollama automatiquement
+        
+        Returns:
+            JSON avec status (running, started, not_installed, start_failed), message, can_proceed
+        """
+        if ollama_installer is None:
+            return json.dumps({
+                "status": "error",
+                "can_proceed": False,
+                "error": "Module ollama_installer non disponible"
+            })
+        
+        try:
+            result = ollama_installer.ensure_running(auto_start=auto_start)
+            return json.dumps(result)
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "can_proceed": False,
+                "error": str(e)
+            })
+
+    @BridgeSlot(result=str)
+    def getOllamaRecommendations(self):
+        """Retourne les recommandations de modèles Ollama pour le système"""
+        if ollama_installer is None:
+            return json.dumps({"error": "Module ollama_installer non disponible"})
+        
+        try:
+            recommendations = ollama_installer.get_recommendations()
+            available_models = ollama_installer.get_available_models()
+            return json.dumps({
+                "recommendations": recommendations,
+                "available_models": available_models,
+                "system_info": ollama_installer.system.system_info if hasattr(ollama_installer, 'system') else {}
+            })
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
 
 class MainThreadExecutor(QObject):
     execute_requested = pyqtSignal(object)

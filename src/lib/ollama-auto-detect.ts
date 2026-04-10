@@ -35,6 +35,109 @@ export async function detectOllama(): Promise<boolean> {
   }
 }
 
+export interface OllamaEnsureResult {
+  status: "running" | "started" | "not_installed" | "not_running" | "start_failed" | "error";
+  installed: boolean;
+  message: string;
+  can_proceed: boolean;
+  error_code?: string;
+  installation?: {
+    platform: string;
+    download_url: string;
+    install_command: string;
+    manual_steps: string[];
+  };
+}
+
+/**
+ * Vérifie qu'Ollama est en cours d'exécution et tente de le démarrer automatiquement via le backend QGIS
+ * 
+ * @param auto_start Si true, tente de démarrer Ollama automatiquement
+ * @returns Le statut d'Ollama et les informations d'installation si nécessaire
+ */
+export async function ensureOllamaRunning(auto_start = true): Promise<OllamaEnsureResult> {
+  // Essayer d'abord via l'API QGIS si disponible
+  try {
+    const baseUrl = window.location.origin;
+    const url = new URL("/api/qgis/ensureOllamaRunning", baseUrl);
+    
+    const response = await fetch(url.toString() + `?auto_start=${auto_start}`, {
+      method: "GET",
+      signal: AbortSignal.timeout(15000), // 15 secondes max pour le démarrage
+    });
+    
+    if (response.ok) {
+      const data = await response.json() as OllamaEnsureResult;
+      return data;
+    }
+  } catch {
+    // Fallback: détection directe
+  }
+  
+  // Fallback: détection directe via l'API Ollama
+  const isRunning = await detectOllama();
+  
+  if (isRunning) {
+    return {
+      status: "running",
+      installed: true,
+      message: "Ollama est en cours d'exécution",
+      can_proceed: true,
+    };
+  }
+  
+  // Ollama n'est pas accessible
+  return {
+    status: "not_running",
+    installed: false, // On ne sait pas s'il est installé depuis le navigateur
+    message: "Ollama n'est pas accessible. Vérifiez qu'il est installé et en cours d'exécution.",
+    can_proceed: false,
+    error_code: "NOT_RUNNING",
+    installation: getInstallationInstructions(),
+  };
+}
+
+function getInstallationInstructions() {
+  const platform = navigator.platform.toLowerCase();
+  
+  if (platform.includes("win")) {
+    return {
+      platform: "Windows",
+      download_url: "https://ollama.com/download/windows",
+      install_command: "winget install Ollama.Ollama",
+      manual_steps: [
+        "1. Téléchargez Ollama depuis https://ollama.com/download/windows",
+        "2. Exécutez le fichier d'installation",
+        "3. Suivez les instructions de l'installateur",
+        "4. Redémarrez QGIS après l'installation",
+      ],
+    };
+  } else if (platform.includes("mac")) {
+    return {
+      platform: "macOS",
+      download_url: "https://ollama.com/download/mac",
+      install_command: "brew install ollama",
+      manual_steps: [
+        "1. Installez Homebrew si ce n'est pas déjà fait",
+        "2. Exécutez: brew install ollama",
+        "3. Ou téléchargez depuis https://ollama.com/download/mac",
+        "4. Redémarrez QGIS après l'installation",
+      ],
+    };
+  } else {
+    return {
+      platform: "Linux",
+      download_url: "https://ollama.com/download/linux",
+      install_command: "curl -fsSL https://ollama.com/install.sh | sh",
+      manual_steps: [
+        "1. Exécutez: curl -fsSL https://ollama.com/install.sh | sh",
+        "2. Ou téléchargez depuis https://ollama.com/download/linux",
+        "3. Redémarrez QGIS après l'installation",
+      ],
+    };
+  }
+}
+
 export async function getOllamaModels(): Promise<OllamaModel[]> {
   try {
     const response = await fetch("http://localhost:11434/api/tags");
@@ -163,13 +266,33 @@ export async function autoConfigureOllama(): Promise<{
   success: boolean;
   model?: string;
   error?: string;
+  status?: OllamaEnsureResult["status"];
+  installation?: OllamaEnsureResult["installation"];
 }> {
-  const ollamaAvailable = await detectOllama();
-  if (!ollamaAvailable) {
+  // Tenter de démarrer Ollama automatiquement si nécessaire
+  const ollamaStatus = await ensureOllamaRunning(true);
+  
+  if (!ollamaStatus.can_proceed) {
+    // Ollama n'est pas installé ou le démarrage a échoué
+    let errorMsg = ollamaStatus.message;
+    
+    if (ollamaStatus.status === "not_installed") {
+      errorMsg = "Ollama n'est pas installé. Cliquez sur le bouton d'installation ci-dessous.";
+    } else if (ollamaStatus.status === "start_failed") {
+      errorMsg = "Impossible de démarrer Ollama automatiquement. Veuillez le lancer manuellement.";
+    }
+    
     return {
       success: false,
-      error: "Ollama n'est pas détecté. Veuillez l'installer et le lancer.",
+      error: errorMsg,
+      status: ollamaStatus.status,
+      installation: ollamaStatus.installation,
     };
+  }
+  
+  // Ollama est en cours d'exécution (soit déjà, soit on vient de le démarrer)
+  if (ollamaStatus.status === "started") {
+    toast.success("Ollama a été démarré automatiquement !");
   }
 
   toast.info("Ollama détecté, recherche du meilleur modèle...");
@@ -180,6 +303,7 @@ export async function autoConfigureOllama(): Promise<{
     return {
       success: false,
       error: "Aucun modèle Ollama disponible. Veuillez en télécharger un.",
+      status: ollamaStatus.status,
     };
   }
 
@@ -192,11 +316,12 @@ export async function autoConfigureOllama(): Promise<{
     return {
       success: false,
       error: "Aucun modèle adapté à votre système trouvé.",
+      status: ollamaStatus.status,
     };
   }
 
   toast.success(`Modèle sélectionné : ${bestModel.name}`);
-  return { success: true, model: bestModel.name };
+  return { success: true, model: bestModel.name, status: ollamaStatus.status };
 }
 
 export function getRecommendedModelDownload(): {

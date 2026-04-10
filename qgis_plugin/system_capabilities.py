@@ -153,79 +153,103 @@ class SystemCapabilities:
         recommendations["can_run_local"] = True
         recommendations["max_model_size_gb"] = available_for_models
         
-        # Recommandations basées sur la RAM et le GPU
+        # Recommandations basées sur la RAM et le GPU (2025 - Modèles récents)
         if has_gpu and gpu_memory_gb:
             # Avec GPU
             if gpu_memory_gb >= 16:
                 recommendations["recommended_models"] = [
-                    {"name": "llama3.1:70b", "size_gb": 40, "description": "Modèle très puissant", "recommended": True},
-                    {"name": "qwen2.5:32b", "size_gb": 20, "description": "Excellent équilibre performance/taille"},
-                    {"name": "mistral:7b", "size_gb": 4.5, "description": "Rapide et performant"},
-                    {"name": "phi3:14b", "size_gb": 9, "description": "Compact et performant"},
+                    {"name": "gemma4:27b", "size_gb": 18, "description": "Google Gemma 4 27B — meilleur rapport qualité/taille 2025", "recommended": True},
+                    {"name": "qwen3:30b-a3b", "size_gb": 19, "description": "Qwen3 30B MoE — qualité maximale avec MoE efficace"},
+                    {"name": "llama3.3:70b", "size_gb": 45, "description": "Llama 3.3 70B — modèle très puissant"},
+                    {"name": "qwen3:8b", "size_gb": 5.2, "description": "Qwen3 8B — rapide et multilingue"},
                 ]
-                recommendations["reason"] = "GPU puissant détecté, modèles de haute qualité recommandés"
+                recommendations["reason"] = "GPU puissant détecté (16GB+), modèles 2025 haute qualité recommandés"
             elif gpu_memory_gb >= 8:
                 recommendations["recommended_models"] = [
-                    {"name": "qwen2.5:14b", "size_gb": 9, "description": "Excellent équilibre", "recommended": True},
-                    {"name": "mistral:7b", "size_gb": 4.5, "description": "Rapide et performant"},
-                    {"name": "phi3:14b", "size_gb": 9, "description": "Compact et performant"},
-                    {"name": "gemma2:9b", "size_gb": 5.5, "description": "Google Gemini"},
+                    {"name": "gemma4:12b", "size_gb": 9, "description": "Google Gemma 4 12B — multimodal et puissant", "recommended": True},
+                    {"name": "qwen3:8b", "size_gb": 5.2, "description": "Qwen3 8B — très bon suivi d'instructions", "recommended": False},
+                    {"name": "llama3.3:8b", "size_gb": 4.9, "description": "Llama 3.3 8B — excellent équilibre"},
+                    {"name": "mistral:7b", "size_gb": 4.5, "description": "Mistral 7B — rapide et performant"},
                 ]
-                recommendations["reason"] = "GPU moyen détecté, modèles de qualité moyenne recommandés"
+                recommendations["reason"] = "GPU moyen détecté (8GB), modèles 2025 qualité moyenne recommandés"
+            elif gpu_memory_gb >= 4:
+                recommendations["recommended_models"] = [
+                    {"name": "gemma4:4b", "size_gb": 3.3, "description": "Google Gemma 4 4B — excellent rapport qualité/taille", "recommended": True},
+                    {"name": "qwen3:4b", "size_gb": 2.8, "description": "Qwen3 4B — compact et performant"},
+                    {"name": "llama3.2:3b", "size_gb": 2.0, "description": "Llama 3.2 3B — ultra rapide"},
+                    {"name": "phi4:3b", "size_gb": 2.2, "description": "Phi-4 3B — Microsoft compact"},
+                ]
+                recommendations["reason"] = "GPU avec mémoire limitée (4GB), modèles compacts 2025 recommandés"
             else:
                 recommendations["recommended_models"] = [
-                    {"name": "phi3:4b", "size_gb": 2.5, "description": "Ultra compact", "recommended": True},
-                    {"name": "gemma2:4b", "size_gb": 2.5, "description": "Google compact"},
-                    {"name": "mistral:7b", "size_gb": 4.5, "description": "Si RAM suffisante"},
+                    {"name": "gemma4:2b", "size_gb": 1.7, "description": "Google Gemma 4 2B — ultra léger", "recommended": True},
+                    {"name": "llama3.2:1b", "size_gb": 1.3, "description": "Llama 3.2 1B — le plus rapide"},
+                    {"name": "smollm2:1.7b", "size_gb": 1.1, "description": "SmolLM2 1.7B — ultra compact"},
                 ]
-                recommendations["reason"] = "GPU avec mémoire limitée, modèles compacts recommandés"
+                recommendations["reason"] = "GPU faible, modèles ultra compacts recommandés"
         else:
             # Sans GPU (CPU only)
             if available_for_models >= 16:
                 recommendations["recommended_models"] = [
-                    {"name": "qwen2.5:7b", "size_gb": 4.5, "description": "CPU optimisé", "recommended": True},
-                    {"name": "mistral:7b", "size_gb": 4.5, "description": "Bon sur CPU"},
-                    {"name": "phi3:4b", "size_gb": 2.5, "description": "Ultra rapide"},
+                    {"name": "gemma4:9b", "size_gb": 6.5, "description": "Google Gemma 4 9B — optimisé CPU", "recommended": True},
+                    {"name": "qwen3:8b", "size_gb": 5.2, "description": "Qwen3 8B — bon sur CPU"},
+                    {"name": "llama3.3:8b", "size_gb": 4.9, "description": "Llama 3.3 8B — CPU optimisé"},
+                    {"name": "mistral:7b", "size_gb": 4.5, "description": "Mistral 7B — rapide"},
                 ]
-                recommendations["reason"] = "CPU uniquement, modèles optimisés CPU recommandés"
+                recommendations["reason"] = "CPU uniquement (16GB+ RAM), modèles 2025 optimisés CPU recommandés"
             elif available_for_models >= 8:
                 recommendations["recommended_models"] = [
-                    {"name": "phi3:4b", "size_gb": 2.5, "description": "Ultra compact", "recommended": True},
-                    {"name": "gemma2:4b", "size_gb": 2.5, "description": "Google compact"},
+                    {"name": "gemma4:4b", "size_gb": 3.3, "description": "Google Gemma 4 4B — ultra compact", "recommended": True},
+                    {"name": "qwen3:4b", "size_gb": 2.8, "description": "Qwen3 4B — rapide sur CPU"},
+                    {"name": "llama3.2:3b", "size_gb": 2.0, "description": "Llama 3.2 3B — léger"},
                 ]
-                recommendations["reason"] = "RAM limitée, modèles compacts recommandés"
+                recommendations["reason"] = "RAM limitée (8GB), modèles compacts 2025 recommandés"
+            elif available_for_models >= 4:
+                recommendations["recommended_models"] = [
+                    {"name": "gemma4:2b", "size_gb": 1.7, "description": "Google Gemma 4 2B — ultra léger", "recommended": True},
+                    {"name": "llama3.2:1b", "size_gb": 1.3, "description": "Llama 3.2 1B — rapide"},
+                    {"name": "smollm2:1.7b", "size_gb": 1.1, "description": "SmolLM2 1.7B — très compact"},
+                ]
+                recommendations["reason"] = "RAM minimale (4-8GB), modèles ultra compacts recommandés"
             else:
                 recommendations["recommended_models"] = [
-                    {"name": "phi3:mini", "size_gb": 2, "description": "Le plus compact", "recommended": True},
+                    {"name": "smollm2:360m", "size_gb": 0.6, "description": "SmolLM2 360M — le plus petit", "recommended": True},
                 ]
-                recommendations["reason"] = "RAM minimale, seul modèle compact possible"
+                recommendations["reason"] = "RAM très limitée, seul modèle minimal possible"
         
         return recommendations
     
     def get_all_available_models(self) -> List[Dict]:
-        """Retourne la liste de tous les modèles Ollama disponibles"""
+        """Retourne la liste de tous les modèles Ollama disponibles (2025)"""
         models = [
-            # Modèles très puissants (16GB+ GPU)
-            {"name": "llama3.1:70b", "size_gb": 40, "category": "high", "description": "Meilleur modèle généraliste", "requires_gpu": True, "min_ram_gb": 32},
-            {"name": "qwen2.5:32b", "size_gb": 20, "category": "high", "description": "Excellent pour le code", "requires_gpu": True, "min_ram_gb": 24},
+            # Modèles très puissants 2025 (16GB+ GPU)
+            {"name": "gemma4:27b", "size_gb": 18, "category": "high", "description": "Google Gemma 4 27B — meilleur rapport 2025", "requires_gpu": True, "min_ram_gb": 24},
+            {"name": "qwen3:30b-a3b", "size_gb": 19, "category": "high", "description": "Qwen3 30B MoE — qualité maximale", "requires_gpu": True, "min_ram_gb": 24},
+            {"name": "llama3.3:70b", "size_gb": 45, "category": "high", "description": "Llama 3.3 70B — très puissant", "requires_gpu": True, "min_ram_gb": 48},
+            {"name": "deepseek-v3:8b", "size_gb": 6, "category": "high", "description": "DeepSeek V3 distillé", "requires_gpu": True, "min_ram_gb": 10},
             
-            # Modèles puissants (8GB+ GPU)
-            {"name": "llama3.1:8b", "size_gb": 4.5, "category": "medium", "description": "Excellent équilibre", "requires_gpu": False, "min_ram_gb": 8},
-            {"name": "qwen2.5:14b", "size_gb": 9, "category": "medium", "description": "Très performant", "requires_gpu": True, "min_ram_gb": 12},
-            {"name": "mistral:7b", "size_gb": 4.5, "category": "medium", "description": "Rapide et performant", "requires_gpu": False, "min_ram_gb": 8},
-            {"name": "phi3:14b", "size_gb": 9, "category": "medium", "description": "Compact et performant", "requires_gpu": True, "min_ram_gb": 12},
-            {"name": "gemma2:9b", "size_gb": 5.5, "category": "medium", "description": "Google Gemini", "requires_gpu": False, "min_ram_gb": 8},
+            # Modèles puissants 2025 (8GB+ GPU / 16GB RAM)
+            {"name": "gemma4:12b", "size_gb": 9, "category": "medium", "description": "Google Gemma 4 12B — multimodal", "requires_gpu": False, "min_ram_gb": 12},
+            {"name": "qwen3:8b", "size_gb": 5.2, "category": "medium", "description": "Qwen3 8B — excellent suivi instructions", "requires_gpu": False, "min_ram_gb": 8},
+            {"name": "llama3.3:8b", "size_gb": 4.9, "category": "medium", "description": "Llama 3.3 8B — équilibre parfait", "requires_gpu": False, "min_ram_gb": 8},
+            {"name": "mistral:7b", "size_gb": 4.5, "category": "medium", "description": "Mistral 7B — rapide et performant", "requires_gpu": False, "min_ram_gb": 8},
+            {"name": "gemma4:9b", "size_gb": 6.5, "category": "medium", "description": "Google Gemma 4 9B — CPU optimisé", "requires_gpu": False, "min_ram_gb": 10},
             
-            # Modèles compacts (4-8GB RAM)
-            {"name": "qwen2.5:7b", "size_gb": 4.5, "category": "low", "description": "CPU optimisé", "requires_gpu": False, "min_ram_gb": 6},
-            {"name": "phi3:4b", "size_gb": 2.5, "category": "low", "description": "Ultra compact", "requires_gpu": False, "min_ram_gb": 4},
-            {"name": "gemma2:4b", "size_gb": 2.5, "category": "low", "description": "Google compact", "requires_gpu": False, "min_ram_gb": 4},
-            {"name": "llama3.1:3b", "size_gb": 2, "category": "low", "description": "Compact", "requires_gpu": False, "min_ram_gb": 4},
+            # Modèles compacts 2025 (4-8GB RAM)
+            {"name": "gemma4:4b", "size_gb": 3.3, "category": "low", "description": "Google Gemma 4 4B — ultra efficace", "requires_gpu": False, "min_ram_gb": 6},
+            {"name": "qwen3:4b", "size_gb": 2.8, "category": "low", "description": "Qwen3 4B — compact multilingue", "requires_gpu": False, "min_ram_gb": 5},
+            {"name": "llama3.2:3b", "size_gb": 2.0, "category": "low", "description": "Llama 3.2 3B — ultra rapide", "requires_gpu": False, "min_ram_gb": 4},
+            {"name": "phi4:3b", "size_gb": 2.2, "category": "low", "description": "Phi-4 3B — Microsoft", "requires_gpu": False, "min_ram_gb": 4},
             
-            # Modèles ultra compacts (2-4GB RAM)
-            {"name": "phi3:mini", "size_gb": 2, "category": "minimal", "description": "Le plus compact", "requires_gpu": False, "min_ram_gb": 3},
-            {"name": "tinyllama", "size_gb": 1.1, "category": "minimal", "description": "Ultra léger", "requires_gpu": False, "min_ram_gb": 2},
-            {"name": "gemma:2b", "size_gb": 1.5, "category": "minimal", "description": "Google ultra léger", "requires_gpu": False, "min_ram_gb": 2},
+            # Modèles ultra compacts 2025 (2-4GB RAM)
+            {"name": "gemma4:2b", "size_gb": 1.7, "category": "minimal", "description": "Google Gemma 4 2B — ultra léger", "requires_gpu": False, "min_ram_gb": 3},
+            {"name": "llama3.2:1b", "size_gb": 1.3, "category": "minimal", "description": "Llama 3.2 1B — le plus rapide", "requires_gpu": False, "min_ram_gb": 3},
+            {"name": "smollm2:1.7b", "size_gb": 1.1, "category": "minimal", "description": "SmolLM2 1.7B — très compact", "requires_gpu": False, "min_ram_gb": 3},
+            {"name": "smollm2:360m", "size_gb": 0.6, "category": "minimal", "description": "SmolLM2 360M — minimal", "requires_gpu": False, "min_ram_gb": 2},
+            
+            # Anciens modèles (rétrocompatibilité)
+            {"name": "llama3.1:8b", "size_gb": 4.5, "category": "legacy", "description": "Llama 3.1 8B (legacy)", "requires_gpu": False, "min_ram_gb": 8},
+            {"name": "qwen2.5:7b", "size_gb": 4.5, "category": "legacy", "description": "Qwen2.5 7B (legacy)", "requires_gpu": False, "min_ram_gb": 6},
         ]
         
         # Filtrer selon les capacités du système
