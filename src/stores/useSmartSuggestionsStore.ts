@@ -31,6 +31,8 @@ export interface SuggestionContext {
 interface SmartSuggestionsState {
   suggestions: SmartSuggestion[];
   isVisible: boolean;
+  isProcessing: boolean; // Transition vers réponse
+  processingText: string;
   context: SuggestionContext;
   recentPrompts: string[];
   userPatterns: Record<string, number>;
@@ -38,6 +40,8 @@ interface SmartSuggestionsState {
   // Actions
   generateSuggestions: (input: string, context: SuggestionContext) => void;
   setVisibility: (visible: boolean) => void;
+  startProcessing: (text: string) => void; // Début transition
+  completeProcessing: () => void; // Fin transition
   updateContext: (context: Partial<SuggestionContext>) => void;
   acceptSuggestion: (suggestionId: string) => void;
   dismissSuggestion: (suggestionId: string) => void;
@@ -203,6 +207,8 @@ export const useSmartSuggestionsStore = create<SmartSuggestionsState>()(
     (set, get) => ({
       suggestions: [],
       isVisible: false,
+      isProcessing: false,
+      processingText: "",
       context: {
         layers: [],
         selectedLayers: [],
@@ -218,12 +224,29 @@ export const useSmartSuggestionsStore = create<SmartSuggestionsState>()(
         set({ 
           suggestions,
           isVisible: suggestions.length > 0 && input.length > 0,
+          isProcessing: false,
           context: { ...get().context, ...context },
         });
       },
 
       setVisibility: (visible: boolean) => {
         set({ isVisible: visible });
+      },
+
+      startProcessing: (text: string) => {
+        set({ 
+          isProcessing: true,
+          processingText: text,
+          isVisible: true, // Garder visible pendant le traitement
+        });
+      },
+
+      completeProcessing: () => {
+        set({ 
+          isProcessing: false,
+          isVisible: false,
+          suggestions: [],
+        });
       },
 
       updateContext: (contextUpdate: Partial<SuggestionContext>) => {

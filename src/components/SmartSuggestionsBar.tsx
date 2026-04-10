@@ -18,6 +18,8 @@ import {
   Sparkles,
   X,
   TrendingUp,
+  Loader2,
+  Brain,
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { useSmartSuggestionsStore, SmartSuggestion, SuggestionType } from "../stores/useSmartSuggestionsStore";
@@ -75,6 +77,8 @@ export default function SmartSuggestionsBar({
   const {
     suggestions,
     isVisible,
+    isProcessing,
+    processingText,
     generateSuggestions,
     acceptSuggestion,
     dismissSuggestion,
@@ -154,6 +158,43 @@ export default function SmartSuggestionsBar({
   }, {} as Record<string, SmartSuggestion[]>);
 
   const categories = Object.keys(groupedSuggestions);
+
+  // Mode processing: afficher une vue transition pendant le chargement
+  if (isProcessing) {
+    return (
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className={cn(
+          "absolute bottom-full left-0 right-0 mb-2 z-50",
+          className
+        )}
+      >
+        <div className="mx-4 mb-2">
+          <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-emerald-900/90 to-teal-900/90 backdrop-blur-xl rounded-xl border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
+            <div className="relative">
+              <Loader2 size={18} className="text-emerald-400 animate-spin" />
+              <div className="absolute inset-0 blur-sm">
+                <Loader2 size={18} className="text-emerald-400 animate-spin" />
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-white/90">
+                {processingText || "Analyse de votre demande..."}
+              </p>
+              <p className="text-xs text-white/50">
+                QGISAI+ prépare votre réponse
+              </p>
+            </div>
+            <Brain size={18} className="text-emerald-400/60" />
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   if (!isVisible || suggestions.length === 0) {
     return null;

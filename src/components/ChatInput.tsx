@@ -102,6 +102,7 @@ export default function ChatInput({
   
   // Mettre à jour le contexte de conversation
   const updateContext = useConversationMemoryStore((s) => s.updateContext);
+  const { suggestions } = useSmartSuggestionsStore();
   
   useEffect(() => {
     updateContext({
@@ -139,8 +140,9 @@ export default function ChatInput({
     void onSendMessage(messageToSend);
     setInput("");
     
-    // Cacher les suggestions après envoi
-    useSmartSuggestionsStore.getState().setVisibility(false);
+    // Démarrer la transition processing au lieu de cacher brutalement
+    const detectedIntent = suggestions[0]?.text || "Analyse de votre demande...";
+    useSmartSuggestionsStore.getState().startProcessing(detectedIntent);
   };
   
   const handleSuggestionClick = (suggestion: string) => {

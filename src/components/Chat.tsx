@@ -51,6 +51,7 @@ import {
 } from "../lib/settings";
 import { appendDebugEvent } from "../lib/debug-log";
 import { useUIStore } from "../stores/useUIStore";
+import { useSmartSuggestionsStore } from "../stores/useSmartSuggestionsStore";
 
 interface ChatProps {
   activeConversation: ChatConversation | null;
@@ -178,6 +179,19 @@ export default function Chat(props: ChatProps) {
       setActiveDiagnosticsLayerId(null);
     }
   }, [activeDiagnosticsLayerId, layers]);
+
+  // Terminer le processing des suggestions quand la réponse arrive
+  const prevIsLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    // Détecter la transition de loading=true à loading=false (réponse reçue)
+    if (prevIsLoadingRef.current && !isLoading) {
+      // Petit délai pour laisser l'animation de transition se faire
+      setTimeout(() => {
+        useSmartSuggestionsStore.getState().completeProcessing();
+      }, 500);
+    }
+    prevIsLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   const handleScroll = () => {
     if (!scrollRef.current) {
