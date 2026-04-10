@@ -1,11 +1,369 @@
 /**
  * Système d'intelligence de prompt utilisant un modèle local ultra-léger
  * pour analyser la demande utilisateur et la décomposer en plan d'action
+ * 
+ * ROBUSTESSE: Gère les fautes, abréviations, formulations floues
  */
 
 import { detectOllama, getOllamaModels } from "./ollama-auto-detect";
 import { AppSettings } from "./settings";
 import { toast } from "sonner";
+
+// ===== CORRECTION ORTHOGRAPHIQUE ET EXPANSION =====
+
+const COMMON_MISSPELLINGS: Record<string, string> = {
+  // Fautes courantes
+  "kadastre": "cadastre", "cadast": "cadastre", "cadasstre": "cadastre",
+  "parcele": "parcelle", "parcel": "parcelle", "parselle": "parcelle",
+  "comune": "commune", "commun": "commune", "conmune": "commune",
+  "couche": "couche", "couch": "couche", "kouche": "couche",
+  "baffer": "buffer", "bufeur": "buffer", "buffe": "buffer",
+  "interection": "intersection", "intesection": "intersection",
+  "dissoudre": "dissolve", "disolve": "dissolve", "dissol": "dissolve",
+  "zoomer": "zoom", "zom": "zoom", "zoum": "zoom",
+  "exporte": "export", "exporter": "export", "expot": "export",
+  "charg": "charger", "charge": "charger",
+  "affiche": "afficher", "afiche": "afficher",
+  "calcule": "calculer", "calcul": "calculer",
+  "crée": "créer", "cree": "créer", "creer": "créer",
+  "ajoute": "ajouter", "ajoue": "ajouter",
+  "suprime": "supprimer", "supprime": "supprimer",
+  "renome": "renommer", "renomme": "renommer",
+  "mesure": "mesurer", "mesur": "mesurer",
+  "selectione": "sélectionner", "selectionne": "sélectionner",
+  "filtre": "filtrer", "filtr": "filtrer",
+  "style": "style", "styl": "style",
+  "symbole": "symbologie", "simbol": "symbologie",
+  "etiquet": "étiquette", "etiquette": "étiquette",
+  "legend": "légende", "legende": "légende",
+  "cart": "carte", "kart": "carte",
+  "fore": "forêt", "foret": "forêt", "boi": "bois",
+  "placet": "placette", "place": "placette",
+  "esen": "essence", "esence": "essence", "essens": "essence",
+  "chene": "chêne", "chène": "chêne",
+  "sapin": "sapin", "sapain": "sapin",
+  "pin": "pin", "pine": "pin",
+  "hectar": "hectare", "ectare": "hectare", "ha": "ha",
+  "metre": "mètre", "metr": "mètre", "m": "m",
+  "kilometre": "kilomètre", "km": "km",
+  "surface": "surface", "surfac": "surface",
+  "perimetre": "périmètre", "perimètre": "périmètre",
+  "aire": "aire", "air": "aire",
+  "geojson": "geojson", "geojsn": "geojson", "geo jon": "geojson",
+  "shapefile": "shapefile", "shp": "shp", "shep": "shapefile",
+  "geopackage": "geopackage", "gpkg": "gpkg",
+  "dxf": "dxf", "déf": "dxf",
+  "inventair": "inventaire", "inventer": "inventaire",
+  "ifn": "ifn", "nfi": "ifn",
+  "analyse": "analyse", "analise": "analyse",
+  "stat": "statistique", "statistiks": "statistique",
+  "moyen": "moyenne", "moyenn": "moyenne",
+  "som": "somme", "somm": "somme",
+  "total": "total", "totale": "total",
+  "médian": "médiane", 
+  "ecart": "écart", "varian": "variance",
+  "corélation": "corrélation",
+  "clusteur": "cluster",
+  "proxi": "proximité", "proximiter": "proximité",
+  "distans": "distance", "distan": "distance",
+  "converti": "convertir", "conver": "convertir",
+  "projec": "projection", "projete": "projection",
+  "repro": "reprojection",
+  "pyton": "python", "pithon": "python",
+  "scipt": "script",
+  "cod": "code",
+  "ereur": "erreur",
+  "problem": "problème", "probleme": "problème",
+  "plante": "plantage",
+  "aid": "aide",
+  "explain": "expliquer",
+  "comen": "comment",
+  "pourkoi": "pourquoi",
+  "ke": "que", "koi": "quoi",
+  "sa va": "çava",
+};
+
+const ABBREVIATION_EXPANSIONS: Record<string, string> = {
+  // Abréviations techniques
+  "sig": "SIG système d'information géographique",
+  "qgis": "QGIS",
+  "py": "python",
+  "pyqgis": "PyQGIS",
+  "epsg": "EPSG système de coordonnées",
+  "crs": "CRS système de coordonnées de référence",
+  "wgs": "WGS84",
+  "l93": "Lambert 93",
+  "rgf": "RGF93",
+  "mnt": "MNT modèle numérique de terrain",
+  "mns": "MNS modèle numérique de surface",
+  "mnh": "MNH modèle numérique de hauteur",
+  "ndvi": "NDVI indice de végétation",
+  "ifn": "IFN inventaire forestier national",
+  "shp": "shapefile",
+  "gpkg": "geopackage",
+  "geo": "géographique",
+  "geom": "géométrie",
+  "attr": "attribut",
+  "champ": "champ",
+  "tab": "table",
+  "dist": "distance",
+  "surf": "surface",
+  "perim": "périmètre",
+  "long": "longueur",
+  "lat": "latitude",
+  "lon": "longitude",
+  "coord": "coordonnées",
+  "proj": "projection",
+  "reproj": "reprojection",
+  "buf": "buffer",
+  "tampon": "buffer",
+  "inter": "intersection",
+  "union": "union",
+  "diff": "différence",
+  "diss": "dissolve",
+  "clip": "clip découpe",
+  "merge": "fusion merge",
+  "filt": "filtre",
+  "exp": "export",
+  "imp": "import",
+  "add": "ajouter",
+  "del": "supprimer",
+  "rm": "supprimer",
+  "mod": "modifier",
+  "edit": "éditer modifier",
+  "chg": "changer modifier",
+  "ren": "renommer",
+  "vis": "visible visibilité",
+  "opac": "opacité",
+  "symb": "symbologie",
+  "leg": "légende",
+  "etiq": "étiquette",
+  "lab": "label étiquette",
+  "cad": "cadastre",
+  "par": "parcelle",
+  "parce": "parcelle",
+  "com": "commune",
+  "dep": "département",
+  "reg": "région",
+  "addr": "adresse",
+  "adr": "adresse",
+  "ess": "essence",
+  "spe": "espèce essence",
+  "dbh": "diamètre à hauteur de poitrine",
+  "dhp": "diamètre à hauteur de poitrine",
+  "st": "surface terrière",
+  "dens": "densité",
+  "vol": "volume",
+  "haut": "hauteur",
+  "nb": "nombre",
+  "nbr": "nombre",
+  "nbre": "nombre",
+  "qt": "quantité",
+  "qte": "quantité",
+  "min": "minimum",
+  "max": "maximum",
+  "avg": "moyenne",
+  "sum": "somme",
+  "count": "compter",
+  "tot": "total",
+  "chk": "vérifier",
+  "check": "vérifier",
+  "valid": "valider validation",
+  "rep": "réparer",
+  "fix": "réparer",
+  "corr": "corriger",
+  "cre": "créer",
+  "creat": "créer",
+  "comp": "calculer",
+  "aff": "afficher",
+  "show": "afficher montrer",
+  "disp": "afficher",
+  "voir": "afficher visualiser",
+  "save": "sauvegarder enregistrer",
+  "sav": "sauvegarder",
+  "load": "charger ouvrir",
+  "open": "ouvrir charger",
+  "close": "fermer",
+  "quit": "quitter fermer",
+  "sup": "supprimer",
+  "eff": "effacer",
+  "efface": "effacer supprimer",
+  "raz": "réinitialiser",
+  "reset": "réinitialiser",
+  "init": "initialiser",
+  "upd": "mettre à jour",
+  "update": "mettre à jour",
+  "maj": "mise à jour",
+  "sync": "synchroniser",
+  "link": "lier relier",
+  "attach": "attacher joindre",
+  "merge": "fusionner",
+  "split": "diviser",
+  "sep": "séparer",
+  "extract": "extraire",
+  "extr": "extraire",
+  "select": "sélectionner",
+  "deselect": "désélectionner",
+  "dsel": "désélectionner",
+  "all": "tout tous",
+  "none": "aucun rien",
+  "invert": "inverser",
+  "toggle": "basculer",
+  "switch": "changer basculer",
+  "chg": "changer",
+  "mod": "modifier",
+  "conf": "configuration",
+  "cfg": "configuration",
+  "param": "paramètre",
+  "pref": "préférence",
+  "prop": "propriété",
+  "info": "information",
+  "data": "données",
+  "metad": "métadonnées",
+  "meta": "métadonnées",
+  "doc": "documentation",
+  "help": "aide",
+  "?": "aide",
+  "wtf": "problème erreur",
+  "bug": "bug erreur",
+  "pb": "problème",
+  "pblm": "problème",
+  "err": "erreur",
+  "warn": "avertissement",
+  "alert": "alerte",
+  "notif": "notification",
+  "msg": "message",
+  "log": "journal log",
+  "hist": "historique",
+  "undo": "annuler",
+  "redo": "refaire",
+  "cancel": "annuler",
+  "stop": "arrêter",
+  "pause": "pauser",
+  "run": "exécuter lancer",
+  "exec": "exécuter",
+  "start": "démarrer lancer",
+  "go": "aller exécuter",
+  "do": "faire exécuter",
+  "get": "obtenir récupérer",
+  "fetch": "récupérer obtenir",
+  "put": "placer mettre",
+  "set": "définir configurer",
+  "apply": "appliquer",
+};
+
+const ACTION_SYNONYMS: Record<string, string[]> = {
+  "charger": ["charge", "charg", "load", "open", "ouvre", "ouvrir", "import", "imp", "ajoute", "add"],
+  "afficher": ["affiche", "afiche", "montre", "show", "voir", "visualise", "display", "disp", "rendre visible"],
+  "créer": ["cree", "crée", "fais", "make", "generer", "gen", "produire", "construire", "build"],
+  "supprimer": ["supprime", "efface", "eff", "del", "rm", "remove", "delete", "enleve", "retire", "ote"],
+  "modifier": ["modifie", "change", "edit", "alter", "transforme", "convertis", "met a jour", "update"],
+  "calculer": ["calcule", "calcul", "comp", "compute", "evaluate", "mesure", "quantifie"],
+  "zoomer": ["zoom", "zom", "cadre", "focus", "centrer sur", "va sur"],
+  "exporter": ["exporte", "exp", "save", "sauvegarde", "enregistre", "write", "output"],
+  "filtrer": ["filtre", "filt", "selectionne", "sel", "where", "subset", "filter"],
+  "style": ["symbo", "symbologie", "couleur", "couleure", "color", "rendu", "apparence", "look"],
+};
+
+/**
+ * Normalise un message utilisateur pour améliorer la compréhension
+ * Gère fautes d'orthographe, abréviations, et formulations floues
+ */
+function normalizeUserMessage(userMessage: string): string {
+  let normalized = userMessage.toLowerCase().trim();
+  
+  // 1. Correction des fautes courantes
+  for (const [misspelled, correct] of Object.entries(COMMON_MISSPELLINGS)) {
+    const regex = new RegExp(`\\b${misspelled}\\b`, 'gi');
+    normalized = normalized.replace(regex, correct);
+  }
+  
+  // 2. Expansion des abréviations
+  for (const [abbr, expansion] of Object.entries(ABBREVIATION_EXPANSIONS)) {
+    const regex = new RegExp(`\\b${abbr}\\b`, 'gi');
+    normalized = normalized.replace(regex, expansion);
+  }
+  
+  // 3. Remplacement des synonymes d'actions (garder le terme canonique)
+  for (const [canonical, synonyms] of Object.entries(ACTION_SYNONYMS)) {
+    for (const synonym of synonyms) {
+      const regex = new RegExp(`\\b${synonym}\\b`, 'gi');
+      normalized = normalized.replace(regex, canonical);
+    }
+  }
+  
+  // 4. Corrections spécifiques SIG
+  normalized = normalized
+    .replace(/\bl93\b/gi, "lambert 93")
+    .replace(/\bwgs\s*84\b/gi, "wgs84")
+    .replace(/\bepsg\s*:?\s*(\d+)/gi, "EPSG:$1")
+    .replace(/\blambert\s*2\s*(etendu|étendu)?\b/gi, "lambert 2 étendu")
+    .replace(/\brgf\s*93\b/gi, "rgf93")
+    .replace(/\b(\d+)\s*(m|mètre|metre|metres|mètres?)\b/gi, "$1m")
+    .replace(/\b(\d+)\s*(km|kilometre|kilomètres?)\b/gi, "$1km")
+    .replace(/\b(\d+)\s*(ha|hectare|hectares?)\b/gi, "$1ha")
+    .replace(/\bgeo\s*json\b/gi, "geojson")
+    .replace(/\bshape\s*file\b/gi, "shapefile")
+    .replace(/\bgeo\s*package\b/gi, "geopackage")
+    .replace(/\bpour\s*quoi\b/gi, "pourquoi")
+    .replace(/\bca\s*va\b/gi, "çava")
+    .replace(/\bce\s*que\b/gi, "est-ce que")
+    .replace(/\by\s*a\s*t\s*il\b/gi, "y a-t-il")
+    .replace(/\bcomment\s*ça\s*marche\b/gi, "expliquer fonctionnement");
+  
+  // 5. Suppression des répétitions de caractères (ex: "couuuuche" → "couche")
+  normalized = normalized.replace(/(.)\1{2,}/g, "$1$1");
+  
+  // 6. Gestion des formulations interrogatives courtes
+  if (normalized.length < 20 && !normalized.includes("?")) {
+    // Ajouter contexte si c'est une demande implicite
+    if (/^\s*(cadastre|parcelle|commune|couche|style|buffer|export)\s*$/.test(normalized)) {
+      normalized = `afficher ${normalized}`;
+    }
+  }
+  
+  return normalized;
+}
+
+/**
+ * Détecte si c'est une demande d'aide implicite
+ */
+function detectImplicitHelp(userMessage: string): boolean {
+  const helpPatterns = [
+    /^\s*(aide|help|\?|comment|pourquoi|kezako|kesako|keski)\s*$/i,
+    /^\s*(je ne sais pas|je sais pas|jsp|j'y comprends rien|comprends pas)\s*/i,
+    /^\s*(ça marche pas|ca marche pas|cmarchepas|bug|problème|pb)\s*/i,
+    /^\s*(c quoi|c koi|c'est quoi|keskecé|kesskecé)\s+(.+)$/i,
+    /^\s*(comment on fait|comment faire|comment ça marche)\s*/i,
+  ];
+  return helpPatterns.some(p => p.test(userMessage));
+}
+
+/**
+ * Complète une demande incomplète ou ambiguë
+ */
+function completeAmbiguousRequest(userMessage: string, normalized: string): string {
+  // Détecter les demandes trop courtes
+  if (normalized.split(/\s+/).length < 3) {
+    // Ajouter du contexte selon les mots-clés présents
+    if (/cadastre|parcelle/.test(normalized) && !/charger|afficher|ajouter/.test(normalized)) {
+      return `charger ${normalized}`;
+    }
+    if (/couche/.test(normalized) && !/créer|modifier|supprimer|style/.test(normalized)) {
+      return `afficher ${normalized}`;
+    }
+    if (/buffer|tampon/.test(normalized) && !/créer|calculer/.test(normalized)) {
+      return `créer ${normalized}`;
+    }
+    if (/export|sauvegarder/.test(normalized) && !/exporter/.test(normalized)) {
+      return `exporter ${normalized}`;
+    }
+    if (/calcul|somme|moyenne|total/.test(normalized)) {
+      return `calculer ${normalized}`;
+    }
+  }
+  return normalized;
+}
 
 export type UserIntent =
   | "DATA_QUERY"           // Requête de données (cadastre, communes, etc.)
@@ -274,9 +632,31 @@ export async function analyzeUserIntent(
 
 /**
  * Analyse heuristique améliorée avec patterns étendus et extraction complète des entités
+ * Intègre la normalisation pour gérer fautes d'orthographe et formulations floues
  */
 function heuristicIntentAnalysis(userMessage: string): IntentAnalysis {
-  const normalized = userMessage.toLowerCase();
+  // 1. Détecter les demandes d'aide implicites
+  if (detectImplicitHelp(userMessage)) {
+    return {
+      intent: "EXPLANATION",
+      complexity: "SIMPLE",
+      confidence: 0.9,
+      needsQgisContext: false,
+      needsTools: false,
+      estimatedSteps: 1,
+      suggestedApproach: "LOCAL_ROUTER",
+      keywords: ["aide", "explication"],
+      entities: {},
+      requiresLargeContext: false,
+      suggestedModelTier: "ULTRA_LIGHT",
+    };
+  }
+  
+  // 2. Normaliser le message (correction fautes, expansion abréviations)
+  let normalized = normalizeUserMessage(userMessage);
+  
+  // 3. Compléter les demandes ambiguës ou trop courtes
+  normalized = completeAmbiguousRequest(userMessage, normalized);
   
   // ===== PATTERNS DÉTAILLÉS PAR INTENTION =====
   
