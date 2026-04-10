@@ -1,5 +1,5 @@
 /**
- * Orchestrateur Multi-Modèles pour GeoSylva AI
+ * Orchestrateur Multi-Modèles pour QGISAI+
  * 
  * Architecture:
  * 1. Phase 1: Analyse d'intention (modèle ultra-léger local)
@@ -390,7 +390,7 @@ async function handleDirectLLM(
 
   const response = await generateWithOllama(
     model,
-    `Tu es GeoSylva AI, expert SIG. Réponds en français de façon concise et précise.\n\n${userMessage}`,
+    `Tu es QGISAI+, expert SIG. Réponds en français de façon concise et précise.\n\n${userMessage}`,
     signal
   );
 

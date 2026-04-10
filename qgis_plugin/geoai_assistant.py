@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from .ui import LaunchButton, QGISAILaunchDock
 import functools
 import http.server
 import importlib
@@ -229,8 +230,8 @@ class QgisBridge(BridgeQObject):
         return QgsProject.instance().mapLayer(layer_ref)
 
     def _notify(self, message, level=Qgis.Info, duration=4):
-        self.iface.messageBar().pushMessage("GeoSylva AI", message, level=level, duration=duration)
-        QgsMessageLog.logMessage(message, "GeoSylva AI", level=level)
+        self.iface.messageBar().pushMessage("QGISAI+", message, level=level, duration=duration)
+        QgsMessageLog.logMessage(message, "QGISAI+", level=level)
 
     def _layer_node(self, layer):
         if layer is None:
@@ -848,7 +849,7 @@ class QgisBridge(BridgeQObject):
     @BridgeSlot()
     def openSettings(self):
         self._notify(
-            "Les paramètres du modèle se configurent depuis l'interface GeoSylva AI.",
+            "Les paramètres du modèle se configurent depuis l'interface QGISAI+.",
             Qgis.Info,
         )
 
@@ -1360,7 +1361,7 @@ class QgisBridge(BridgeQObject):
         except Exception:
             QgsMessageLog.logMessage(
                 traceback.format_exc(),
-                "GeoSylva AI",
+                "QGISAI+",
                 level=Qgis.Critical,
             )
             self._notify("La fusion raster a échoué.", Qgis.Critical, duration=6)
@@ -1404,7 +1405,7 @@ class QgisBridge(BridgeQObject):
         except Exception:
             QgsMessageLog.logMessage(
                 traceback.format_exc(),
-                "GeoSylva AI",
+                "QGISAI+",
                 level=Qgis.Critical,
             )
             self._notify(
@@ -1454,7 +1455,7 @@ class QgisBridge(BridgeQObject):
         if require_confirmation:
             message_box = QMessageBox(self.iface.mainWindow())
             message_box.setIcon(QMessageBox.Warning)
-            message_box.setWindowTitle("GeoSylva AI")
+            message_box.setWindowTitle("QGISAI+")
             message_box.setText("Confirmer l'exécution du script PyQGIS ?")
             message_box.setInformativeText(
                 "Le code proposé par l'IA va s'exécuter dans votre session QGIS."
@@ -1489,7 +1490,7 @@ class QgisBridge(BridgeQObject):
             error_message = traceback.format_exc()
             QgsMessageLog.logMessage(
                 f"Erreur script IA :\n{error_message}",
-                "GeoSylva AI",
+                "QGISAI+",
                 level=Qgis.Critical,
             )
             message = f"Erreur lors de l'exécution : {exc}"
@@ -2029,7 +2030,7 @@ class GeoAIAssistant:
             QDesktopServices.openUrl(QUrl(self.external_ui_url))
 
         self.iface.messageBar().pushMessage(
-            "GeoSylva AI",
+            "QGISAI+",
             "Interface ouverte dans votre navigateur.",
             level=Qgis.Info,
             duration=5,
@@ -2041,8 +2042,8 @@ class GeoAIAssistant:
         if clipboard is not None:
             clipboard.setText(value)
             self.iface.messageBar().pushMessage(
-                "GeoSylva AI",
-                "URL GeoSylva AI copiée dans le presse-papier.",
+                "QGISAI+",
+                "URL QGISAI+ copiée dans le presse-papier.",
                 level=Qgis.Success,
                 duration=4,
             )
@@ -2152,14 +2153,14 @@ class GeoAIAssistant:
         badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hero_text_layout.addWidget(badge, 0, Qt.AlignmentFlag.AlignLeft)
 
-        title = QLabel("GeoSylva AI fonctionne, mais via le navigateur externe")
+        title = QLabel("QGISAI+ fonctionne, mais via le navigateur externe")
         title.setWordWrap(True)
         title.setObjectName("geoaiHeroTitle")
         hero_text_layout.addWidget(title)
 
         body = QLabel(
             "Le moteur Web Qt embarqué de cette installation QGIS n'est pas disponible. "
-            "L'interface GeoSylva AI a donc été ouverte automatiquement dans votre navigateur, "
+            "L'interface QGISAI+ a donc été ouverte automatiquement dans votre navigateur, "
             "avec le bridge local QGIS déjà actif."
         )
         body.setWordWrap(True)
@@ -2185,7 +2186,7 @@ class GeoAIAssistant:
         actions_layout = QHBoxLayout()
         actions_layout.setSpacing(10)
 
-        open_button = QPushButton("Ouvrir GeoSylva AI")
+        open_button = QPushButton("Ouvrir QGISAI+")
         open_button.setObjectName("geoaiPrimaryButton")
         open_button.setEnabled(bool(url))
         open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
@@ -2242,7 +2243,7 @@ class GeoAIAssistant:
 
     def _create_dock(self):
         self._debug("create_dock:start")
-        self.dock = QDockWidget("GeoSylva AI", self.iface.mainWindow())
+        self.dock = QDockWidget("QGISAI+", self.iface.mainWindow())
         self._debug("create_dock:dock_created")
         self.dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
         self.dock.setMinimumWidth(420)
@@ -2311,12 +2312,12 @@ class GeoAIAssistant:
         icon_path = os.path.join(self.plugin_dir, "logo.png")
 
         # Action principale avec configuration
-        action_name = ICON_CONFIG.get("name", "GeoSylva AI")
-        action_tooltip = ICON_CONFIG.get("tooltip", "Ouvrir l'assistant IA GeoSylva")
+        action_name = ICON_CONFIG.get("name", "QGISAI+")
+        action_tooltip = ICON_CONFIG.get("tooltip", "Ouvrir l'assistant IA QGISAI+")
         action_status_tip = ICON_CONFIG.get("status_tip", "Assistant IA pour QGIS")
         action_whats_this = ICON_CONFIG.get("whats_this", "")
         action_shortcut = ICON_CONFIG.get("shortcut", "Ctrl+Shift+G")
-        action_text = ICON_CONFIG.get("text", "GeoSylva AI")
+        action_text = ICON_CONFIG.get("text", "QGISAI+")
         show_text = ICON_CONFIG.get("show_text", True)
         icon_size = ICON_CONFIG.get("icon_size", 24)
 
@@ -2341,7 +2342,7 @@ class GeoAIAssistant:
         self.iface.addToolBarIcon(self.action)
         
         # Ajouter au menu avec configuration
-        menu_name = MENU_CONFIG.get("name", "&GeoSylva AI")
+        menu_name = MENU_CONFIG.get("name", "&QGISAI+")
         use_submenu = MENU_CONFIG.get("submenu", True)
         show_icon = MENU_CONFIG.get("icon", True)
         
@@ -2410,7 +2411,7 @@ class GeoAIAssistant:
         self._debug("initGui:end")
 
     def run(self):
-        """Lance l'interface GeoSylva AI dans le navigateur externe"""
+        """Lance l'interface QGISAI+ dans le navigateur externe"""
         self._debug("run:start")
 
         try:
@@ -2438,7 +2439,7 @@ class GeoAIAssistant:
 
             if not server_running:
                 self.iface.messageBar().pushMessage(
-                    "GeoSylva AI",
+                    "QGISAI+",
                     "Démarrage du serveur de développement...",
                     Qgis.MessageLevel.Info,
                     3
@@ -2462,7 +2463,7 @@ class GeoAIAssistant:
                             pass
                 except Exception as e:
                     self.iface.messageBar().pushMessage(
-                        "GeoSylva AI",
+                        "QGISAI+",
                         f"Serveur non démarré: {str(e)} — lancez 'npm run dev' manuellement",
                         Qgis.MessageLevel.Warning,
                         8
@@ -2470,8 +2471,8 @@ class GeoAIAssistant:
 
             webbrowser.open(server_url)
             self.iface.messageBar().pushMessage(
-                "GeoSylva AI",
-                "Interface GeoSylva AI ouverte dans votre navigateur.",
+                "QGISAI+",
+                "Interface QGISAI+ ouverte dans votre navigateur.",
                 Qgis.MessageLevel.Success,
                 3
             )
@@ -2480,7 +2481,7 @@ class GeoAIAssistant:
         except Exception as e:
             self._debug(f"run:error {e}")
             self.iface.messageBar().pushMessage(
-                "GeoSylva AI",
+                "QGISAI+",
                 f"Erreur: {str(e)}",
                 Qgis.MessageLevel.Critical,
                 5
@@ -2501,7 +2502,7 @@ class GeoAIAssistant:
 
         # Informer l'utilisateur que les paramètres sont dans l'interface web
         self.iface.messageBar().pushMessage(
-            "GeoSylva AI",
+            "QGISAI+",
             "Les paramètres sont accessibles depuis l'interface web (icône ⚙️ en bas à droite).",
             level=Qgis.Info,
             duration=5,
@@ -2530,7 +2531,7 @@ class GeoAIAssistant:
             # Fallback: ouvrir la documentation en ligne
             QDesktopServices.openUrl(QUrl("https://github.com/geosylva/geoai-ai-qgis"))
             self.iface.messageBar().pushMessage(
-                "GeoSylva AI",
+                "QGISAI+",
                 "Documentation en ligne ouverte dans votre navigateur.",
                 level=Qgis.Info,
                 duration=3,
@@ -2544,9 +2545,9 @@ class GeoAIAssistant:
         from qgis.PyQt.QtWidgets import QMessageBox
         
         about_text = """
-        <h2>GeoSylva AI</h2>
+        <h2>QGISAI+</h2>
         <p><b>Assistant IA pour QGIS</b></p>
-        <p>GeoSylva AI est un assistant intelligent qui vous aide à accomplir 
+        <p>QGISAI+ est un assistant intelligent qui vous aide à accomplir 
         des tâches SIG complexes en langage naturel.</p>
         
         <h3>Fonctionnalités:</h3>
@@ -2565,7 +2566,7 @@ class GeoAIAssistant:
         
         QMessageBox.about(
             self.iface.mainWindow(),
-            "À propos de GeoSylva AI",
+            "À propos de QGISAI+",
             about_text
         )
         self._debug("open_about:end")
@@ -2581,7 +2582,7 @@ class GeoAIAssistant:
         # Supprimer l'action principale
         if self.action is not None:
             self.iface.removeToolBarIcon(self.action)
-            self.iface.removePluginMenu("&GeoSylva AI", self.action)
+            self.iface.removePluginMenu("&QGISAI+", self.action)
             self.action.deleteLater()
             self.action = None
         

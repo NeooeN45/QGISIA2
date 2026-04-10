@@ -99,7 +99,7 @@ export const GEMINI_MODEL_PRESETS: ModelPreset[] = [
   {
     id: "gemini-2.5-flash",
     label: "Gemini 2.5 Flash",
-    description: "Rapide et polyvalent — recommandé pour GeoSylva.",
+    description: "Rapide et polyvalent — recommandé pour QGISAI+.",
     tags: ["recommandé"],
   },
   {

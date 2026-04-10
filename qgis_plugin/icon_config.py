@@ -5,11 +5,11 @@ Configuration de l'icône et de la disposition du plugin dans QGIS
 
 # Configuration de l'icône
 ICON_CONFIG = {
-    "name": "GeoSylva AI",
-    "tooltip": "Ouvrir l'assistant IA GeoSylva",
+    "name": "QGISAI+ AI",
+    "tooltip": "Ouvrir l'assistant IA QGISAI+",
     "status_tip": "Assistant IA pour QGIS - Intégration OpenRouter",
     "whats_this": (
-        "GeoSylva AI est un assistant intelligent qui vous aide à accomplir "
+        "QGISAI+ AI est un assistant intelligent qui vous aide à accomplir "
         "des tâches SIG complexes en langage naturel.\n\n"
         "Fonctionnalités:\n"
         "- Commandes en langage naturel\n"
@@ -20,7 +20,7 @@ ICON_CONFIG = {
     ),
     "shortcut": "Ctrl+Shift+G",
     "shortcut_context": "window",  # window, application
-    "text": "GeoSylva AI",  # Texte à afficher sur le bouton
+    "text": "QGISAI+ AI",  # Texte à afficher sur le bouton
     "show_text": True,  # Afficher le texte sur le bouton
     "icon_size": 32,  # Taille de l'icône en pixels
 }
@@ -36,14 +36,14 @@ TOOLBAR_CONFIG = {
 
 # Configuration du menu
 MENU_CONFIG = {
-    "name": "&GeoSylva AI",
+    "name": "&QGISAI+",
     "position": "top",  # top, bottom dans le menu Plugins
     "icon": True,  # Afficher l'icône dans le menu
     "submenu": True,  # Utiliser un sous-menu
     "items": [
         {
             "name": "Ouvrir",
-            "tooltip": "Ouvrir le panneau GeoSylva AI",
+            "tooltip": "Ouvrir le panneau QGISAI+ AI",
             "icon": "icon.png",
             "shortcut": "Ctrl+Shift+G",
         },
@@ -65,7 +65,7 @@ MENU_CONFIG = {
         },
         {
             "name": "À propos",
-            "tooltip": "À propos de GeoSylva AI",
+            "tooltip": "À propos de QGISAI+",
             "icon": "help-about",
         },
     ],
@@ -80,7 +80,7 @@ PROCESSING_MENU_CONFIG = {
 
 # Configuration du dock widget
 DOCK_CONFIG = {
-    "title": "GeoSylva AI",
+    "title": "QGISAI+",
     "area": "right",  # left, right, top, bottom
     "allowed_areas": ["left", "right"],
     "default_width": 450,
@@ -93,9 +93,9 @@ DOCK_CONFIG = {
 
 # Configuration des messages
 MESSAGE_CONFIG = {
-    "on_open": "GeoSylva AI ouvert",
-    "on_close": "GeoSylva AI fermé",
-    "on_error": "Erreur GeoSylva AI: {error}",
+    "on_open": "QGISAI+ ouvert",
+    "on_close": "QGISAI+ fermé",
+    "on_error": "Erreur QGISAI+: {error}",
     "on_success": "Opération réussie",
     "duration": 3,  # secondes
 }

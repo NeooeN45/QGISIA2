@@ -33,7 +33,7 @@ import {
 
 const FALLBACK_MODEL = DEFAULT_GOOGLE_MODEL;
 
-const SYSTEM_INSTRUCTION = `Tu es GeoSylva AI, un agent SIG expert intégré dans QGIS. Tu réponds TOUJOURS en français avec précision et professionnalisme.
+const SYSTEM_INSTRUCTION = `Tu es QGISAI+, un agent SIG expert intégré dans QGIS. Tu réponds TOUJOURS en français avec précision et professionnalisme.
 
 == IDENTITÉ ET EXPERTISE ==
 Tu es un assistant SIG de niveau professionnel avec une expertise dans :

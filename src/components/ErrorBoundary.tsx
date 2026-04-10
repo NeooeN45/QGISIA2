@@ -22,7 +22,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error("[GeoSylva ErrorBoundary]", error, info.componentStack);
+    console.error("[QGISAI+ ErrorBoundary]", error, info.componentStack);
   }
 
   handleReset = () => {

@@ -1,4 +1,4 @@
-// Sources de données supplémentaires pour GeoSylva AI QGIS
+// Sources de données supplémentaires pour QGISAI+
 // Organisées par catégories pour une navigation facile
 // WMS, WMTS, WFS, WCS, XYZ, ArcGIS, etc.
 

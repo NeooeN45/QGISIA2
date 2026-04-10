@@ -656,7 +656,7 @@ export async function generateAssistantReply(
       }
 
       const freeSystemPrompt = input.conversation.mode === "free"
-        ? "Tu es GeoSylva AI, un assistant conversationnel polyvalent. Reponds en francais de facon naturelle et utile sur tout sujet. Pas de SIG, pas de QGIS, pas de scripts."
+        ? "Tu es QGISAI+, un assistant conversationnel polyvalent. Reponds en francais de facon naturelle et utile sur tout sujet. Pas de SIG, pas de QGIS, pas de scripts."
         : undefined;
 
       return generateLocalReply(settings, input.prompt, {

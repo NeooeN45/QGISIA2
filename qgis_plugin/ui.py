@@ -40,7 +40,7 @@ class LaunchButton(QPushButton):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setText("🚀 Lancer GeoSylva AI")
+        self.setText("🚀 Lancer QGISAI+ AI")
         self.setMinimumHeight(60)
         self.setStyleSheet("""
             QPushButton {
@@ -110,11 +110,11 @@ class InfoCard(QFrame):
         layout.addWidget(content_label)
 
 
-class GeoSylvaLaunchDock(QDockWidget):
-    """Dock widget de lancement pour GeoSylva AI - affiché sur le côté de QGIS"""
+class QGISAILaunchDock(QDockWidget):
+    """Dock widget de lancement pour QGISAI+ - affiché sur le côté de QGIS"""
 
     def __init__(self, iface, server_url="http://localhost:5173", parent=None):
-        super().__init__("GeoSylva AI", parent)
+        super().__init__("QGISAI+", parent)
         self.iface = iface
         self.server_url = server_url
         self.project_path = self._find_project_path()
@@ -135,7 +135,7 @@ class GeoSylvaLaunchDock(QDockWidget):
         self._apply_style()
 
     def _find_project_path(self):
-        """Trouve le chemin du projet GeoSylva AI"""
+        """Trouve le chemin du projet QGISAI+"""
         # Chemins possibles du projet
         possible_paths = [
             r"c:\Users\camil\Documents\Projet\GeoSylva_AI_QGIS_OpenRouter",
@@ -270,7 +270,7 @@ class GeoSylvaLaunchDock(QDockWidget):
             webbrowser.open(self.server_url)
             self.status_label.setText("✅ Navigateur ouvert!")
             self.iface.messageBar().pushMessage(
-                "GeoSylva AI",
+                "QGISAI+ AI",
                 "Navigateur ouvert. Connectez-vous à l'interface.",
                 Qgis.MessageLevel.Success,
                 5
@@ -385,7 +385,7 @@ class GeoSylvaLaunchDock(QDockWidget):
         title_column_layout.setContentsMargins(0, 0, 0, 0)
         title_column_layout.setSpacing(4)
 
-        title = QLabel("GeoSylva AI")
+        title = QLabel("QGISAI+ AI")
         title.setStyleSheet("""
             QLabel {
                 color: #e3e3e3;
@@ -500,7 +500,7 @@ class GeoSylvaLaunchDock(QDockWidget):
         """)
 
     def _launch_browser(self):
-        """Lance le navigateur externe avec l'interface GeoSylva AI"""
+        """Lance le navigateur externe avec l'interface QGISAI+"""
         try:
             # Vérifier si le serveur est déjà en cours d'exécution
             if self._check_server_running():

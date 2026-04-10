@@ -1,5 +1,5 @@
 /**
- * Security utilities for GeoSylva AI
+ * Security utilities for QGISAI+
  * Ensures sensitive data is protected and not exposed
  */
 

@@ -3,7 +3,7 @@ import { type ChatConversation } from "./chat-history";
 export function exportConversationToMarkdown(conversation: ChatConversation): string {
   const lines: string[] = [];
 
-  lines.push(`# ${conversation.title || "Conversation GeoSylva AI"}`);
+  lines.push(`# ${conversation.title || "Conversation QGISAI+"}`);
   lines.push(``);
   lines.push(`**Date:** ${new Date(conversation.createdAt).toLocaleString("fr-FR")}`);
   lines.push(`**Mode:** ${conversation.mode === "plan" ? "Planification" : "Action"}`);

@@ -42,8 +42,8 @@ export async function fetchOpenRouterModels(
     method: "GET",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://geosylva.ai",
-      "X-Title": "GeoSylva AI",
+      "HTTP-Referer": "https://qgisai.plus",
+      "X-Title": "QGISAI+",
     },
     signal,
   });

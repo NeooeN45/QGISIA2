@@ -2327,7 +2327,7 @@ export default function SettingsModal({
                           onClick={() => {
                             const blob = new Blob([formatDebugEventsForClipboard(debugEvents)], { type: "text/plain" });
                             const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a"); a.href = url; a.download = `geosylva-logs-${Date.now()}.txt`; a.click();
+                            const a = document.createElement("a"); a.href = url; a.download = `qgisai-logs-${Date.now()}.txt`; a.click();
                             URL.revokeObjectURL(url);
                           }}
                           className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1.5 text-xs font-semibold text-blue-100 transition-all hover:bg-blue-500/16"

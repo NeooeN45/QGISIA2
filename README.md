@@ -1,4 +1,4 @@
-# GeoSylva AI for QGIS
+# QGISAI+ - Assistant IA pour QGIS
 
 Assistant IA pour QGIS — interface web React servie directement par le plugin, avec bridge QGIS integre.
 
@@ -8,9 +8,9 @@ Assistant IA pour QGIS — interface web React servie directement par le plugin,
 1. Telechargez `geoai_assistant.zip` depuis le depot GitHub
 2. Dans QGIS : **Extensions > Installer/Gerer les extensions > Installer depuis un ZIP**
 3. Selectionnez le ZIP et cliquez **Installer**
-4. Activez **GeoSylva AI** dans la liste des extensions
+4. Activez **QGISAI+** dans la liste des extensions
 
-> **Aucun serveur externe requis.** Cliquez sur le bouton GeoSylva AI dans la barre d'outils, l'interface s'ouvre automatiquement dans votre navigateur avec le bridge QGIS actif.
+> **Aucun serveur externe requis.** Cliquez sur le bouton QGISAI+ dans la barre d'outils, l'interface s'ouvre automatiquement dans votre navigateur avec le bridge QGIS actif.
 
 ## Providers IA supportes
 

@@ -15,7 +15,7 @@ export default function IntroAnimation({ onComplete, isFirstTime = false }: Intr
   const slides = [
     {
       icon: <Sparkles size={48} className="text-emerald-400" />,
-      title: "Bienvenue sur GeoSylva AI",
+      title: "Bienvenue sur QGISAI+",
       description: "Votre assistant intelligent pour QGIS",
       color: "emerald",
     },
@@ -96,7 +96,7 @@ export default function IntroAnimation({ onComplete, isFirstTime = false }: Intr
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/20">
                   <Sparkles size={16} className="text-emerald-400" />
                 </div>
-                <span className="text-sm font-semibold text-white/50">GeoSylva AI</span>
+                <span className="text-sm font-semibold text-white/50">QGISAI+</span>
               </div>
               {isFirstTime && (
                 <button

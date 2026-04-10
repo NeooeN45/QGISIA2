@@ -1460,7 +1460,7 @@ out geom;" />
         {isOpen ? (
           <div>
             <p className="text-[9px] font-black uppercase tracking-[0.35em] bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-              GeoSylva AI
+              QGISAI+
             </p>
             <h2 className="mt-0.5 text-[13px] font-bold text-gray-800 dark:text-gray-100">
               Workspace QGIS

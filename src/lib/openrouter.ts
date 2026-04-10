@@ -1351,7 +1351,7 @@ export async function generateOpenRouterReply(
         {
           role: "system",
           content: [
-            "Tu es l'agent exécuteur de GeoSylva AI. Réponds en français.",
+            "Tu es l'agent exécuteur de QGISAI+. Réponds en français.",
             "Utilise les outils QGIS pour vérifier l'état réel du projet avant de répondre.",
             "N'invente pas de données, champs ou couches. N'appelle pas d'outils inutiles.",
             "Si une action nécessite PyQGIS, fournis un bloc ```python``` complet et auto-suffisant.",
