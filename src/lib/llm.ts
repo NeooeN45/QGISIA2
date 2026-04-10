@@ -628,6 +628,11 @@ export async function generateAssistantReply(
         subMessage: "Compréhension de l'intention et de la complexité",
       });
 
+      // Passer en streaming mode AVANT d'attendre le LLM pour éviter le vide
+      // L'utilisateur verra le bloc streaming se remplir progressivement
+      useStreamingStore.getState().startStreaming(createMessageId());
+      thinkingStore.setPhase("STREAMING_RESPONSE");
+
       const result = await orchestrateResponse(
         input.conversation,
         input.latestUserMessage,
@@ -651,17 +656,25 @@ export async function generateAssistantReply(
         });
       }
 
-      // Phase finale: streaming de la réponse
-      thinkingStore.setPhase("STREAMING_RESPONSE", {
-        message: "Finalisation de la réponse...",
-        subMessage: "Formatage des résultats",
-        progress: 95,
-      });
+      // Simuler le streaming avec la réponse complète pour pas de vide visuel
+      // On envoie la réponse progressivement au store streaming
+      const response = result.response;
+      const chunkSize = 10; // Caractères par chunk
+      
+      for (let i = 0; i < response.length; i += chunkSize) {
+        const chunk = response.slice(i, i + chunkSize);
+        useStreamingStore.getState().addChunk(chunk);
+        // Petit délai pour donner l'impression d'un vrai streaming
+        await new Promise(r => setTimeout(r, 2)); // 2ms par chunk
+      }
 
       // Réinitialiser après un délai
-      setTimeout(() => thinkingStore.reset(), 500);
+      setTimeout(() => {
+        thinkingStore.reset();
+        useStreamingStore.getState().completeStreaming();
+      }, 500);
 
-      return result.response;
+      return response;
 
     } catch (error) {
       thinkingStore.reset();
