@@ -2,11 +2,15 @@ import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
 import mammoth from "mammoth";
 
-// Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.mjs",
-  import.meta.url
-).toString();
+// Initialize PDF.js worker avec gestion d'erreur
+try {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.mjs",
+    import.meta.url
+  ).toString();
+} catch (error) {
+  console.warn("[Document Utils] PDF.js worker initialization failed:", error);
+}
 
 export async function extractTextFromFile(file: File): Promise<string> {
   const fileType = file.type;
@@ -55,21 +59,39 @@ export async function extractTextFromFile(file: File): Promise<string> {
   if (fileType === "application/pdf" || fileName.endsWith(".pdf")) {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      // Vérifier si le worker est configuré
+      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        console.warn("[PDF] Worker non configuré, utilisation du mode legacy");
+      }
+      
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
       let fullText = "";
       
       for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((item: any) => item.str)
-          .join(" ");
-        fullText += `[Page ${i}]\n${pageText}\n\n`;
+        try {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((item: any) => item.str)
+            .join(" ");
+          fullText += `[Page ${i}]\n${pageText}\n\n`;
+        } catch (pageError) {
+          console.warn(`[PDF] Erreur page ${i}:`, pageError);
+          fullText += `[Page ${i}] [Erreur de lecture]\n\n`;
+        }
       }
+      
+      if (!fullText.trim()) {
+        throw new Error("Aucun texte n'a pu être extrait du PDF");
+      }
+      
       return fullText.trim();
     } catch (error) {
-      console.error("PDF Extraction error:", error);
+      console.error("[PDF Extraction] Erreur:", error);
+      console.error("[PDF Extraction] Fichier:", file.name, "Taille:", file.size);
       throw new Error(`Erreur lors de la lecture du PDF: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
