@@ -86,7 +86,12 @@ export default function SmartSuggestionsBar({
   } = useSmartSuggestionsStore();
 
   // Mettre à jour le contexte et générer les suggestions
+  const prevInputRef = useRef(input);
   useEffect(() => {
+    // Éviter les mises à jour excessives si l'input n'a pas vraiment changé
+    if (prevInputRef.current === input && !isProcessing) return;
+    prevInputRef.current = input;
+    
     updateContext({
       layers,
       selectedLayers,
@@ -100,7 +105,8 @@ export default function SmartSuggestionsBar({
       conversationCount: 0,
       userPreferences: {},
     });
-  }, [input, layers, selectedLayers, lastIntent]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, layers, selectedLayers, lastIntent, isProcessing]);
 
   // Gestion du clavier
   useEffect(() => {

@@ -19,6 +19,7 @@ import ChatInputArea from "./ChatInput";
 import WelcomeScreen from "./WelcomeScreen";
 import MessageBubble from "./MessageBubble";
 import ThinkingIndicator from "./ThinkingIndicator";
+import StreamingMessage from "./StreamingMessage";
 import {
   addRasterFile,
   addRemoteService,
@@ -568,6 +569,9 @@ export default function Chat(props: ChatProps) {
                     <MessageBubble key={message.id} message={message} />
                   ))}
                 </AnimatePresence>
+
+                {/* Message en streaming temps réel */}
+                <StreamingMessage />
 
                 {isLoading && (
                   <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />

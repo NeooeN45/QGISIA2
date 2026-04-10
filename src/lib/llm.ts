@@ -13,6 +13,7 @@ import {
 } from "./settings";
 import { orchestrateResponse } from "./multi-model-orchestrator";
 import { useThinkingStore } from "../stores/useThinkingStore";
+import { useStreamingStore, createMessageId } from "../stores/useStreamingStore";
 
 interface GenerateAssistantReplyInput {
   conversation: ChatConversation;
@@ -205,6 +206,7 @@ async function withRetry<T>(
 async function streamLocalResponse(
   endpoint: string,
   body: Record<string, unknown>,
+  messageId: string,
   signal?: AbortSignal,
 ): Promise<string> {
   const response = await fetch(endpoint, {
@@ -225,6 +227,9 @@ async function streamLocalResponse(
   const decoder = new TextDecoder();
   const chunks: string[] = [];
   const isOpenAI = /\/v1\/chat\/completions/.test(endpoint);
+  
+  // Démarrer le streaming dans le store
+  useStreamingStore.getState().startStreaming(messageId);
 
   while (true) {
     const { done, value } = await reader.read();
@@ -240,15 +245,25 @@ async function streamLocalResponse(
           if (data === "[DONE]") break;
           const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
           const delta = parsed.choices?.[0]?.delta?.content;
-          if (delta) chunks.push(delta);
+          if (delta) {
+            chunks.push(delta);
+            // Envoyer le chunk au store en temps réel
+            useStreamingStore.getState().addChunk(delta);
+          }
         } else {
           const parsed = JSON.parse(trimmed) as {
             message?: { content?: string };
             response?: string;
             done?: boolean;
           };
-          if (parsed.message?.content) chunks.push(parsed.message.content);
-          else if (parsed.response) chunks.push(parsed.response);
+          let content = "";
+          if (parsed.message?.content) content = parsed.message.content;
+          else if (parsed.response) content = parsed.response;
+          
+          if (content) {
+            chunks.push(content);
+            useStreamingStore.getState().addChunk(content);
+          }
           if (parsed.done) break;
         }
       } catch {
@@ -257,7 +272,10 @@ async function streamLocalResponse(
     }
   }
 
-  return chunks.join("").trim() || "Reponse vide du modele local.";
+  const fullText = chunks.join("").trim();
+  useStreamingStore.getState().completeStreaming();
+  
+  return fullText || "Reponse vide du modele local.";
 }
 
 async function generateLocalReply(
@@ -365,8 +383,9 @@ async function generateLocalReply(
 
   if (settings.streamingEnabled) {
     try {
+      const messageId = createMessageId();
       const result = await withRetry(
-        () => streamLocalResponse(endpoint, body, combinedSignal),
+        () => streamLocalResponse(endpoint, body, messageId, combinedSignal),
         3,
         combinedSignal,
       );
