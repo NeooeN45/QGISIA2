@@ -18,6 +18,7 @@ import ChatHeader from "./ChatHeader";
 import ChatInputArea from "./ChatInput";
 import WelcomeScreen from "./WelcomeScreen";
 import MessageBubble from "./MessageBubble";
+import ThinkingIndicator from "./ThinkingIndicator";
 import {
   addRasterFile,
   addRemoteService,
@@ -555,27 +556,7 @@ export default function Chat(props: ChatProps) {
                 </AnimatePresence>
 
                 {isLoading && (
-                  <div className="flex gap-4 md:gap-6">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-gray-200 dark:border-[#333537] bg-gray-100 dark:bg-[#1e1f20] shadow-lg">
-                      <Sparkles size={20} className="animate-pulse text-blue-400" />
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2 rounded-[28px] border border-gray-200 dark:border-[#333537]/40 bg-white dark:bg-[#1e1f20]/60 p-5 shadow-sm dark:backdrop-blur-sm">
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-blue-400 [animation-delay:-0.3s]" />
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-cyan-400 [animation-delay:-0.15s]" />
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-emerald-400" />
-                      </div>
-                      {onStopGeneration && (
-                        <button
-                          onClick={onStopGeneration}
-                          className="flex w-fit items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-200 transition-all hover:bg-red-500/16"
-                        >
-                          <div className="h-2 w-2 rounded-sm bg-red-500" />
-                          Arrêter la génération
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
                 )}
               </div>
             )}

@@ -11,6 +11,8 @@ import {
   getConfiguredGeminiApiKey,
   getConfiguredOpenRouterApiKey,
 } from "./settings";
+import { orchestrateResponse } from "./multi-model-orchestrator";
+import { useThinkingStore } from "../stores/useThinkingStore";
 
 interface GenerateAssistantReplyInput {
   conversation: ChatConversation;
@@ -594,24 +596,74 @@ export async function generateAssistantReply(
   const { settings } = input;
 
   if (settings.provider === "local") {
-    if (input.conversation.mode !== "free") {
-      const routed = await tryHandleLocalIntent(
+    // Utiliser l'orchestrateur multi-modèles avec feedback visuel
+    const thinkingStore = useThinkingStore.getState();
+    
+    try {
+      // Phase 1: Analyse d'intention
+      thinkingStore.setPhase("ANALYZING_INTENT", {
+        message: "Analyse de votre demande...",
+        subMessage: "Compréhension de l'intention et de la complexité",
+      });
+
+      const result = await orchestrateResponse(
+        input.conversation,
         input.latestUserMessage,
+        settings,
         input.conversation.mode,
+        input.signal,
       );
-      if (routed.handled && routed.response) {
-        return routed.response;
+
+      // Mise à jour selon l'approche utilisée
+      if (result.approach === "HYBRID" || result.approach === "TOOL_CALLING") {
+        thinkingStore.setPhase("EXECUTING_TOOLS", {
+          message: "Exécution des outils QGIS...",
+          subMessage: `Approche: ${result.approach}`,
+          modelName: result.modelUsed || undefined,
+        });
+      } else if (result.approach === "CODE_GENERATION") {
+        thinkingStore.setPhase("GENERATING_CODE", {
+          message: "Génération du code PyQGIS...",
+          subMessage: "Création du script pour QGIS",
+          modelName: result.modelUsed || undefined,
+        });
       }
+
+      // Phase finale: streaming de la réponse
+      thinkingStore.setPhase("STREAMING_RESPONSE", {
+        message: "Finalisation de la réponse...",
+        subMessage: "Formatage des résultats",
+        progress: 95,
+      });
+
+      // Réinitialiser après un délai
+      setTimeout(() => thinkingStore.reset(), 500);
+
+      return result.response;
+
+    } catch (error) {
+      thinkingStore.reset();
+      
+      // Fallback vers le traitement local traditionnel
+      if (input.conversation.mode !== "free") {
+        const routed = await tryHandleLocalIntent(
+          input.latestUserMessage,
+          input.conversation.mode,
+        );
+        if (routed.handled && routed.response) {
+          return routed.response;
+        }
+      }
+
+      const freeSystemPrompt = input.conversation.mode === "free"
+        ? "Tu es GeoSylva AI, un assistant conversationnel polyvalent. Reponds en francais de facon naturelle et utile sur tout sujet. Pas de SIG, pas de QGIS, pas de scripts."
+        : undefined;
+
+      return generateLocalReply(settings, input.prompt, {
+        signal: input.signal,
+        system: freeSystemPrompt,
+      });
     }
-
-    const freeSystemPrompt = input.conversation.mode === "free"
-      ? "Tu es GeoSylva AI, un assistant conversationnel polyvalent. Reponds en francais de facon naturelle et utile sur tout sujet. Pas de SIG, pas de QGIS, pas de scripts."
-      : undefined;
-
-    return generateLocalReply(settings, input.prompt, {
-      signal: input.signal,
-      system: freeSystemPrompt,
-    });
   }
 
   if (settings.provider === "google") {

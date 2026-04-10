@@ -27,6 +27,14 @@ import {
 } from "./qgis";
 import type { RemoteServiceConfig } from "./catalog";
 import {
+  createBufferAnalysis,
+  createCentroids,
+  createDissolve,
+  createForestInventoryGrid,
+  createIntersection,
+  exportLayer,
+} from "./qgis-advanced-tools";
+import {
   loadOfficialSource,
   OVERPASS_ENDPOINTS,
   searchCadastreParcels,
@@ -819,6 +827,122 @@ const OPENAI_QGIS_TOOLS: OpenAiToolDefinition[] = [
       },
     },
   },
+  // Outils avancés d'analyse spatiale
+  {
+    type: "function",
+    function: {
+      name: "createBufferAnalysis",
+      description: "Créer une zone tampon (buffer) autour d'une couche vectorielle avec options avancées: segments, dissolve, styles de jointure.",
+      parameters: {
+        type: "object",
+        properties: {
+          layerId: { type: "string", description: "Nom de la couche source" },
+          distance: { type: "number", description: "Distance du buffer en unités de la couche" },
+          outputName: { type: "string", description: "Nom de la couche de sortie" },
+          segments: { type: "number", description: "Nombre de segments pour les arcs (défaut: 5)" },
+          dissolve: { type: "boolean", description: "Fusionner les buffers qui se chevauchent" },
+          endCapStyle: { type: "string", enum: ["Round", "Flat", "Square"], description: "Style des extrémités" },
+          joinStyle: { type: "string", enum: ["Round", "Miter", "Bevel"], description: "Style des jointures" },
+        },
+        required: ["layerId", "distance", "outputName"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "createIntersection",
+      description: "Créer une intersection spatiale entre deux couches vectorielles avec sélection de champs à conserver.",
+      parameters: {
+        type: "object",
+        properties: {
+          layerId1: { type: "string", description: "Première couche" },
+          layerId2: { type: "string", description: "Deuxième couche" },
+          outputName: { type: "string", description: "Nom de sortie" },
+          inputFields: { type: "array", items: { type: "string" }, description: "Champs à garder de la couche 1" },
+          intersectFields: { type: "array", items: { type: "string" }, description: "Champs à garder de la couche 2" },
+          prefix2: { type: "string", description: "Préfixe pour les champs de la couche 2" },
+        },
+        required: ["layerId1", "layerId2", "outputName"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "createDissolve",
+      description: "Dissoudre une couche vectorielle par un champ avec agrégation d'attributs et conservation du type de géométrie.",
+      parameters: {
+        type: "object",
+        properties: {
+          layerId: { type: "string", description: "Couche source" },
+          outputName: { type: "string", description: "Nom de sortie" },
+          field: { type: "string", description: "Champ de dissolve (optionnel, sinon tout fusionne)" },
+          keepGeomType: { type: "boolean", description: "Conserver le type de géométrie (défaut: true)" },
+        },
+        required: ["layerId", "outputName"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "createCentroids",
+      description: "Créer les centroïdes d'une couche vectorielle polygonale.",
+      parameters: {
+        type: "object",
+        properties: {
+          layerId: { type: "string", description: "Couche source" },
+          outputName: { type: "string", description: "Nom de sortie" },
+          inside: { type: "boolean", description: "Forcer le centroïde à l'intérieur du polygone" },
+          allParts: { type: "boolean", description: "Un centroïde par partie de multipart" },
+        },
+        required: ["layerId", "outputName"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "exportLayer",
+      description: "Exporter une couche vers différents formats avec options de CRS et sélection.",
+      parameters: {
+        type: "object",
+        properties: {
+          layerId: { type: "string", description: "Couche à exporter" },
+          filePath: { type: "string", description: "Chemin de sortie" },
+          format: { type: "string", enum: ["GeoJSON", "Shapefile", "GeoPackage", "KML", "CSV", "DXF"], description: "Format d'export" },
+          crs: { type: "string", description: "CRS de sortie, ex: EPSG:4326 (défaut: EPSG:2154)" },
+          selectedOnly: { type: "boolean", description: "Exporter sélection uniquement" },
+        },
+        required: ["layerId", "filePath", "format"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "createForestInventoryGrid",
+      description: "Créer une grille d'inventaire forestier systématique avec placettes.",
+      parameters: {
+        type: "object",
+        properties: {
+          zoneLayerId: { type: "string", description: "Couche de la zone d'étude" },
+          cellSize: { type: "number", description: "Taille des mailles en mètres" },
+          outputName: { type: "string", description: "Nom de la grille" },
+          buffer: { type: "number", description: "Buffer depuis la limite en mètres" },
+          systematic: { type: "boolean", description: "Placement systématique (défaut: true)" },
+        },
+        required: ["zoneLayerId", "cellSize", "outputName"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 function requireString(
@@ -1351,6 +1475,75 @@ export async function executeQgisToolCall(
         ok: true,
         status: status || "Script transmis a QGIS.",
       };
+    }
+    case "createBufferAnalysis": {
+      const layerId = requireString(args, "layerId", "Le nom de couche");
+      const distance = requireNumber(args, "distance", "La distance");
+      const outputName = requireString(args, "outputName", "Le nom de sortie");
+      const validEndCapStyles = ["Round", "Flat", "Square"] as const;
+      const validJoinStyles = ["Round", "Miter", "Bevel"] as const;
+      const endCapStyle = validEndCapStyles.includes(args.endCapStyle as typeof validEndCapStyles[number]) 
+        ? args.endCapStyle as typeof validEndCapStyles[number] 
+        : "Round";
+      const joinStyle = validJoinStyles.includes(args.joinStyle as typeof validJoinStyles[number]) 
+        ? args.joinStyle as typeof validJoinStyles[number] 
+        : "Round";
+      const result = await createBufferAnalysis(layerId, distance, outputName, {
+        segments: typeof args.segments === "number" ? args.segments : 5,
+        dissolve: typeof args.dissolve === "boolean" ? args.dissolve : false,
+        endCapStyle,
+        joinStyle,
+      });
+      return { ...result } as Record<string, unknown>;
+    }
+    case "createIntersection": {
+      const layerId1 = requireString(args, "layerId1", "La première couche");
+      const layerId2 = requireString(args, "layerId2", "La deuxième couche");
+      const outputName = requireString(args, "outputName", "Le nom de sortie");
+      const result = await createIntersection(layerId1, layerId2, outputName, {
+        inputFields: Array.isArray(args.inputFields) ? args.inputFields : undefined,
+        intersectFields: Array.isArray(args.intersectFields) ? args.intersectFields : undefined,
+        prefix2: typeof args.prefix2 === "string" ? args.prefix2 : undefined,
+      });
+      return { ...result } as Record<string, unknown>;
+    }
+    case "createDissolve": {
+      const layerId = requireString(args, "layerId", "Le nom de couche");
+      const outputName = requireString(args, "outputName", "Le nom de sortie");
+      const result = await createDissolve(layerId, outputName, {
+        field: typeof args.field === "string" ? args.field : undefined,
+        keepGeomType: typeof args.keepGeomType === "boolean" ? args.keepGeomType : true,
+      });
+      return { ...result } as Record<string, unknown>;
+    }
+    case "createCentroids": {
+      const layerId = requireString(args, "layerId", "Le nom de couche");
+      const outputName = requireString(args, "outputName", "Le nom de sortie");
+      const result = await createCentroids(layerId, outputName, {
+        inside: typeof args.inside === "boolean" ? args.inside : false,
+        allParts: typeof args.allParts === "boolean" ? args.allParts : false,
+      });
+      return { ...result } as Record<string, unknown>;
+    }
+    case "exportLayer": {
+      const layerId = requireString(args, "layerId", "Le nom de couche");
+      const filePath = requireString(args, "filePath", "Le chemin de fichier");
+      const format = requireString(args, "format", "Le format") as Parameters<typeof exportLayer>[2];
+      const result = await exportLayer(layerId, filePath, format, {
+        crs: typeof args.crs === "string" ? args.crs : undefined,
+        selectedOnly: typeof args.selectedOnly === "boolean" ? args.selectedOnly : false,
+      });
+      return { ...result } as Record<string, unknown>;
+    }
+    case "createForestInventoryGrid": {
+      const zoneLayerId = requireString(args, "zoneLayerId", "La zone d'étude");
+      const cellSize = requireNumber(args, "cellSize", "La taille des mailles");
+      const outputName = requireString(args, "outputName", "Le nom de sortie");
+      const result = await createForestInventoryGrid(zoneLayerId, cellSize, outputName, {
+        buffer: typeof args.buffer === "number" ? args.buffer : 0,
+        systematic: typeof args.systematic === "boolean" ? args.systematic : true,
+      });
+      return { ...result } as Record<string, unknown>;
     }
     default:
       throw new Error(`Outil QGIS inconnu: ${name}`);
