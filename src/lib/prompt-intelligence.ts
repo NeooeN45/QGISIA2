@@ -16,6 +16,9 @@ export type UserIntent =
   | "CODE_GENERATION"      // Génération de code PyQGIS
   | "EXPLANATION"          // Explication, documentation
   | "DEBUG"                // Diagnostic, débogage
+  | "FOREST_INVENTORY"     // Inventaire forestier spécifique
+  | "GEOCODING"            // Géocodage adresses
+  | "EXPORT"               // Export de données
   | "FREE_CHAT";           // Discussion libre
 
 export type ActionComplexity = "SIMPLE" | "MODERATE" | "COMPLEX" | "VERY_COMPLEX";
@@ -34,20 +37,39 @@ export interface IntentAnalysis {
     layers?: string[];
     dataSources?: string[];
     operations?: string[];
+    species?: string[];        // Espèces forestières
+    attributes?: string[];     // Attributs/champs demandés
+    formats?: string[];        // Formats d'export
+    crs?: string;              // Système de coordonnées mentionné
+    distances?: number[];      // Distances (buffer, etc.)
   };
   requiresLargeContext: boolean; // Nécessite une fenêtre de contexte large
   suggestedModelTier: "ULTRA_LIGHT" | "LIGHT" | "MEDIUM" | "HEAVY";
 }
 
-const INTENT_ANALYSIS_PROMPT = `Tu es un analyseur d'intentions SIG. Analyse la demande utilisateur et réponds UNIQUEMENT en JSON valide.
+const INTENT_ANALYSIS_PROMPT = `Tu es un analyseur d'intentions SIG expert. Analyse la demande utilisateur et réponds UNIQUEMENT en JSON valide.
 
-Règles:
-1. Détecte l'intention principale parmi: DATA_QUERY, ANALYSIS, VISUALIZATION, PROCESSING, WORKFLOW, CODE_GENERATION, EXPLANATION, DEBUG, FREE_CHAT
-2. Évalue la complexité: SIMPLE (1 étape), MODERATE (2-3 étapes), COMPLEX (4-6 étapes), VERY_COMPLEX (7+ étapes)
-3. Identifie les entités: communes, couches, sources de données, opérations
-4. Détermine l'approche: LOCAL_ROUTER (actions directes), TOOL_CALLING (outils structurés), CODE_GENERATION (PyQGIS), HYBRID (combinaison)
+INTENTIONS POSSIBLES:
+- DATA_QUERY: Requête données (cadastre, communes, sources officielles)
+- ANALYSIS: Analyse spatiale/statistique (corrélation, stats, clustering)
+- VISUALIZATION: Style, symbologie, cartographie, légendes
+- PROCESSING: Traitement géospatial (buffer, intersection, dissolve, reprojection)
+- WORKFLOW: Workflow complexe multi-étapes avec dépendances
+- FOREST_INVENTORY: Inventaire forestier (placettes, grille, IFN, essences)
+- GEOCODING: Géocodage d'adresses
+- EXPORT: Export de données (GeoJSON, Shapefile, etc.)
+- CODE_GENERATION: Génération script PyQGIS
+- EXPLANATION: Explication concept/méthode
+- DEBUG: Diagnostic erreur
+- FREE_CHAT: Discussion générale
 
-Réponds EXACTEMENT dans ce format JSON:
+RÈGLES:
+1. Détecte l'intention principale avec confiance élevée
+2. Évalue la complexité: SIMPLE (1), MODERATE (2-3), COMPLEX (4-6), VERY_COMPLEX (7+)
+3. Extrais les entités: communes, couches, sources, opérations, distances, formats, CRS
+4. Détermine l'approche optimale: LOCAL_ROUTER, TOOL_CALLING, CODE_GENERATION, HYBRID
+
+FORMAT JSON REQUIS:
 {
   "intent": "...",
   "complexity": "...",
@@ -61,11 +83,18 @@ Réponds EXACTEMENT dans ce format JSON:
     "communes": ["..."],
     "layers": ["..."],
     "dataSources": ["..."],
-    "operations": ["..."]
+    "operations": ["..."],
+    "species": ["..."],
+    "attributes": ["..."],
+    "formats": ["..."],
+    "crs": "...",
+    "distances": [number]
   },
   "requiresLargeContext": true/false,
   "suggestedModelTier": "ULTRA_LIGHT|LIGHT|MEDIUM|HEAVY"
 }
+
+EXEMPLES:
 
 Exemple 1 - "Charge le cadastre de Lyon et zoom dessus":
 {
@@ -81,7 +110,12 @@ Exemple 1 - "Charge le cadastre de Lyon et zoom dessus":
     "communes": ["Lyon"],
     "layers": [],
     "dataSources": ["cadastre"],
-    "operations": ["charger", "zoom"]
+    "operations": ["charger", "zoom"],
+    "species": [],
+    "attributes": [],
+    "formats": [],
+    "crs": null,
+    "distances": []
   },
   "requiresLargeContext": false,
   "suggestedModelTier": "ULTRA_LIGHT"
@@ -101,10 +135,40 @@ Exemple 2 - "Analyse la corrélation entre le NDVI 2020 et 2023 sur toutes les c
     "communes": [],
     "layers": ["NDVI 2020", "NDVI 2023"],
     "dataSources": [],
-    "operations": ["analyse corrélation", "carte choroplèthe", "légende personnalisée"]
+    "operations": ["analyse corrélation", "carte choroplèthe", "légende personnalisée"],
+    "species": [],
+    "attributes": [],
+    "formats": [],
+    "crs": null,
+    "distances": []
   },
   "requiresLargeContext": true,
   "suggestedModelTier": "MEDIUM"
+}
+
+Exemple 3 - "Crée une grille d'inventaire avec des placettes de 15m sur ma zone forestière et calcule la surface par essence":
+{
+  "intent": "FOREST_INVENTORY",
+  "complexity": "COMPLEX",
+  "confidence": 0.92,
+  "needsQgisContext": true,
+  "needsTools": true,
+  "estimatedSteps": 5,
+  "suggestedApproach": "TOOL_CALLING",
+  "keywords": ["grille", "inventaire", "placettes", "forestière", "surface", "essence"],
+  "entities": {
+    "communes": [],
+    "layers": ["zone forestière"],
+    "dataSources": [],
+    "operations": ["créer grille", "placettes 15m", "calculer surface"],
+    "species": [],
+    "attributes": ["essence"],
+    "formats": [],
+    "crs": null,
+    "distances": [15]
+  },
+  "requiresLargeContext": false,
+  "suggestedModelTier": "LIGHT"
 }
 
 Analyse cette demande:`;
@@ -173,27 +237,34 @@ export async function analyzeUserIntent(
       return heuristicIntentAnalysis(userMessage);
     }
 
-    const analysis: IntentAnalysis = JSON.parse(jsonMatch[0]);
+    const parsedAnalysis = JSON.parse(jsonMatch[0]);
     
-    // Validation et valeurs par défaut
-    return {
-      intent: analysis.intent || "FREE_CHAT",
-      complexity: analysis.complexity || "SIMPLE",
-      confidence: Math.max(0, Math.min(1, analysis.confidence || 0.5)),
-      needsQgisContext: analysis.needsQgisContext ?? true,
-      needsTools: analysis.needsTools ?? false,
-      estimatedSteps: Math.max(1, analysis.estimatedSteps || 1),
-      suggestedApproach: analysis.suggestedApproach || "CODE_GENERATION",
-      keywords: analysis.keywords || [],
+    // Validation et mapping vers IntentAnalysis avec toutes les entités
+    const analysis: IntentAnalysis = {
+      intent: parsedAnalysis.intent || "FREE_CHAT",
+      complexity: parsedAnalysis.complexity || "SIMPLE",
+      confidence: Math.max(0, Math.min(1, parsedAnalysis.confidence || 0.5)),
+      needsQgisContext: parsedAnalysis.needsQgisContext ?? true,
+      needsTools: parsedAnalysis.needsTools ?? false,
+      estimatedSteps: Math.max(1, parsedAnalysis.estimatedSteps || 1),
+      suggestedApproach: parsedAnalysis.suggestedApproach || "CODE_GENERATION",
+      keywords: parsedAnalysis.keywords || [],
       entities: {
-        communes: analysis.entities?.communes || [],
-        layers: analysis.entities?.layers || [],
-        dataSources: analysis.entities?.dataSources || [],
-        operations: analysis.entities?.operations || [],
+        communes: parsedAnalysis.entities?.communes || [],
+        layers: parsedAnalysis.entities?.layers || [],
+        dataSources: parsedAnalysis.entities?.dataSources || [],
+        operations: parsedAnalysis.entities?.operations || [],
+        species: parsedAnalysis.entities?.species || [],
+        attributes: parsedAnalysis.entities?.attributes || [],
+        formats: parsedAnalysis.entities?.formats || [],
+        crs: parsedAnalysis.entities?.crs || undefined,
+        distances: parsedAnalysis.entities?.distances || [],
       },
-      requiresLargeContext: analysis.requiresLargeContext ?? false,
-      suggestedModelTier: analysis.suggestedModelTier || "LIGHT",
+      requiresLargeContext: parsedAnalysis.requiresLargeContext ?? false,
+      suggestedModelTier: parsedAnalysis.suggestedModelTier || "LIGHT",
     };
+    
+    return analysis;
 
   } catch (error) {
     console.warn("[IntentAnalyzer] Erreur analyse LLM:", error);
@@ -202,64 +273,220 @@ export async function analyzeUserIntent(
 }
 
 /**
- * Analyse heuristique fallback quand le LLM n'est pas disponible
+ * Analyse heuristique améliorée avec patterns étendus et extraction complète des entités
  */
 function heuristicIntentAnalysis(userMessage: string): IntentAnalysis {
   const normalized = userMessage.toLowerCase();
   
-  // Détection d'intention par mots-clés
-  const hasCadastre = /cadastre|parcelle|section/i.test(normalized);
-  const hasCommune = /commune|ville|département|région/i.test(normalized);
-  const hasAnalysis = /analyse|calcul|statistique|corrélation|moyenne|somme/i.test(normalized);
-  const hasVisualization = /style|symbologie|couleur|carte|légende|étiquette/i.test(normalized);
-  const hasProcessing = /traitement|fusion|découpe|buffer|intersection|union/i.test(normalized);
-  const hasCode = /python|script|code|pyqgis|plugin/i.test(normalized);
-  const hasDebug = /debug|erreur|problème|bug|diagnostic/i.test(normalized);
-  const hasNDVI = /ndvi|sentinel|landsat|raster|ortho/i.test(normalized);
+  // ===== PATTERNS DÉTAILLÉS PAR INTENTION =====
   
-  // Compter les étapes (approximation par les connecteurs)
-  const stepIndicators = (normalized.match(/\b(et|puis|ensuite|après|enfin|d'abord)\b/g) || []).length;
-  const estimatedSteps = stepIndicators + 1;
+  // DATA_QUERY - Requêtes de données
+  const dataQueryPatterns = {
+    cadastre: /cadastre|parcelle|section|numéro|propriétaire/i,
+    communes: /commune|ville|département|région|code\s*insee/i,
+    adresses: /adresse|rue|avenue|boulevard|lieu-dit|localisation/i,
+    sources: /ign|geoportail|openstreetmap|osm|google|bing/i,
+  };
   
-  // Déterminer l'intention
+  // ANALYSIS - Analyses
+  const analysisPatterns = {
+    stats: /statistique|moyenne|médiane|somme|count|min|max|écart|variance/i,
+    spatial: /corrélation|cluster|hotspot|analyse\s*spatiale|proximité|distance/i,
+    surface: /surface|aire|superficie|ha\b|hectare|km²|m²/i,
+  };
+  
+  // VISUALIZATION - Visualisation
+  const vizPatterns = {
+    style: /style|symbologie|couleur|remplissage|contour|hachure/i,
+    legend: /légende|étiquette|label|annotation|texte/i,
+    layout: /mise\s*en\s*page|composition|carte|atlas|print/i,
+  };
+  
+  // PROCESSING - Traitement
+  const processingPatterns = {
+    buffer: /buffer|tampon|zone\s*de\s*protection|distance/i,
+    overlay: /intersection|union|différence|fusion|découpe|clip/i,
+    transform: /reprojection|transformation|convertir|project/i,
+    raster: /ndvi|sentinel|landsat|raster|ortho|dem|mnt|mns/i,
+  };
+  
+  // FOREST_INVENTORY - Forestier
+  const forestPatterns = {
+    inventory: /inventaire|placette|maille|grille|ifn/i,
+    species: /essence|espèce|chêne|pin|sapin|hêtre|érable|bouleau/i,
+    metrics: /diamètre|hauteur|dbh|surface\s*terrière|volume/i,
+    forest: /forêt|bois|peuplement|parcelle\s*forestière/i,
+  };
+  
+  // EXPORT - Export
+  const exportPatterns = {
+    formats: /geojson|shapefile|shp|geopackage|gpkg|kml|kmz|dxf|csv|excel|pdf/i,
+    action: /exporter|sauvegarder|enregistrer|télécharger|save/i,
+  };
+  
+  // CODE & DEBUG
+  const hasCode = /python|script|code|pyqgis|plugin|développer|programmer/i.test(normalized);
+  const hasDebug = /debug|erreur|problème|bug|diagnostic|planté|crash|échoue/i.test(normalized);
+  const hasExplain = /expliquer|comment|pourquoi|qu'est-ce|documentation|aide/i.test(normalized);
+  
+  // ===== DÉTECTION DES INTENTIONS =====
+  const hasDataQuery = Object.values(dataQueryPatterns).some(p => p.test(normalized));
+  const hasAnalysis = Object.values(analysisPatterns).some(p => p.test(normalized));
+  const hasVisualization = Object.values(vizPatterns).some(p => p.test(normalized));
+  const hasProcessing = Object.values(processingPatterns).some(p => p.test(normalized));
+  const hasForest = Object.values(forestPatterns).some(p => p.test(normalized));
+  const hasExport = exportPatterns.formats.test(normalized) && exportPatterns.action.test(normalized);
+  
+  // Déterminer l'intention (ordre de priorité)
   let intent: UserIntent = "FREE_CHAT";
-  if (hasCadastre || hasCommune) intent = "DATA_QUERY";
+  if (hasForest) intent = "FOREST_INVENTORY";
+  else if (hasExport) intent = "EXPORT";
+  else if (hasDataQuery) intent = "DATA_QUERY";
   else if (hasAnalysis) intent = "ANALYSIS";
   else if (hasVisualization) intent = "VISUALIZATION";
-  else if (hasProcessing || hasNDVI) intent = "PROCESSING";
-  else if (hasCode) intent = "CODE_GENERATION";
+  else if (hasProcessing) intent = "PROCESSING";
   else if (hasDebug) intent = "DEBUG";
+  else if (hasCode) intent = "CODE_GENERATION";
+  else if (hasExplain) intent = "EXPLANATION";
   
-  // Déterminer la complexité
+  // ===== CALCUL COMPLEXITÉ =====
+  const stepConnectors = /\b(et|puis|ensuite|après|enfin|d'abord|puis\s*ensuite|ensuite\s*puis|et\s*enfin)\b/gi;
+  const stepIndicators = (normalized.match(stepConnectors) || []).length;
+  
+  // Complexité basée sur le nombre d'opérations détectées
+  const operationCount = [
+    hasDataQuery, hasAnalysis, hasVisualization, hasProcessing, hasForest
+  ].filter(Boolean).length;
+  
+  let estimatedSteps = Math.max(stepIndicators + 1, operationCount);
+  
   let complexity: ActionComplexity = "SIMPLE";
-  if (estimatedSteps >= 7) complexity = "VERY_COMPLEX";
-  else if (estimatedSteps >= 4) complexity = "COMPLEX";
-  else if (estimatedSteps >= 2) complexity = "MODERATE";
+  if (estimatedSteps >= 7 || normalized.length > 800) complexity = "VERY_COMPLEX";
+  else if (estimatedSteps >= 4 || normalized.length > 400) complexity = "COMPLEX";
+  else if (estimatedSteps >= 2 || normalized.length > 200) complexity = "MODERATE";
   
-  // Déterminer l'approche
+  // ===== DÉTERMINER L'APPROCHE =====
   let approach: IntentAnalysis["suggestedApproach"] = "CODE_GENERATION";
-  if ((hasCadastre || hasCommune) && estimatedSteps <= 2) approach = "LOCAL_ROUTER";
-  else if (estimatedSteps <= 3 && !hasCode) approach = "TOOL_CALLING";
-  else if (estimatedSteps > 3 && (hasAnalysis || hasProcessing)) approach = "HYBRID";
+  if ((hasDataQuery) && estimatedSteps <= 2) approach = "LOCAL_ROUTER";
+  else if (estimatedSteps <= 3 && !hasCode && !hasDebug) approach = "TOOL_CALLING";
+  else if (estimatedSteps > 3 && (hasAnalysis || hasProcessing || hasForest)) approach = "HYBRID";
   
-  // Extraire les entités simples
-  const communeMatches = normalized.match(/(?:commune|ville|de|d')\s+([A-Za-zÀ-ÿ\s'-]+?)(?:\s+(?:et|avec|sans|pour|dans|sur|,|\.|$))/i);
-  const layerMatches = normalized.match(/couche[s]?\s+["']?([\w\s_-]+)["']?/gi);
+  // ===== EXTRACTION COMPLÈTE DES ENTITÉS =====
+  
+  // Communes/Villes
+  const communePatterns = [
+    /(?:commune|ville|de|d')\s+([A-Za-zÀ-ÿ\s'-]+?)(?:\s+(?:et|avec|sans|pour|dans|sur|,|\.|$|\d))/i,
+    /([A-Za-zÀ-ÿ\s'-]+?)\s*\(\s*\d{2,5}\s*\)/,  // Lyon (69000)
+    /\b(Paris|Lyon|Marseille|Bordeaux|Nantes|Strasbourg|Toulouse|Nice)\b/i,  // Grandes villes
+  ];
+  const communes: string[] = [];
+  for (const pattern of communePatterns) {
+    const match = normalized.match(pattern);
+    if (match && match[1]) {
+      const name = match[1].trim();
+      if (name.length > 2 && !communes.includes(name)) {
+        communes.push(name);
+      }
+    }
+  }
+  
+  // Couches (patterns améliorés)
+  const layerPatterns = [
+    /couche[s]?\s+(?:"|'|«)?([^"'»]{2,50})(?:"|'|»)?/gi,
+    /(?:de|du|la|sur)\s+la\s+couche\s+["']?([^"']{2,50})["']?/gi,
+    /(?:charger|ouvrir|ajouter)\s+["']?([^"']{10,50}\.(shp|geojson|gpkg|tif))["']?/gi,
+  ];
+  const layers: string[] = [];
+  for (const pattern of layerPatterns) {
+    const matches = normalized.matchAll(pattern);
+    for (const match of matches) {
+      const name = match[1]?.trim();
+      if (name && name.length > 1 && !layers.includes(name)) {
+        layers.push(name);
+      }
+    }
+  }
+  
+  // Distances (buffer, etc.)
+  const distancePattern = /(\d+(?:\.\d+)?)\s*(m|mètre|km|hectare|ha)\b/gi;
+  const distances: number[] = [];
+  let distMatch;
+  while ((distMatch = distancePattern.exec(normalized)) !== null) {
+    const value = parseFloat(distMatch[1]);
+    const unit = distMatch[2].toLowerCase();
+    // Normaliser en mètres
+    if (unit.includes('km')) distances.push(value * 1000);
+    else if (unit.includes('ha')) distances.push(Math.sqrt(value * 10000)); // Approximation
+    else distances.push(value);
+  }
+  
+  // Formats d'export
+  const formatMatches = normalized.match(/geojson|shapefile|shp|geopackage|gpkg|kml|kmz|dxf|csv/gi) || [];
+  const formats = [...new Set(formatMatches.map(f => f.toLowerCase()))];
+  
+  // CRS/Système de coordonnées
+  const crsPattern = /(EPSG:[\d]{4,6}|Lambert\s*93|WGS\s*84|RGF93)/i;
+  const crsMatch = normalized.match(crsPattern);
+  const crs = crsMatch ? crsMatch[1] : undefined;
+  
+  // Sources de données
+  const dataSources: string[] = [];
+  if (dataQueryPatterns.cadastre.test(normalized)) dataSources.push("cadastre");
+  if (processingPatterns.raster.test(normalized)) dataSources.push("raster");
+  if (/ign|geoportail/i.test(normalized)) dataSources.push("ign");
+  if (/osm|openstreetmap/i.test(normalized)) dataSources.push("openstreetmap");
+  
+  // Espèces forestières
+  const speciesPattern = /(chêne|pin|sapin|hêtre|érable|bouleau|châtaignier|douglas|pin\s*maritime|pin\s*sylvestre|chêne\s*pédonculé|chêne\s*pubescent)/gi;
+  const speciesMatches = normalized.match(speciesPattern) || [];
+  const species = [...new Set(speciesMatches.map(s => s.toLowerCase()))];
+  
+  // Attributs/Champs
+  const attrPattern = /champ\s+["']?([^"']+)["']?|attribut\s+["']?([^"']+)["']?|colonne\s+["']?([^"']+)["']?/gi;
+  const attributes: string[] = [];
+  const attrMatches = normalized.matchAll(attrPattern);
+  for (const match of attrMatches) {
+    const name = (match[1] || match[2] || match[3])?.trim();
+    if (name && !attributes.includes(name)) {
+      attributes.push(name);
+    }
+  }
+  
+  // Opérations détectées
+  const operations: string[] = [];
+  if (processingPatterns.buffer.test(normalized)) operations.push("buffer");
+  if (processingPatterns.overlay.test(normalized)) operations.push("overlay");
+  if (analysisPatterns.surface.test(normalized)) operations.push("calcul_surface");
+  if (hasForest) operations.push("inventaire_forestier");
+  if (hasExport) operations.push("export");
+  
+  // Keywords filtrés
+  const stopWords = /\b(le|la|les|de|du|des|et|ou|un|une|en|dans|sur|avec|sans|pour|par|que|qui|quoi|ce|ces|cette|mon|ma|mes|ton|ta|tes|son|sa|ses|notre|votre|leur|leurs|je|tu|il|elle|nous|vous|ils|elles|me|te|se|lui|soi)\b/gi;
+  const keywords = normalized
+    .replace(stopWords, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 3 && /^[a-zàâäéèêëîïôöùûüç]/i.test(w))
+    .slice(0, 15);
   
   return {
     intent,
     complexity,
-    confidence: 0.6, // Confiance moyenne pour l'heuristique
+    confidence: 0.65,
     needsQgisContext: !["FREE_CHAT", "EXPLANATION"].includes(intent),
     needsTools: !["FREE_CHAT", "EXPLANATION", "CODE_GENERATION"].includes(intent),
     estimatedSteps,
     suggestedApproach: approach,
-    keywords: normalized.split(/\s+/).filter(w => w.length > 3),
+    keywords: [...new Set(keywords)],
     entities: {
-      communes: communeMatches ? [communeMatches[1].trim()] : [],
-      layers: layerMatches ? layerMatches.map(m => m.replace(/couche[s]?\s+["']?/i, "").replace(/["']?$/, "")) : [],
-      dataSources: hasCadastre ? ["cadastre"] : hasNDVI ? ["raster"] : [],
-      operations: [],
+      communes,
+      layers,
+      dataSources,
+      operations,
+      species,
+      attributes,
+      formats,
+      crs,
+      distances,
     },
     requiresLargeContext: estimatedSteps > 5 || normalized.length > 500,
     suggestedModelTier: complexity === "VERY_COMPLEX" ? "HEAVY" : complexity === "COMPLEX" ? "MEDIUM" : "LIGHT",

@@ -102,7 +102,17 @@ export async function orchestrateResponse(
     return handleDirectLLM(conversation, latestUserMessage, settings, signal, startTime, intentAnalysis);
   }
 
-  // 2C: Tâches complexes → Planification et exécution multi-étapes
+  // 2C: Inventaire forestier → Traitement spécialisé avec outils dédiés
+  if (intentAnalysis.intent === "FOREST_INVENTORY") {
+    return handleForestInventory(latestUserMessage, intentAnalysis, settings, signal, startTime);
+  }
+
+  // 2D: Export de données → Traitement rapide
+  if (intentAnalysis.intent === "EXPORT") {
+    return handleExport(latestUserMessage, intentAnalysis, settings, signal, startTime);
+  }
+
+  // 2E: Tâches complexes → Planification et exécution multi-étapes
   if (intentAnalysis.complexity === "COMPLEX" || intentAnalysis.complexity === "VERY_COMPLEX") {
     return handleComplexWorkflow(
       conversation,
@@ -114,7 +124,7 @@ export async function orchestrateResponse(
     );
   }
 
-  // 2D: Actions modérées → Tool Calling ou Code Generation
+  // 2F: Actions modérées → Tool Calling ou Code Generation
   if (intentAnalysis.suggestedApproach === "TOOL_CALLING") {
     return handleToolCalling(latestUserMessage, intentAnalysis, settings, signal, startTime);
   }
@@ -467,6 +477,147 @@ ENTITÉS DÉTECTÉES:
 - Opérations: ${analysis.entities.operations?.join(", ") || "à déterminer"}
 
 Génère le code:`;
+}
+
+/**
+ * Gère les demandes d'inventaire forestier avec outils spécialisés
+ */
+async function handleForestInventory(
+  userMessage: string,
+  analysis: IntentAnalysis,
+  settings: AppSettings,
+  signal?: AbortSignal,
+  startTime?: number
+): Promise<OrchestratorResult> {
+  const start = startTime || performance.now();
+  
+  toast.info("Préparation de l'inventaire forestier...", { duration: 2000 });
+  
+  // Sélectionner le modèle approprié
+  const ollamaModels = await getOllamaModels();
+  const modelSelection = selectModelForIntent(analysis, ollamaModels.map(m => m.name), settings);
+  
+  appendDebugEvent({
+    level: "info",
+    source: "orchestrator",
+    title: "Inventaire forestier",
+    message: `Demande: ${userMessage.slice(0, 80)}...`,
+    details: `Modèle: ${modelSelection.model}\nEssences: ${analysis.entities.species?.join(", ") || "non spécifiées"}\nDistances: ${analysis.entities.distances?.join("m, ") || "non spécifiées"}m`,
+  });
+  
+  // Construire un prompt spécialisé pour l'inventaire forestier
+  const forestPrompt = `Tu es un expert en inventaire forestier et PyQGIS.
+
+Demande: ${userMessage}
+
+Contexte forestier détecté:
+- Essences: ${analysis.entities.species?.join(", ") || "toutes essences"}
+- Métriques demandées: ${analysis.entities.attributes?.join(", ") || "surface, densité"}
+- Distances: ${analysis.entities.distances?.join("m, ") || "15"}m
+
+Génère un script PyQGIS complet pour réaliser cet inventaire forestier.
+
+RÈGLES SPÉCIFIQUES:
+1. Utilise les algorithmes de grille (creategrid) pour les placettes
+2. Calcule les métriques forestières (surface terrière, densité)
+3. Gère les projections en Lambert 93 (EPSG:2154)
+4. Ajoute des commentaires sur les méthodes forestières utilisées
+5. Message de confirmation final avec les statistiques
+
+Génère le code:`;
+
+  const response = await generateWithOllama(modelSelection.model, forestPrompt, signal);
+  
+  // Extraire le code Python
+  const codeMatch = response.match(/```python\n([\s\S]*?)\n```/);
+  const code = codeMatch ? codeMatch[1] : response;
+  
+  return {
+    success: true,
+    response: `**Inventaire forestier prêt à exécuter**
+
+J'ai préparé un script pour réaliser cet inventaire avec les paramètres détectés:
+- **Essences**: ${analysis.entities.species?.join(", ") || "toutes"}
+- **Placettes**: Grille ${analysis.entities.distances?.[0] || 15}m
+- **Métriques**: ${analysis.entities.attributes?.join(", ") || "surface"}
+
+\`\`\`python
+${code}
+\`\`\``, 
+    codeGenerated: code,
+    approach: "CODE_GENERATION",
+    modelUsed: modelSelection.model,
+    executionTimeMs: performance.now() - start,
+  };
+}
+
+/**
+ * Gère les demandes d'export de données
+ */
+async function handleExport(
+  userMessage: string,
+  analysis: IntentAnalysis,
+  settings: AppSettings,
+  signal?: AbortSignal,
+  startTime?: number
+): Promise<OrchestratorResult> {
+  const start = startTime || performance.now();
+  
+  const formats = analysis.entities.formats || ["GeoJSON"];
+  const layers = analysis.entities.layers || [];
+  const crs = analysis.entities.crs || "EPSG:2154";
+  
+  toast.info(`Export vers ${formats.join(", ")}...`, { duration: 2000 });
+  
+  appendDebugEvent({
+    level: "info",
+    source: "orchestrator",
+    title: "Export de données",
+    message: `Formats: ${formats.join(", ")}`,
+    details: `Couches: ${layers.join(", ") || "toutes"}\nCRS: ${crs}`,
+  });
+  
+  // Si une seule couche et format simple, générer code direct
+  if (layers.length === 1 && formats.length === 1) {
+    const exportPrompt = `Génère un script PyQGIS pour exporter une couche.
+
+Couche: "${layers[0]}"
+Format: ${formats[0].toUpperCase()}
+CRS: ${crs}
+
+RÈGLES:
+1. Utiliser QgsVectorFileWriter pour l'export
+2. Vérifier que la couche existe avant d'exporter
+3. Message de confirmation avec le chemin de sortie
+4. Gestion des erreurs avec try/except
+
+Script:`;
+
+    const ollamaModels = await getOllamaModels();
+    const model = ollamaModels[0]?.name || "gemma4:4b";
+    const response = await generateWithOllama(model, exportPrompt, signal);
+    
+    const codeMatch = response.match(/```python\n([\s\S]*?)\n```/);
+    const code = codeMatch ? codeMatch[1] : response;
+    
+    return {
+      success: true,
+      response: `**Export ${formats[0].toUpperCase()} configuré**
+
+Couche source: "${layers[0]}"\nCRS de sortie: ${crs}
+
+\`\`\`python
+${code}
+\`\`\``, 
+      codeGenerated: code,
+      approach: "CODE_GENERATION",
+      modelUsed: model,
+      executionTimeMs: performance.now() - start,
+    };
+  }
+  
+  // Export multiple : utiliser handleToolCalling
+  return handleToolCalling(userMessage, analysis, settings, signal, start);
 }
 
 /**
