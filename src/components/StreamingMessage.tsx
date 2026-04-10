@@ -33,8 +33,11 @@ export default function StreamingMessage({ className }: StreamingMessageProps) {
   }, [streamedText]);
 
   // Afficher dès qu'on est en streaming (même sans texte encore) ou qu'il y a du texte
-  if (!isStreaming && !streamedText) {
-    return null;
+  const shouldRender = isStreaming || streamedText.length > 0;
+  
+  // Si on ne devrait pas rendre, retourner une div vide pour permettre les animations
+  if (!shouldRender) {
+    return <div />;
   }
 
   // Calculer la progression combinée (thinking + streaming)

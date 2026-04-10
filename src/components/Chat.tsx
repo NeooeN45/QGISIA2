@@ -139,6 +139,8 @@ export default function Chat(props: ChatProps) {
   
   // Subscription réactive au streaming pour transition fluide
   const isStreaming = useStreamingStore((s) => s.isStreaming);
+  const streamedText = useStreamingStore((s) => s.streamedText);
+  const hasStreamedContent = streamedText.length > 0;
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -575,25 +577,43 @@ export default function Chat(props: ChatProps) {
                 </AnimatePresence>
 
                 {/* Transition fluide: Thinking → Streaming sans vide */}
-                <AnimatePresence mode="popLayout">
-                  {/* ThinkingIndicator visible tant que isLoading ET pas encore de streaming */}
-                  {isLoading && !isStreaming && (
-                    <motion.div
-                      key="thinking"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.98 }}
-                      transition={{ duration: 0.15, ease: "easeInOut" }}
-                    >
-                      <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* Les deux composants sont dans le DOM, on contrôle leur visibilité avec opacity */}
+                
+                {/* Transition fluide sans vide - les deux sont dans le DOM */}
+                <div className="relative">
+                  {/* ThinkingIndicator : visible tant qu'on n'a pas de contenu streamé */}
+                  <motion.div
+                    initial={false}
+                    animate={{ 
+                      opacity: (isLoading || (isStreaming && !hasStreamedContent)) ? 1 : 0,
+                      position: (isLoading || (isStreaming && !hasStreamedContent)) ? "relative" : "absolute",
+                    }}
+                    transition={{ duration: 0.08, ease: "linear" }}
+                    style={{ 
+                      pointerEvents: (isLoading || (isStreaming && !hasStreamedContent)) ? "auto" : "none",
+                    }}
+                  >
+                    <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
+                  </motion.div>
 
-                {/* Streaming visible dès qu'il commence avec animation d'entrée immédiate */}
-                <AnimatePresence>
-                  <StreamingMessage />
-                </AnimatePresence>
+                  {/* StreamingMessage : visible dès qu'il y a du streaming ou du contenu */}
+                  <motion.div
+                    initial={false}
+                    animate={{ 
+                      opacity: (isStreaming || hasStreamedContent) ? 1 : 0,
+                      position: (isStreaming || hasStreamedContent) ? "relative" : "absolute",
+                    }}
+                    transition={{ duration: 0.08, ease: "linear" }}
+                    style={{ 
+                      pointerEvents: (isStreaming || hasStreamedContent) ? "auto" : "none",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                    }}
+                  >
+                    <StreamingMessage />
+                  </motion.div>
+                </div>
               </div>
             )}
           </div>
