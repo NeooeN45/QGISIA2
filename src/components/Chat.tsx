@@ -574,46 +574,37 @@ export default function Chat(props: ChatProps) {
                   ))}
                 </AnimatePresence>
 
-                {/* Transition fluide: Thinking → Streaming sans vide */}
-                {/* Les deux composants sont dans le DOM, on contrôle leur visibilité avec opacity */}
-                
-                {/* Transition fluide sans vide - les deux sont dans le DOM */}
+                {/* Transition instantanée: Thinking → Streaming */}
                 <div className="relative">
                   {/* ThinkingIndicator : visible seulement pendant le chargement initial */}
-                  <motion.div
-                    initial={false}
-                    animate={{ 
-                      opacity: isLoading && !isStreaming ? 1 : 0,
-                    }}
-                    transition={{ duration: 0.05 }}
+                  <div
                     style={{ 
+                      opacity: isLoading && !isStreaming ? 1 : 0,
                       pointerEvents: isLoading && !isStreaming ? "auto" : "none",
                       position: isLoading && !isStreaming ? "relative" : "absolute",
                       top: 0,
                       left: 0,
                       right: 0,
+                      transition: "none",
                     }}
                   >
                     <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
-                  </motion.div>
+                  </div>
 
                   {/* StreamingMessage : visible seulement pendant le streaming */}
-                  <motion.div
-                    initial={false}
-                    animate={{ 
-                      opacity: isStreaming ? 1 : 0,
-                    }}
-                    transition={{ duration: 0.05 }}
+                  <div
                     style={{ 
+                      opacity: isStreaming ? 1 : 0,
                       pointerEvents: isStreaming ? "auto" : "none",
                       position: isStreaming ? "relative" : "absolute",
                       top: 0,
                       left: 0,
                       right: 0,
+                      transition: "none",
                     }}
                   >
                     <StreamingMessage />
-                  </motion.div>
+                  </div>
                 </div>
               </div>
             )}

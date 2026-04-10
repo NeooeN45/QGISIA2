@@ -5,19 +5,18 @@
  */
 
 import { useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useStreamingStore } from "../stores/useStreamingStore";
 import { useThinkingStore } from "../stores/useThinkingStore";
 import { cn } from "@/src/lib/utils";
-import { Loader2, Sparkles, CheckCircle2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 
 interface StreamingMessageProps {
   className?: string;
 }
 
 export default function StreamingMessage({ className }: StreamingMessageProps) {
-  const { isStreaming, streamedText, tokensPerSecond, chunkCount } = useStreamingStore();
-  const { progress: thinkingProgress, phase: thinkingPhase } = useThinkingStore();
+  const { isStreaming, streamedText, tokensPerSecond } = useStreamingStore();
+  const { progress: thinkingProgress } = useThinkingStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -45,21 +44,9 @@ export default function StreamingMessage({ className }: StreamingMessageProps) {
     ? Math.min(95 + (streamedText.length / 100), 99) // Progression basée sur taille texte
     : thinkingProgress;
 
-  // Déterminer si on vient juste de commencer le streaming (transition)
-  const isTransitioning = isStreaming && thinkingPhase === "STREAMING_RESPONSE";
-
   return (
-    <motion.div
+    <div
       ref={contentRef}
-      layout
-      initial={{ opacity: 0, y: 10, scale: 0.99 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -10, scale: 0.99 }}
-      transition={{ 
-        duration: 0.15, 
-        ease: "easeOut",
-        layout: { duration: 0.2 }
-      }}
       className={cn(
         "w-full max-w-3xl mx-auto",
         className
@@ -75,53 +62,39 @@ export default function StreamingMessage({ className }: StreamingMessageProps) {
         <div className="flex-1 min-w-0">
           <div className="rounded-[28px] border border-gray-200 dark:border-[#333537]/40 bg-white dark:bg-[#1e1f20]/60 p-5 shadow-sm dark:backdrop-blur-sm">
             {/* Header avec statut - disparaît quand streaming terminé */}
-            <AnimatePresence>
-              {isStreaming && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100 dark:border-white/5"
-                >
-                  <div className="flex items-center gap-2">
-                    <Loader2 size={14} className="text-emerald-400 animate-spin" />
-                    <span className="text-xs font-medium text-emerald-500">
-                      Génération en cours...
+            {isStreaming && (
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100 dark:border-white/5">
+                <div className="flex items-center gap-2">
+                  <Loader2 size={14} className="text-emerald-400 animate-spin" />
+                  <span className="text-xs font-medium text-emerald-500">
+                    Génération en cours...
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  {tokensPerSecond > 0 && (
+                    <span className="text-xs text-gray-400 font-mono">
+                      {tokensPerSecond} tok/s
                     </span>
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                    {tokensPerSecond > 0 && (
-                      <span className="text-xs text-gray-400 font-mono">
-                        {tokensPerSecond} tok/s
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-400">
-                      {streamedText.length} caractères
-                    </span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  )}
+                  <span className="text-xs text-gray-400">
+                    {streamedText.length} caractères
+                  </span>
+                </div>
+              </div>
+            )}
 
-            {/* Barre de progression simple */}
-            <AnimatePresence>
-              {isStreaming && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="mb-3"
-                >
-                  <div className="h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
-                      style={{ width: `${combinedProgress}%` }}
-                    />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Barre de progression - disparaît quand streaming terminé */}
+            {isStreaming && (
+              <div className="mb-3">
+                <div className="h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-teal-500"
+                    style={{ width: `${combinedProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Texte streaming avec curseur */}
             <div
@@ -131,34 +104,23 @@ export default function StreamingMessage({ className }: StreamingMessageProps) {
               <div className="text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed font-light">
                 {streamedText}
                 {isStreaming && (
-                  <motion.span 
-                    className="inline-block w-2 h-5 bg-emerald-400 ml-0.5 align-middle"
-                    animate={{ opacity: [1, 0.3, 1] }}
-                    transition={{ duration: 0.8, repeat: Infinity }}
-                  />
+                  <span className="inline-block w-2 h-5 bg-emerald-400 ml-0.5 align-middle animate-pulse" />
                 )}
               </div>
             </div>
 
             {/* Footer simple - disparaît quand streaming terminé */}
-            <AnimatePresence>
-              {isStreaming && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-white/5 overflow-hidden"
-                >
-                  <Loader2 size={14} className="text-emerald-400 animate-spin" />
-                  <span className="text-xs text-gray-400">
-                    En cours...
-                  </span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {isStreaming && (
+              <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-white/5">
+                <Loader2 size={14} className="text-emerald-400 animate-spin" />
+                <span className="text-xs text-gray-400">
+                  En cours...
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
