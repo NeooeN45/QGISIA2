@@ -451,13 +451,15 @@ export default function ChatInput({
         </div>
       </div>
       
-      {/* Script Template Modal */}
-      <ScriptTemplateModal
-        isOpen={showTemplates}
-        onClose={() => setShowTemplates(false)}
-        onExecute={handleTemplateExecute}
-        availableLayers={availableLayers}
-      />
+      {/* Script Template Modal - pointer-events-auto crucial pour permettre l'interaction */}
+      <div className="pointer-events-auto">
+        <ScriptTemplateModal
+          isOpen={showTemplates}
+          onClose={() => setShowTemplates(false)}
+          onExecute={handleTemplateExecute}
+          availableLayers={availableLayers}
+        />
+      </div>
     </div>
   );
 }
