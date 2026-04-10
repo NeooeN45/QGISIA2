@@ -53,6 +53,7 @@ import {
 import { appendDebugEvent } from "../lib/debug-log";
 import { useUIStore } from "../stores/useUIStore";
 import { useSmartSuggestionsStore } from "../stores/useSmartSuggestionsStore";
+import { useStreamingStore } from "../stores/useStreamingStore";
 
 interface ChatProps {
   activeConversation: ChatConversation | null;
@@ -135,6 +136,9 @@ export default function Chat(props: ChatProps) {
   const setShowPluginSetup = useUIStore((s) => s.setShowPluginSetup);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  
+  // Subscription réactive au streaming pour transition fluide
+  const isStreaming = useStreamingStore((s) => s.isStreaming);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -570,23 +574,26 @@ export default function Chat(props: ChatProps) {
                   ))}
                 </AnimatePresence>
 
-                {/* Transition fluide: Thinking → Streaming */}
-                <AnimatePresence mode="wait">
-                  {isLoading && (
+                {/* Transition fluide: Thinking → Streaming sans vide */}
+                <AnimatePresence mode="popLayout">
+                  {/* ThinkingIndicator visible tant que isLoading ET pas encore de streaming */}
+                  {isLoading && !isStreaming && (
                     <motion.div
                       key="thinking"
-                      initial={{ opacity: 0, y: 20 }}
+                      initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                      transition={{ duration: 0.3 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={{ duration: 0.15, ease: "easeInOut" }}
                     >
                       <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                {/* Streaming s'affiche pendant et après le loading pour transition fluide */}
-                <StreamingMessage />
+                {/* Streaming visible dès qu'il commence avec animation d'entrée immédiate */}
+                <AnimatePresence>
+                  <StreamingMessage />
+                </AnimatePresence>
               </div>
             )}
           </div>

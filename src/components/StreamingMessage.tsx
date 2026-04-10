@@ -32,7 +32,7 @@ export default function StreamingMessage({ className }: StreamingMessageProps) {
     }
   }, [streamedText]);
 
-  // Ne pas afficher si pas de streaming et pas de texte
+  // Afficher dès qu'on est en streaming (même sans texte encore) ou qu'il y a du texte
   if (!isStreaming && !streamedText) {
     return null;
   }
@@ -48,10 +48,15 @@ export default function StreamingMessage({ className }: StreamingMessageProps) {
   return (
     <motion.div
       ref={contentRef}
-      initial={{ opacity: 0, y: 20, scale: 0.98 }}
+      layout
+      initial={{ opacity: 0, y: 10, scale: 0.99 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -20, scale: 0.98 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
+      exit={{ opacity: 0, y: -10, scale: 0.99 }}
+      transition={{ 
+        duration: 0.15, 
+        ease: "easeOut",
+        layout: { duration: 0.2 }
+      }}
       className={cn(
         "w-full max-w-3xl mx-auto",
         className
