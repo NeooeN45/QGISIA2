@@ -19,7 +19,6 @@ import ChatInputArea from "./ChatInput";
 import WelcomeScreen from "./WelcomeScreen";
 import MessageBubble from "./MessageBubble";
 import ThinkingIndicator from "./ThinkingIndicator";
-import FeedbackWidget from "./FeedbackWidget";
 import {
   addRasterFile,
   addRemoteService,
@@ -558,16 +557,6 @@ export default function Chat(props: ChatProps) {
 
                 {isLoading && (
                   <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
-                )}
-                
-                {/* Feedback Widget - affiché après la réponse de l'assistant */}
-                {!isLoading && messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
-                  <div className="flex justify-center mt-6">
-                    <FeedbackWidget
-                      actionId={`action_${messages[messages.length - 1].id}`}
-                      onDismiss={() => {}}
-                    />
-                  </div>
                 )}
               </div>
             )}
