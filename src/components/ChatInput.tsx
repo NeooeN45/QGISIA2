@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   Database,
+  FileCode,
   Layers,
   Loader2,
   Paperclip,
@@ -15,6 +16,12 @@ import {
 import { cn } from "@/src/lib/utils";
 import { ConversationMode } from "../lib/chat-history";
 import { isQgisAvailable, LayerSummary, openQgisLayersPanel, openQgisSettings } from "../lib/qgis";
+import { useSmartSuggestionsStore } from "../stores/useSmartSuggestionsStore";
+import { useConversationMemoryStore } from "../stores/useConversationMemoryStore";
+import { UserIntent } from "../lib/prompt-intelligence";
+import SmartSuggestionsBar from "./SmartSuggestionsBar";
+import SemanticAutocomplete from "./SemanticAutocomplete";
+import ScriptTemplateModal from "./ScriptTemplateModal";
 import { getActiveModel } from "../lib/settings";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useUIStore } from "../stores/useUIStore";
@@ -69,6 +76,8 @@ interface ChatInputProps {
   selectedLayers: LayerSummary[];
   layerContextById: Record<string, string>;
   onToggleLayerSelection: (layerId: string) => void;
+  availableLayers?: string[];
+  lastIntent?: UserIntent;
 }
 
 export default function ChatInput({
@@ -79,14 +88,27 @@ export default function ChatInput({
   selectedLayers,
   layerContextById,
   onToggleLayerSelection,
+  availableLayers = [],
+  lastIntent,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [showTests, setShowTests] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const settings = useSettingsStore((s) => s.settings);
   const isQgisConnected = useUIStore((s) => s.isQgisConnected);
   const documents = useDocumentStore((s) => s.documents);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Mettre à jour le contexte de conversation
+  const updateContext = useConversationMemoryStore((s) => s.updateContext);
+  
+  useEffect(() => {
+    updateContext({
+      activeLayers: availableLayers,
+      lastIntent,
+    });
+  }, [availableLayers, lastIntent, updateContext]);
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -116,6 +138,19 @@ export default function ChatInput({
     
     void onSendMessage(messageToSend);
     setInput("");
+    
+    // Cacher les suggestions après envoi
+    useSmartSuggestionsStore.getState().setVisibility(false);
+  };
+  
+  const handleSuggestionClick = (suggestion: string) => {
+    setInput(suggestion);
+    textareaRef.current?.focus();
+  };
+  
+  const handleTemplateExecute = (code: string, templateName: string) => {
+    const message = `Exécuter le template "${templateName}":\n\n\`\`\`python\n${code}\n\`\`\``;
+    void onSendMessage(message);
   };
 
   const handleQgisAction = (action: "layers" | "settings") => {
@@ -212,6 +247,22 @@ export default function ChatInput({
           </div>
         )}
 
+        {/* Smart Suggestions Bar */}
+        <SmartSuggestionsBar
+          input={input}
+          onSuggestionClick={handleSuggestionClick}
+          layers={availableLayers}
+          selectedLayers={selectedLayers.map(l => l.name)}
+          lastIntent={lastIntent}
+        />
+        
+        {/* Semantic Autocomplete */}
+        <SemanticAutocomplete
+          input={input}
+          onAccept={(completion) => setInput(prev => prev + completion)}
+          layerNames={availableLayers}
+        />
+
         <form onSubmit={handleSubmit} className="group relative">
           <div className="absolute -inset-4 rounded-[44px] bg-gradient-to-r from-blue-500 via-emerald-500 to-violet-500 opacity-[0.18] blur-3xl transition-all duration-700 group-focus-within:opacity-[0.55] group-focus-within:-inset-6" />
           <div className="absolute -inset-2 rounded-[40px] bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400 opacity-[0.08] blur-xl transition-all duration-500 group-focus-within:opacity-[0.25]" />
@@ -225,6 +276,14 @@ export default function ChatInput({
                   title="Couches QGIS"
                 >
                   <Layers size={20} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowTemplates(true)}
+                  className="rounded-full p-3 text-gray-500 dark:text-[#c4c7c5] transition-all hover:bg-emerald-400/10 hover:text-emerald-500 dark:hover:text-emerald-400"
+                  title="Templates de scripts"
+                >
+                  <FileCode size={20} />
                 </button>
                 <button
                   type="button"
@@ -391,6 +450,14 @@ export default function ChatInput({
           </div>
         </div>
       </div>
+      
+      {/* Script Template Modal */}
+      <ScriptTemplateModal
+        isOpen={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        onExecute={handleTemplateExecute}
+        availableLayers={availableLayers}
+      />
     </div>
   );
 }
