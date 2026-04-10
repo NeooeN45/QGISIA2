@@ -570,12 +570,23 @@ export default function Chat(props: ChatProps) {
                   ))}
                 </AnimatePresence>
 
-                {/* Message en streaming temps réel */}
-                <StreamingMessage />
+                {/* Transition fluide: Thinking → Streaming */}
+                <AnimatePresence mode="wait">
+                  {isLoading && (
+                    <motion.div
+                      key="thinking"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                {isLoading && (
-                  <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
-                )}
+                {/* Streaming s'affiche pendant et après le loading pour transition fluide */}
+                <StreamingMessage />
               </div>
             )}
           </div>

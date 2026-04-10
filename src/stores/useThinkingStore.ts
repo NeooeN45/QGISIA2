@@ -5,6 +5,34 @@
 
 import { create } from "zustand";
 
+// Progression dynamique par phase (début, fin)
+const phaseProgressRanges: Record<ThinkingPhase, [number, number]> = {
+  IDLE: [0, 0],
+  ANALYZING_INTENT: [5, 15],
+  PLANNING: [15, 25],
+  SELECTING_MODEL: [25, 35],
+  RETRIEVING_CONTEXT: [35, 45],
+  EXECUTING_TOOLS: [45, 60],
+  GENERATING_CODE: [60, 75],
+  WAITING_FOR_LLM: [75, 85],
+  PROCESSING_RESPONSE: [85, 95],
+  STREAMING_RESPONSE: [95, 100],
+};
+
+// Ordre des phases pour la progression
+const phaseOrder: ThinkingPhase[] = [
+  "IDLE",
+  "ANALYZING_INTENT",
+  "PLANNING", 
+  "SELECTING_MODEL",
+  "RETRIEVING_CONTEXT",
+  "EXECUTING_TOOLS",
+  "GENERATING_CODE",
+  "WAITING_FOR_LLM",
+  "PROCESSING_RESPONSE",
+  "STREAMING_RESPONSE",
+];
+
 export type ThinkingPhase =
   | "IDLE"
   | "ANALYZING_INTENT"      // Analyse de l'intention utilisateur
@@ -24,6 +52,7 @@ interface ThinkingState {
   progress: number; // 0-100
   modelName: string | null;
   estimatedTime: string | null;
+  progressInterval: number | null;
   
   // Actions
   setPhase: (phase: ThinkingPhase, details?: { message?: string; subMessage?: string; modelName?: string; estimatedTime?: string; progress?: number }) => void;
@@ -72,40 +101,81 @@ const phaseMessages: Record<ThinkingPhase, { message: string; subMessage: string
   },
 };
 
-export const useThinkingStore = create<ThinkingState>((set) => ({
+export const useThinkingStore = create<ThinkingState>((set, get) => ({
   phase: "IDLE",
   message: "",
   subMessage: "",
   progress: 0,
   modelName: null,
   estimatedTime: null,
+  progressInterval: null as number | null,
 
   setPhase: (phase, details = {}) => {
     const defaultMessages = phaseMessages[phase];
-    const defaultProgress = phase === "IDLE" ? 0 : phase === "STREAMING_RESPONSE" ? 90 : 50;
+    const [minProgress, maxProgress] = phaseProgressRanges[phase];
+    
+    // Arrêter l'animation précédente
+    if (get().progressInterval) {
+      clearInterval(get().progressInterval);
+    }
+    
+    // Si on a un progress explicite, l'utiliser, sinon démarrer depuis min
+    const targetProgress = details.progress ?? minProgress;
+    
     set({
       phase,
       message: details.message ?? defaultMessages.message,
       subMessage: details.subMessage ?? defaultMessages.subMessage,
       modelName: details.modelName ?? null,
       estimatedTime: details.estimatedTime ?? null,
-      progress: details.progress ?? defaultProgress,
+      progress: targetProgress,
+      progressInterval: null,
     });
+    
+    // Animer la progression jusqu'à maxProgress si ce n'est pas IDLE
+    if (phase !== "IDLE" && !details.progress) {
+      const interval = window.setInterval(() => {
+        const current = get().progress;
+        if (current < maxProgress) {
+          // Incrément lent et aléatoire pour effet naturel
+          const increment = Math.random() * 0.5 + 0.1;
+          set({ progress: Math.min(current + increment, maxProgress) });
+        } else {
+          clearInterval(interval);
+          set({ progressInterval: null });
+        }
+      }, 100);
+      set({ progressInterval: interval });
+    }
   },
 
   setProgress: (progress) => set({ progress }),
   
   updateSubMessage: (subMessage) => set({ subMessage }),
 
-  reset: () => set({
-    phase: "IDLE",
-    message: "",
-    subMessage: "",
-    progress: 0,
-    modelName: null,
-    estimatedTime: null,
-  }),
+  reset: () => {
+    // Nettoyer l'intervalle avant reset
+    const interval = get().progressInterval;
+    if (interval) clearInterval(interval);
+    
+    set({
+      phase: "IDLE",
+      message: "",
+      subMessage: "",
+      progress: 0,
+      modelName: null,
+      estimatedTime: null,
+      progressInterval: null,
+    });
+  },
 }));
+
+// Helper pour calculer la progression basée sur l'ordre des phases
+export const calculateProgressFromPhase = (phase: ThinkingPhase): number => {
+  const index = phaseOrder.indexOf(phase);
+  if (index === -1) return 0;
+  return Math.round((index / (phaseOrder.length - 1)) * 100);
+};
 
 /**
  * Obtient une phrase descriptive animée selon la phase

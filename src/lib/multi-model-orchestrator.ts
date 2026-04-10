@@ -16,6 +16,7 @@ import { executeQgisToolCall, getOpenAiQgisToolDefinitions } from "./qgis-tools"
 import { getLayersCatalog, getSystemSpecs } from "./qgis";
 import { appendDebugEvent } from "./debug-log";
 import { toast } from "sonner";
+import { useThinkingStore } from "../stores/useThinkingStore";
 
 export interface OrchestratorResult {
   success: boolean;
@@ -65,6 +66,7 @@ export async function orchestrateResponse(
   });
 
   // === PHASE 1: Analyse d'intention (modèle ultra-léger) ===
+  useThinkingStore.getState().setPhase("ANALYZING_INTENT");
   toast.info("Analyse de votre demande...", { duration: 1500 });
   
   const intentAnalysis = await analyzeUserIntent(latestUserMessage, settings);
@@ -83,6 +85,9 @@ export async function orchestrateResponse(
   });
 
   // === PHASE 2: Routage selon l'intention ===
+  useThinkingStore.getState().setPhase("SELECTING_MODEL", {
+    modelName: intentAnalysis.suggestedModelTier,
+  });
   
   // 2A: Actions simples → Local Router (réponse immédiate)
   if (mode === "chat" && canUseLocalRouter(intentAnalysis)) {
@@ -146,11 +151,13 @@ async function handleComplexWorkflow(
 ): Promise<OrchestratorResult> {
   const start = startTime || performance.now();
   
+  useThinkingStore.getState().setPhase("PLANNING");
   toast.info(`Planification d'un workflow de ${analysis.estimatedSteps} étapes...`, { duration: 2000 });
 
   // Récupérer le contexte QGIS si nécessaire
   let contextData: Record<string, unknown> = {};
   if (analysis.needsQgisContext) {
+    useThinkingStore.getState().setPhase("RETRIEVING_CONTEXT");
     const [layers, specs] = await Promise.all([
       getLayersCatalog(),
       getSystemSpecs(),
@@ -177,6 +184,8 @@ async function handleComplexWorkflow(
   const results: OrchestratorResult["toolCalls"] = [];
   const completedSteps: number[] = [];
 
+  useThinkingStore.getState().setPhase("EXECUTING_TOOLS");
+  
   for (const step of plan.steps) {
     // Vérifier les dépendances
     if (step.dependsOn) {
@@ -187,6 +196,7 @@ async function handleComplexWorkflow(
       }
     }
 
+    useThinkingStore.getState().updateSubMessage(`Étape ${step.id}/${plan.steps.length}: ${step.description}`);
     toast.info(`Exécution étape ${step.id}/${plan.steps.length}: ${step.description}`, { duration: 1500 });
 
     try {
@@ -336,10 +346,15 @@ async function handleCodeGeneration(
 ): Promise<OrchestratorResult> {
   const start = startTime || performance.now();
   
+  useThinkingStore.getState().setPhase("GENERATING_CODE");
+  
   // Sélectionner le modèle approprié
   const ollamaModels = await getOllamaModels();
   const modelSelection = selectModelForIntent(analysis, ollamaModels.map(m => m.name), settings);
 
+  useThinkingStore.getState().setPhase("WAITING_FOR_LLM", {
+    modelName: modelSelection.model,
+  });
   toast.info(`Génération de code avec ${modelSelection.model}...`, { duration: 2000 });
 
   // Appeler le LLM avec le modèle sélectionné
@@ -383,10 +398,16 @@ async function handleDirectLLM(
 ): Promise<OrchestratorResult> {
   const start = startTime || performance.now();
   
+  useThinkingStore.getState().setPhase("WAITING_FOR_LLM");
+  
   const ollamaModels = await getOllamaModels();
   const model = analysis ? 
     selectModelForIntent(analysis, ollamaModels.map(m => m.name), settings).model :
     (ollamaModels[0]?.name || "gemma4:4b");
+  
+  useThinkingStore.getState().setPhase("WAITING_FOR_LLM", {
+    modelName: model,
+  });
 
   const response = await generateWithOllama(
     model,

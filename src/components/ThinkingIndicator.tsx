@@ -165,18 +165,59 @@ export default function ThinkingIndicator({ isLoading, onStop }: ThinkingIndicat
             )}
           </div>
 
-          {/* Barre de progression */}
+          {/* Barre de progression améliorée */}
           {progress > 0 && (
-            <div className="w-full max-w-xs">
-              <div className="h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div className="w-full max-w-md">
+              {/* Container avec glow effect */}
+              <div className="relative">
+                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
+                  {/* Barre principale avec gradient animé */}
+                  <motion.div
+                    className={`h-full bg-gradient-to-r ${gradientClass} relative`}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ 
+                      duration: 0.3,
+                      ease: "easeOut"
+                    }}
+                  >
+                    {/* Effet shimmer */}
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                      animate={{ x: ["-100%", "100%"] }}
+                      transition={{ 
+                        duration: 1.5,
+                        repeat: Infinity,
+                        ease: "linear"
+                      }}
+                    />
+                    {/* Pointe brillante */}
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg shadow-white/50" />
+                  </motion.div>
+                </div>
+                
+                {/* Glow sous la barre */}
                 <motion.div
-                  className={`h-full bg-gradient-to-r ${gradientClass}`}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.5 }}
+                  className={`absolute -inset-1 bg-gradient-to-r ${gradientClass} rounded-full opacity-20 blur-sm -z-10`}
+                  animate={{ opacity: [0.1, 0.3, 0.1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1">{progress}% complété</p>
+              
+              {/* Info sous la barre */}
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                  {progress < 15 && "Analyse en cours..."}
+                  {progress >= 15 && progress < 35 && "Planification..."}
+                  {progress >= 35 && progress < 60 && "Préparation..."}
+                  {progress >= 60 && progress < 85 && "Génération..."}
+                  {progress >= 85 && progress < 100 && "Finalisation..."}
+                  {progress >= 100 && "Terminé !"}
+                </p>
+                <p className="text-xs font-bold bg-gradient-to-r ${gradientClass} bg-clip-text text-transparent">
+                  {Math.round(progress)}%
+                </p>
+              </div>
             </div>
           )}
         </motion.div>

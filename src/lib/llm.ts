@@ -14,6 +14,7 @@ import {
 import { orchestrateResponse } from "./multi-model-orchestrator";
 import { useThinkingStore } from "../stores/useThinkingStore";
 import { useStreamingStore, createMessageId } from "../stores/useStreamingStore";
+import { useSmartSuggestionsStore } from "../stores/useSmartSuggestionsStore";
 
 interface GenerateAssistantReplyInput {
   conversation: ChatConversation;
@@ -228,8 +229,10 @@ async function streamLocalResponse(
   const chunks: string[] = [];
   const isOpenAI = /\/v1\/chat\/completions/.test(endpoint);
   
-  // Démarrer le streaming dans le store
+  // Démarrer le streaming dans le store et mettre à jour la phase thinking
   useStreamingStore.getState().startStreaming(messageId);
+  useThinkingStore.getState().setPhase("STREAMING_RESPONSE");
+  useSmartSuggestionsStore.getState().completeProcessing(); // Fermer la barre de suggestions
 
   while (true) {
     const { done, value } = await reader.read();
