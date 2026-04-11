@@ -393,6 +393,15 @@ export async function pullOllamaModel(
   signal?: AbortSignal
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Vérifier d'abord qu'Ollama est démarré
+    const isOllamaRunning = await detectOllama();
+    if (!isOllamaRunning) {
+      return {
+        success: false,
+        error: "Ollama n'est pas démarré. Veuillez lancer Ollama (ollama serve) et réessayer.",
+      };
+    }
+
     const response = await fetch("http://localhost:11434/api/pull", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -433,14 +433,20 @@ export default function SettingsModal({
     const ctrl = new AbortController();
     abortInstallRef.current = ctrl;
     try {
-      await pullOllamaModel(
+      const result = await pullOllamaModel(
         modelId,
         (progress) => setInstallProgress(progress),
         ctrl.signal,
       );
-      setInstalledModels((prev) => Array.from(new Set([...prev, modelId])));
-      setLocalSettings((current) => ({ ...current, localModel: modelId }));
-      toast.success(`✅ Modèle ${modelId} installé et sélectionné`);
+      
+      if (result.success) {
+        setInstalledModels((prev) => Array.from(new Set([...prev, modelId])));
+        setLocalSettings((current) => ({ ...current, localModel: modelId }));
+        toast.success(`✅ Modèle ${modelId} installé et sélectionné`);
+      } else {
+        setInstallError(result.error || "Erreur inconnue lors de l'installation");
+        toast.error(`❌ Erreur: ${result.error}`);
+      }
     } catch (err: unknown) {
       if ((err as Error)?.name !== "AbortError") {
         const msg = err instanceof Error ? err.message : String(err);
