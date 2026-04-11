@@ -1,96 +1,178 @@
-# QGISAI+ - Assistant IA pour QGIS
+<div align="center">
 
-Assistant IA pour QGIS — interface web React servie directement par le plugin, avec bridge QGIS integre.
+# 🌲 GeoSylva AI — Assistant IA pour QGIS
 
-## Installation rapide (v2.0)
+**Un assistant SIG intelligent directement dans QGIS.**  
+Parlez à vos données géographiques, générez du code PyQGIS, analysez vos couches — le tout avec l'IA.
 
-### Methode ZIP (recommandee)
-1. Telechargez `geoai_assistant.zip` depuis le depot GitHub
-2. Dans QGIS : **Extensions > Installer/Gerer les extensions > Installer depuis un ZIP**
-3. Selectionnez le ZIP et cliquez **Installer**
-4. Activez **QGISAI+** dans la liste des extensions
+[![QGIS](https://img.shields.io/badge/QGIS-3.16%2B%20%7C%204.0-green?logo=qgis&logoColor=white)](https://qgis.org)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)](https://python.org)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![License](https://img.shields.io/badge/Licence-MIT-orange)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](https://github.com/NeooeN45/QGISIA2)
 
-> **Aucun serveur externe requis.** Cliquez sur le bouton QGISAI+ dans la barre d'outils, l'interface s'ouvre automatiquement dans votre navigateur avec le bridge QGIS actif.
+</div>
 
-## Providers IA supportes
+---
 
-| Provider | Modele par defaut |
-|---|---|
-| **Local / Ollama** (defaut) | `qwen3:4b` via `localhost:11434` |
-| **Google Gemini** | `gemini-2.5-flash` |
-| **OpenRouter** | Multi-agent configurable |
+## ✨ Fonctionnalités
 
-## Fonctionnalites cles
+<table>
+<tr>
+<td width="50%">
 
-- historique de conversations persiste localement
-- contexte de discussion par couche avec portee `couche` ou `selection active`
-- barre laterale retractable pour naviguer entre sessions et couches
-- mode `plan d'execution` pour preparer un traitement avant action
-- diagnostic automatique des couches avec alertes qualite
-- gestion directe des couches : visibilite, opacite, zoom et filtres
-- appels QGIS depuis l'agent et depuis l'interface
-- provider `OpenRouter` avec orchestration multi-agent
-- roles configurables `planner`, `planner deep`, `reviewer`, `retriever`, `executor`
-- reranking embeddings OpenRouter pour prioriser le bon contexte avant reponse
-- mode `tools` OpenRouter pour appeler directement les outils QGIS
-- catalogue de services et APIs officiels pour IGN, geo.api.gouv.fr, Overpass, NASA et Copernicus
-- recherche officielle cadastre/communes/OSM directement depuis l'onglet `Services`
-- stylage parcellaire, etiquetage et decoupe de parcelles selectionnees
-- fusion multi-bandes de rasters pour construire des composites bi-annuels NDVI / CRswir
-- creation de grilles d'inventaire et generation automatique des centroides
+### 🤖 IA Multi-Provider
+- **Ollama local** — Gemma 4, Qwen3, Llama 3 (100% offline)
+- **Google Gemini** — gemini-2.5-flash
+- **OpenRouter** — orchestration multi-agent (GPT-4, Claude, Mistral…)
+- **HuggingFace** — accès aux derniers modèles
 
-## OpenRouter multi-agent
+</td>
+<td width="50%">
 
-Profils integres : **gratuit**, **valeur** (recommande), **qualite**
+### 🗺️ Actions QGIS Directes
+- Gérer couches (visibilité, opacité, zoom, filtres)
+- Exécuter des scripts **PyQGIS** générés par l'IA
+- Reprojection, buffers, calculs raster
+- Chargement WMS / WFS / XYZ / GeoJSON
 
-Le menu **Parametres IA** permet de configurer la pile complete : planner, planner deep, reviewer, retriever embeddings, executor.
+</td>
+</tr>
+<tr>
+<td width="50%">
 
-## Sources officielles et services
+### 📡 Services Officiels Intégrés
+- 🇫🇷 IGN / Géoplateforme / cartes.gouv.fr
+- 🏛️ API Carto Cadastre & geo.api.gouv.fr
+- 🌍 Overpass / OpenStreetMap
+- 🛰️ Copernicus Data Space & NASA Earthdata
 
-L'onglet **Services** expose :
-- `IGN / cartes.gouv.fr / Geoplateforme`
-- `API Carto Cadastre`
-- `geo.api.gouv.fr`
-- `Overpass / OpenStreetMap`
-- `Copernicus Data Space`
-- `NASA Earthdata / CMR STAC`
+</td>
+<td width="50%">
 
-## Developpement (rebuilder le frontend)
+### 🧠 Orchestration Avancée
+- Pipeline multi-agent : **Planner → Reviewer → Executor**
+- Reranking embeddings pour un contexte optimal
+- Mode `plan d'exécution` avant toute action
+- Diagnostic automatique des couches
 
-Prerequis : Node.js 20+
+</td>
+</tr>
+</table>
+
+---
+
+## 🚀 Installation
+
+### Méthode ZIP (recommandée — 2 minutes)
+
+```
+1. Télécharger GeoSylva_AI_QGIS_plugin.zip (bouton vert ci-dessus)
+2. QGIS → Extensions → Installer depuis un ZIP
+3. Sélectionner le ZIP → Installer
+4. Activer "GeoSylva AI" dans la liste des extensions
+```
+
+> **Aucun serveur externe requis.** Le plugin lance automatiquement son interface web et se connecte à QGIS via un bridge local.
+
+### Prérequis optionnels
+
+| Besoin | Solution |
+|--------|----------|
+| IA locale (offline) | [Ollama](https://ollama.com) + `ollama pull gemma4:e4b` |
+| Meilleure qualité cloud | Clé API [OpenRouter](https://openrouter.ai) ou [Gemini](https://aistudio.google.com) |
+
+---
+
+## 🤖 Modèles IA Supportés
+
+### Local (Ollama — gratuit, offline)
+
+| Modèle | Taille | Recommandé Pour |
+|--------|--------|-----------------|
+| `gemma4:e4b` ⭐ | 9.6 GB | **Meilleur compromis — multimodal** |
+| `gemma4:e2b` | 7.2 GB | Machines modestes |
+| `gemma4:26b` | 18 GB | Qualité supérieure (MoE) |
+| `qwen3:4b` | 2.5 GB | Ultra-léger et rapide |
+
+### Cloud (clé API requise)
+
+| Provider | Modèle | Usage |
+|----------|--------|-------|
+| Google Gemini | `gemini-2.5-flash` | Rapide et gratuit |
+| OpenRouter | Multi-agent configurable | Qualité maximale |
+
+---
+
+## 🛠️ Développement
 
 ```bash
+# Cloner et installer
+git clone https://github.com/NeooeN45/QGISIA2.git
+cd QGISIA2
 npm install
-npm run build   # genere qgis_plugin/web/
+
+# Développement live
+npm run dev        # → http://localhost:5173
+
+# Build pour le plugin
+npm run build      # → génère qgis_plugin/web/
 ```
 
-Optionnel - fichier `.env.local` :
-```
+**Variables d'environnement** (`.env.local`) :
+```env
 VITE_GEMINI_API_KEY=...
 VITE_OPENROUTER_API_KEY=...
 ```
 
-Pour le developpement live (Vite dev server) :
-```bash
-npm run dev   # http://localhost:5173
+---
+
+## 🗂️ Ce que l'IA peut faire dans QGIS
+
+```
+✅ Lister et analyser les couches du projet
+✅ Lire les champs attributaires et diagnostiquer la qualité
+✅ Appliquer filtres, styles, visibilité et zoom
+✅ Générer et exécuter des scripts PyQGIS
+✅ Reprojeter des couches vectorielles
+✅ Charger des services WMS / WFS / XYZ
+✅ Calculer statistiques, rasters, MNH
+✅ Stylage parcellaire et étiquetage automatique
+✅ Fusion multi-bandes NDVI / CRswir
+✅ Créer grilles d'inventaire et centroides
 ```
 
-## Ce que le plugin expose a l'IA
+---
 
-- liste et catalogue des couches du projet
-- lecture des champs attributaires et diagnostic detaille
-- application de filtres, visibilite, opacite et zoom
-- statistiques sur un champ numerique
-- reprojection d'une couche vecteur
-- ajout de GeoJSON distants dans la carte
-- style parcellaire et etiquetage automatique
-- decoupe des entites selectionnees par ligne
-- chargement de services WMS/WFS/XYZ
-- calcul raster et calcul de MNH
-- execution confirmee de scripts PyQGIS
+## 🏗️ Architecture
 
-## Compatibilite
+```
+QGIS Plugin (Python)
+    └── Lance un serveur web local (Flask)
+        └── Sert l'interface React (Vite + TailwindCSS)
+            └── Communique avec le bridge QGIS via WebSocket
+                └── Appelle Ollama / Gemini / OpenRouter selon config
+```
 
-- QGIS 3.16+ et QGIS 4.0 (Qt6/PyQt6)
-- Windows, Linux, macOS
-- Python 3.9+
+---
+
+## 🤝 Compatibilité
+
+| Plateforme | Status |
+|------------|--------|
+| Windows 10/11 | ✅ Supporté |
+| Linux (Ubuntu 20.04+) | ✅ Supporté |
+| macOS 12+ | ✅ Supporté |
+| QGIS 3.16+ | ✅ |
+| QGIS 4.0 (Qt6/PyQt6) | ✅ |
+| Python 3.9+ | ✅ |
+
+---
+
+<div align="center">
+
+**Fait avec ❤️ pour la communauté SIG francophone**
+
+[⭐ Mettre une étoile](https://github.com/NeooeN45/QGISIA2) · [🐛 Signaler un bug](https://github.com/NeooeN45/QGISIA2/issues) · [💡 Proposer une fonctionnalité](https://github.com/NeooeN45/QGISIA2/issues)
+
+</div>
