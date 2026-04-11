@@ -1,91 +1,65 @@
-# Script de test "One-by-One" pour modèles HuggingFace
+# Script de test "One-by-One" pour Gemma 4 via Ollama
 # Installe → Teste → Note → Supprime → Passe au suivant
 
-param(
-    [string]$ApiKey = "",
-    [string]$Provider = "huggingface"  # huggingface ou ollama
-)
+# Optimisation vitesse de téléchargement Ollama
+$env:OLLAMA_MAX_DOWNLOAD_CONCURRENCY = 8  # Téléchargements parallèles max
+$env:OLLAMA_KEEP_ALIVE = "0"              # Ne garde pas le modèle en RAM après test
 
-# Modèles à tester avec leurs prompts de test
+# Modèles Gemma 4 disponibles sur Ollama (noms officiels vérifiés)
+# E = "Effective parameters" (per-layer embeddings), MoE = Mixture of Experts
 $modelsToTest = @(
     @{
-        Name = "google/gemma-4-4b-it"
-        Label = "Gemma 4 4B"
+        Name = "gemma4:e2b"       # Effective 2B — 7.2 GB, context 128K
+        Label = "Gemma 4 E2B"
         SizeGB = 8
-        TestPrompts = @(
-            "Explique comment créer une couche vectorielle dans QGIS en 3 étapes",
-            "Écris un script Python pour bufferiser une couche vectorielle dans QGIS",
-            "Quelle est la différence entre un système de coordonnées projeté et géographique ?"
-        )
     },
     @{
-        Name = "google/gemma-4-9b-it"
-        Label = "Gemma 4 9B"
-        SizeGB = 18
-        TestPrompts = @(
-            "Explique comment créer une couche vectorielle dans QGIS en 3 étapes",
-            "Écris un script Python pour bufferiser une couche vectorielle dans QGIS",
-            "Quelle est la différence entre un système de coordonnées projeté et géographique ?"
-        )
+        Name = "gemma4:e4b"       # Effective 4B (= latest) — 9.6 GB, context 128K
+        Label = "Gemma 4 E4B (default)"
+        SizeGB = 11
     },
     @{
-        Name = "google/gemma-4-12b-it"
-        Label = "Gemma 4 12B"
-        SizeGB = 24
-        TestPrompts = @(
-            "Explique comment créer une couche vectorielle dans QGIS en 3 étapes",
-            "Écris un script Python pour bufferiser une couche vectorielle dans QGIS",
-            "Quelle est la différence entre un système de coordonnées projeté et géographique ?"
-        )
+        Name = "gemma4:26b"       # 26B MoE, actifs 4B — 18 GB, context 256K
+        Label = "Gemma 4 26B MoE"
+        SizeGB = 20
     },
     @{
-        Name = "google/gemma-4-27b-it"
-        Label = "Gemma 4 27B"
-        SizeGB = 54
-        TestPrompts = @(
-            "Explique comment créer une couche vectorielle dans QGIS en 3 étapes",
-            "Écris un script Python pour bufferiser une couche vectorielle dans QGIS",
-            "Quelle est la différence entre un système de coordonnées projeté et géographique ?"
-        )
+        Name = "gemma4:31b"       # 31B dense — 20 GB, context 256K
+        Label = "Gemma 4 31B"
+        SizeGB = 22
     }
 )
 
-# Fonction pour tester via API HuggingFace
-function Test-HuggingFaceModel {
-    param($ModelId, $Prompt, $ApiKey)
-    
+$testPrompts = @(
+    "Explique comment créer une couche vectorielle dans QGIS en 3 étapes.",
+    "Écris un script Python PyQGIS pour bufferiser une couche vectorielle de 500 mètres.",
+    "Quelle est la différence entre un système de coordonnées projeté et géographique ?"
+)
+
+# Teste un modèle via l'API Ollama locale
+function Invoke-OllamaPrompt {
+    param([string]$ModelName, [string]$Prompt)
+
     $body = @{
-        inputs = $Prompt
-        parameters = @{
-            temperature = 0.7
-            max_new_tokens = 1024
-            return_full_text = $false
-        }
+        model  = $ModelName
+        prompt = $Prompt
+        stream = $false
+        options = @{ temperature = 0.7; num_predict = 512 }
     } | ConvertTo-Json
-    
+
     $startTime = Get-Date
     try {
-        $response = Invoke-RestMethod -Uri "https://api-inference.huggingface.co/models/$ModelId" -Method Post -Headers @{ "Authorization" = "Bearer $ApiKey"; "Content-Type" = "application/json" } -Body $body -TimeoutSec 120
-        $endTime = Get-Date
-        $duration = ($endTime - $startTime).TotalSeconds
-        
-        return @{
-            Success = $true
-            Response = $response[0].generated_text
-            Duration = $duration
-            TokensPerSecond = ($response[0].generated_text.Length / $duration)
-        }
+        $response = Invoke-RestMethod -Uri "http://localhost:11434/api/generate" `
+            -Method Post -ContentType "application/json" -Body $body -TimeoutSec 180
+        $duration = ((Get-Date) - $startTime).TotalSeconds
+        return @{ Success = $true; Response = $response.response; Duration = $duration }
     } catch {
-        return @{
-            Success = $false
-            Error = $_.Exception.Message
-            Duration = 0
-        }
+        return @{ Success = $false; Error = $_.Exception.Message; Duration = 0 }
     }
 }
 
 # Fonction pour noter un modèle
-function Score-Model {
+function Get-ModelRating {
     param($Label, $Responses, $Durations)
     
     Write-Host ""
@@ -124,127 +98,139 @@ function Score-Model {
     }
 }
 
-# Fonction pour sauvegarder les résultats
-function Save-Results {
+# Sauvegarde les résultats dans un fichier JSON
+function Save-TestResults {
     param($Results)
-    
-    $resultsPath = Join-Path $PSScriptRoot "hf-model-test-results.json"
-    $Results | ConvertTo-Json -Depth 4 | Out-File -FilePath $resultsPath -Encoding UTF8
-    Write-Host "✅ Résultats sauvegardés dans : $resultsPath" -ForegroundColor Green
+    $path = Join-Path $PSScriptRoot "gemma4-test-results.json"
+    $Results | ConvertTo-Json -Depth 4 | Out-File -FilePath $path -Encoding UTF8
+    Write-Host "✅ Résultats sauvegardés : $path" -ForegroundColor Green
 }
 
 # === MAIN ===
 
-Write-Host "=== Système de Test Modèles HuggingFace ===" -ForegroundColor Green
-Write-Host "Mode: Test One-by-One (Installe → Teste → Note → Supprime)" -ForegroundColor Gray
+Write-Host "=== Test Gemma 4 via Ollama (One-by-One) ===" -ForegroundColor Green
+Write-Host "Mode: Installe → Teste → Note → Supprime → Suivant" -ForegroundColor Gray
 Write-Host ""
 
-if ([string]::IsNullOrEmpty($ApiKey)) {
-    Write-Host "❌ Clé API HuggingFace requise" -ForegroundColor Red
-    Write-Host "Obtenez une clé gratuite sur https://huggingface.co/settings/tokens" -ForegroundColor Yellow
-    $ApiKey = Read-Host "Entrez votre clé API HuggingFace"
+# Vérifier qu'Ollama est démarré
+try {
+    $null = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -TimeoutSec 5
+    Write-Host "✅ Ollama est démarré" -ForegroundColor Green
+} catch {
+    Write-Host "❌ Ollama n'est pas démarré. Lance 'ollama serve' d'abord." -ForegroundColor Red
+    exit 1
 }
 
 Write-Host ""
 Write-Host "📋 Modèles à tester :" -ForegroundColor Cyan
 foreach ($model in $modelsToTest) {
-    Write-Host "  • $($model.Label) (~$($model.SizeGB) GB)" -ForegroundColor White
+    Write-Host "  • $($model.Label) — $($model.Name) (~$($model.SizeGB) GB)" -ForegroundColor White
 }
 
 Write-Host ""
-$confirmation = Read-Host "⚠️  Cette opération va télécharger/supprimer les modèles un par un. Continuer ? (oui/non)"
-if ($confirmation -ne "oui") {
-    Write-Host "Test annulé." -ForegroundColor Yellow
-    exit 0
-}
+$confirmation = Read-Host "⚠️  Chaque modèle sera installé, testé puis supprimé. Continuer ? (oui/non)"
+if ($confirmation -ne "oui") { Write-Host "Test annulé." -ForegroundColor Yellow; exit 0 }
 
-$allResults = @()
+$allResults = [System.Collections.ArrayList]@()
 
 foreach ($model in $modelsToTest) {
     Write-Host ""
-    Write-Host "==============================================" -ForegroundColor Green
-    Write-Host "  TEST : $($model.Label)" -ForegroundColor Green
-    Write-Host "==============================================" -ForegroundColor Green
-    Write-Host ""
-    
+    Write-Host "=============================================" -ForegroundColor Cyan
+    Write-Host "  TEST : $($model.Label)" -ForegroundColor Cyan
+    Write-Host "=============================================" -ForegroundColor Cyan
+
     # 1. Vérifier l'espace disque
     $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
     $freeSpaceGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-    
+    Write-Host "💾 Espace libre : $freeSpaceGB GB (besoin : $($model.SizeGB + 2) GB)" -ForegroundColor Gray
+
     if ($freeSpaceGB -lt ($model.SizeGB + 2)) {
-        Write-Host "❌ Espace disque insuffisant ($freeSpaceGB GB libre, besoin de $($model.SizeGB + 2) GB)" -ForegroundColor Red
-        Write-Host "⏭️  Passage au modèle suivant..." -ForegroundColor Yellow
+        Write-Host "❌ Espace insuffisant — modèle ignoré." -ForegroundColor Red
         continue
     }
-    
-    # 2. Tester via API (pas besoin de télécharger pour HuggingFace)
-    Write-Host "🧪 Test via API HuggingFace..." -ForegroundColor Cyan
-    $responses = @()
-    $durations = @()
-    
-    foreach ($prompt in $model.TestPrompts) {
-        Write-Host "  Prompt: $prompt" -ForegroundColor Gray
-        $result = Test-HuggingFaceModel -ModelId $model.Name -Prompt $prompt -ApiKey $ApiKey
-        
+
+    # 2. Télécharger le modèle (avec mesure du temps)
+    Write-Host ""
+    Write-Host "📥 Téléchargement de $($model.Name) ($($model.SizeGB) GB)..." -ForegroundColor Yellow
+    Write-Host "   Astuce : ferme les autres apps pour maximiser la bande passante" -ForegroundColor DarkGray
+    $dlStart = Get-Date
+    ollama pull $($model.Name)
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ Échec du téléchargement." -ForegroundColor Red
+        continue
+    }
+    $dlSec = [math]::Round(((Get-Date) - $dlStart).TotalSeconds)
+    $dlMBps = [math]::Round(($model.SizeGB * 1024) / $dlSec, 1)
+    Write-Host "✅ Téléchargé en ${dlSec}s (~${dlMBps} MB/s)" -ForegroundColor Green
+
+    # 3. Envoyer les prompts de test
+    Write-Host ""
+    Write-Host "🧪 Envoi des prompts de test..." -ForegroundColor Cyan
+    $responses = [System.Collections.ArrayList]@()
+    $durations = [System.Collections.ArrayList]@()
+
+    foreach ($prompt in $testPrompts) {
+        Write-Host "  → $prompt" -ForegroundColor Gray
+        $result = Invoke-OllamaPrompt -ModelName $model.Name -Prompt $prompt
+
         if ($result.Success) {
-            Write-Host "  ✅ Réponse en $([math]::Round($result.Duration, 2))s" -ForegroundColor Green
-            $responses += $result.Response
-            $durations += $result.Duration
-            
-            # Afficher un extrait de la réponse
-            $preview = if ($result.Response.Length -gt 100) { $result.Response.Substring(0, 100) + "..." } else { $result.Response }
-            Write-Host "     $preview" -ForegroundColor DarkGray
+            $null = $responses.Add($result.Response)
+            $null = $durations.Add($result.Duration)
+            $preview = if ($result.Response.Length -gt 120) { $result.Response.Substring(0, 120) + "..." } else { $result.Response }
+            Write-Host "  ✅ $([math]::Round($result.Duration, 1))s  |  $preview" -ForegroundColor DarkGray
         } else {
             Write-Host "  ❌ Erreur: $($result.Error)" -ForegroundColor Red
         }
         Write-Host ""
     }
-    
-    # 3. Noter le modèle
+
+    # 4. Notation interactive
     if ($responses.Count -gt 0) {
-        $scoreResult = Score-Model -Label $model.Label -Responses $responses -Durations $durations
-        $allResults += $scoreResult
-        
+        $scoreResult = Get-ModelRating -Label $model.Label -Responses $responses -Durations $durations
+        $null = $allResults.Add($scoreResult)
         Write-Host ""
-        Write-Host "📊 Score pour $($model.Label) : $($scoreResult.TotalScore)/100" -ForegroundColor Cyan
+        Write-Host "📊 Score $($model.Label) : $($scoreResult.TotalScore)/100" -ForegroundColor Cyan
     } else {
-        Write-Host "⚠️  Aucune réponse valide pour $($model.Label)" -ForegroundColor Yellow
+        Write-Host "⚠️  Aucune réponse valide — pas de notation." -ForegroundColor Yellow
     }
-    
+
+    # 5. Supprimer le modèle pour libérer l'espace
     Write-Host ""
-    Write-Host "✅ $($model.Label) testé et noté !" -ForegroundColor Green
-    Write-Host "   (Le modèle n'est pas stocké localement - test via API)" -ForegroundColor Gray
+    Write-Host "🗑️  Suppression de $($model.Name)..." -ForegroundColor Yellow
+    ollama rm $($model.Name) 2>&1 | Out-Null
+    Write-Host "✅ Modèle supprimé." -ForegroundColor Green
+
     Write-Host ""
-    
-    # Pause avant le suivant
-    Read-Host "Appuyez sur Entrée pour passer au modèle suivant..."
+    Read-Host "Appuyez sur Entrée pour continuer avec le modèle suivant..."
 }
 
-# 4. Sauvegarder tous les résultats
-Save-Results -Results $allResults
+# 6. Sauvegarder les résultats
+Save-TestResults -Results $allResults
 
-# 5. Afficher le classement
+# 7. Classement final
 Write-Host ""
 Write-Host "=== CLASSEMENT FINAL ===" -ForegroundColor Green
 Write-Host ""
 
+if ($allResults.Count -eq 0) {
+    Write-Host "⚠️  Aucun modèle testé avec succès." -ForegroundColor Yellow
+    exit 0
+}
+
 $ranking = $allResults | Sort-Object -Property TotalScore -Descending
 $position = 1
 foreach ($result in $ranking) {
-    $color = if ($position -eq 1) { "Green" } elseif ($position -eq 2) { "Yellow" } else { "Gray" }
-    Write-Host "$position. $($result.Model) - Score: $($result.TotalScore)/100" -ForegroundColor $color
+    $color = switch ($position) { 1 { "Green" } 2 { "Yellow" } default { "Gray" } }
+    Write-Host "$position. $($result.Model) — Score: $($result.TotalScore)/100" -ForegroundColor $color
     Write-Host "   Qualité: $($result.Quality)/10 | Vitesse: $($result.Speed)/10 | Pertinence: $($result.Relevance)/10" -ForegroundColor Gray
-    if ($result.Notes) {
-        Write-Host "   Notes: $($result.Notes)" -ForegroundColor DarkGray
-    }
+    if ($result.Notes) { Write-Host "   Notes: $($result.Notes)" -ForegroundColor DarkGray }
     Write-Host ""
     $position++
 }
 
+$winner = $ranking[0]
+Write-Host "🏆 Gagnant : $($winner.Model)" -ForegroundColor Green
 Write-Host ""
-Write-Host "🏆 Gagnant : $($ranking[0].Model)" -ForegroundColor Green
-Write-Host ""
-Write-Host "Prochaines étapes :" -ForegroundColor Cyan
-Write-Host "1. Utilisez cleanup-hf-models.ps1 pour installer le gagnant en local" -ForegroundColor White
-Write-Host "2. Configurez le modèle dans Settings du plugin" -ForegroundColor White
+Write-Host "Pour installer définitivement le gagnant :" -ForegroundColor Cyan
+Write-Host "  ollama pull $($winner.Model.ToLower() -replace ' .*','') # à adapter selon le label" -ForegroundColor White
 Write-Host ""
