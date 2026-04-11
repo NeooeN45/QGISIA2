@@ -553,6 +553,53 @@ export const LOCAL_MODEL_PRESETS: ModelPreset[] = [
   },
 ];
 
+/**
+ * Modèles HuggingFace API disponibles (comme Gemma 4)
+ * Ces modèles nécessitent une clé API HuggingFace
+ */
+export const HUGGINGFACE_MODEL_PRESETS = [
+  {
+    id: "google/gemma-4-4b-it",
+    label: "Gemma 4 4B (HF)",
+    description: "Gemma 4 via HuggingFace API — Multimodal, testez la variante 4B !",
+    category: "huggingface",
+    vram: "API Cloud",
+    ramMinGb: 0,
+    vramMinGb: 0,
+    tags: ["gemma4", "multimodal", "api"],
+  },
+  {
+    id: "google/gemma-4-9b-it",
+    label: "Gemma 4 9B (HF)",
+    description: "Gemma 4 via HuggingFace API — Version standard 9B.",
+    category: "huggingface",
+    vram: "API Cloud",
+    ramMinGb: 0,
+    vramMinGb: 0,
+    tags: ["gemma4", "multimodal", "api"],
+  },
+  {
+    id: "google/gemma-4-12b-it",
+    label: "Gemma 4 12B (HF)",
+    description: "Gemma 4 via HuggingFace API — Version avancée 12B.",
+    category: "huggingface",
+    vram: "API Cloud",
+    ramMinGb: 0,
+    vramMinGb: 0,
+    tags: ["gemma4", "multimodal", "api"],
+  },
+  {
+    id: "google/gemma-4-27b-it",
+    label: "Gemma 4 27B (HF)",
+    description: "Gemma 4 via HuggingFace API — Version maximale 27B.",
+    category: "huggingface",
+    vram: "API Cloud",
+    ramMinGb: 0,
+    vramMinGb: 0,
+    tags: ["gemma4", "multimodal", "api"],
+  },
+];
+
 export const OPENROUTER_ROLE_PRESETS = {
   planner: [
     {
