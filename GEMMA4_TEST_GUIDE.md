@@ -1,16 +1,18 @@
-# Guide de Test : Comparer les Versions de Gemma 4
+# Guide de Test : Comparer les Versions de Gemma 2
 
 ## 🎯 Objectif
-Trouver la meilleure version de Gemma 4 pour QGISAI+ en testant la qualité et la performance.
+Trouver la meilleure version de Gemma 2 pour QGISAI+ en testant la qualité et la performance.
 
 ## 📋 Versions à Tester
 
 | Version | Taille | RAM Min | Vitesse | Qualité | Idéal Pour |
 |---------|--------|---------|---------|---------|------------|
-| **gemma4:4b** | ~2.5GB | 6GB | ⚡ Très rapide | ⭐⭐⭐⭐ Bonne | Machines modestes, réponses rapides |
-| **gemma4:9b** | ~5.5GB | 12GB | ⚡ Rapide | ⭐⭐⭐⭐⭐ Excellente | Compromis idéal qualité/vitesse |
-| **gemma4:12b** | ~7.5GB | 16GB | 🚀 Modérée | ⭐⭐⭐⭐⭐⭐ Supérieure | Meilleure qualité, machines puissantes |
-| **gemma4:27b** | ~17GB | 32GB | 🐢 Lente | ⭐⭐⭐⭐⭐⭐⭐ Maximale | Qualité maximale, stations de travail |
+| **gemma2:2b** | ~1.6GB | 4GB | ⚡⚡ Ultra rapide | ⭐⭐⭐ Bonne | Très légère, réponses instantanées |
+| **gemma2:4b** | ~2.5GB | 6GB | ⚡ Très rapide | ⭐⭐⭐⭐ Très bonne | Machines modestes, réponses rapides |
+| **gemma2:9b** | ~5.5GB | 12GB | ⚡ Rapide | ⭐⭐⭐⭐⭐ Excellente | Compromis idéal qualité/vitesse |
+| **gemma2:27b** | ~17GB | 32GB | 🐢 Lente | ⭐⭐⭐⭐⭐⭐⭐ Maximale | Qualité maximale, stations de travail |
+
+**Note** : Gemma 4 n'est pas encore disponible sur Ollama. Gemma 2 est la dernière version.
 
 ## 🧪 Scénarios de Test
 
@@ -80,19 +82,19 @@ La version avec le score le plus élevé sera la meilleure pour ton usage.
 
 ## 📈 Interprétation des Résultats
 
-### Si gemma4:4b gagne
-✅ **Parfait pour** : Ordinateurs portables, réponses rapides, tâches simples
-⚠️ **Limites** : Complexité limitée, pas de tâches très avancées
+### Si gemma2:2b gagne
+✅ **Parfait pour** : Très légère, réponses ultra-rapides, machines modestes
+⚠️ **Limites** : Qualité acceptable mais pas excellente
 
-### Si gemma4:9b gagne
+### Si gemma2:4b gagne
+✅ **Parfait pour** : Ordinateurs portables, réponses rapides, tâches simples
+⚠️ **Limites** : Complexité limitée pour les très grosses analyses
+
+### Si gemma2:9b gagne
 ✅ **Parfait pour** : Compromis idéal, usage quotidien professionnel
 ⚠️ **Limites** : Très rarement - c'est le "sweet spot"
 
-### Si gemma4:12b gagne
-✅ **Parfait pour** : Utilisation intensive, code complexe, analyse approfondie
-⚠️ **Limites** : Nécessite une machine puissante (16GB+ RAM)
-
-### Si gemma4:27b gagne
+### Si gemma2:27b gagne
 ✅ **Parfait pour** : Qualité maximale, stations de travail haut de gamme
 ⚠️ **Limites** : Très lent, consommateur de ressources, overkill pour la plupart
 
@@ -102,10 +104,10 @@ Une fois le gagnant identifié, supprime les autres versions pour libérer de l'
 
 ```powershell
 # Dans PowerShell, exécutez :
-ollama rm gemma4:4b    # Si 9b, 12b ou 27b gagne
-ollama rm gemma4:9b    # Si 12b ou 27b gagne  
-ollama rm gemma4:12b   # Si 27b gagne
-ollama rm gemma4:27b   # Si 4b, 9b ou 12b gagne
+ollama rm gemma2:2b    # Si 4b, 9b ou 27b gagne
+ollama rm gemma2:4b    # Si 9b ou 27b gagne  
+ollama rm gemma2:9b    # Si 27b gagne
+ollama rm gemma2:27b   # Si 2b, 4b ou 9b gagne
 
 # Supprimer aussi les autres gros modèles si présents
 ollama rm mixtral:8x7b       # 47GB
@@ -132,8 +134,8 @@ numGpu: -1           # Auto-détection GPU
 
 Copie ce tableau pour noter tes résultats :
 
-| Test | 4b | 9b | 12b | 27b |
-|------|----|----|-----|-----|
+| Test | 2b | 4b | 9b | 27b |
+|------|----|----|----|-----|
 | 1. Simple QGIS | Q:_, V:_, C:_, Code:_ | ... | ... | ... |
 | 2. Code PyQGIS | Q:_, V:_, C:_, Code:_ | ... | ... | ... |
 | 3. Analyse Complexe | Q:_, V:_, C:_, Code:_ | ... | ... | ... |
@@ -145,3 +147,17 @@ Copie ce tableau pour noter tes résultats :
 ---
 
 💡 **Astuce** : La version 9B est généralement le meilleur compromis pour la plupart des utilisateurs.
+
+## 🔄 Alternative : Utiliser le Script PowerShell
+
+Tu peux aussi utiliser les scripts fournis :
+
+### 1. Installer toutes les versions
+```powershell
+.\install-gemma4-versions.ps1
+```
+
+### 2. Nettoyer et garder le gagnant
+```powershell
+.\cleanup-models.ps1 -KeepModel "gemma2:9b"
+```

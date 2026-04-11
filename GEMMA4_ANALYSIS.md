@@ -25,28 +25,29 @@ export async function pullOllamaModel(
 }
 ```
 
-## 🎯 Analyse de Gemma 4 comme Meilleur Modèle
+## 🎯 Analyse de Gemma 2 comme Meilleur Modèle
 
-### Pourquoi Gemma 4 est Idéal pour le Plugin
+**⚠️ Mise à jour importante** : Gemma 4 n'est pas encore disponible sur Ollama. La dernière version disponible est **Gemma 2**.
 
-| Critère | Gemma 4 | Autres Modèles |
+### Pourquoi Gemma 2 est Idéal pour le Plugin
+
+| Critère | Gemma 2 | Autres Modèles |
 |---------|---------|------------------|
-| **Taille optimale** | 4B, 9B, 12B, 27B | Mixtral 8x7B = 47GB, Llama 70B = 40GB+ |
-| **Multimodal natif** | ✅ Images + texte | ❌ La plupart sont texte seul |
-| **Code Python** | Excellente capacité | Variable |
-| **Français** | Très bon | Dépend du modèle |
+| **Taille optimale** | 2B, 4B, 9B, 27B | Mixtral 8x7B = 47GB, Llama 70B = 40GB+ |
+| **Performance** | ✅ Excellente | Variable |
+| **Code Python** | Très bonne capacité | Variable |
+| **Français** | Bon | Dépend du modèle |
 | **Licence** | Open (Google) | Mixte |
 | **Contexte** | Jusqu'à 128K tokens | Souvent 8K-32K |
 
-### Recommandation de la Variante "E"
+### Recommandation des Variantes
 
-La variante "E" mentionnée correspond probablement à :
-- **`gemma4:4b`** - Version standard (recommandée pour QGIS)
-- **`gemma4:9b`** - Meure performance
-- **`gemma4:12b`** - Excellent compromis
-- **`gemma4:27b`** - Maximum de qualité (nécessite 32GB+ RAM)
+- **`gemma2:2b`** - Ultra-légère, réponses instantanées (4GB+ RAM)
+- **`gemma2:4b`** - Version standard recommandée pour QGIS (6GB+ RAM)
+- **`gemma2:9b`** - Meilleur compromis qualité/performance (12GB+ RAM)
+- **`gemma2:27b`** - Maximum de qualité (32GB+ RAM)
 
-**⚠️ Erreur courante** : Le nom exact sur Ollama est `gemma4` (pas `gemma-4` ou `gemma_4`).
+**⚠️ Note** : Gemma 2 est la dernière version stable. Gemma 4 sera disponible prochainement sur Ollama.
 
 ## 🔧 Corrections Nécessaires
 
@@ -78,12 +79,12 @@ const controller = new AbortController();
 const timeoutId = setTimeout(() => controller.abort(), 30 * 60 * 1000); // 30 min
 ```
 
-## 📊 Configuration Optimale Recommandée pour Gemma 4
+## 📊 Configuration Optimale Recommandée pour Gemma 2
 
 ```typescript
 // Paramètres recommandés dans settings.ts
-const GEMMA4_OPTIMAL_SETTINGS = {
-  model: "gemma4:4b",  // ou 9b/12b selon RAM
+const GEMMA2_OPTIMAL_SETTINGS = {
+  model: "gemma2:4b",  // ou 2b/9b/27b selon RAM
   temperature: 0.7,     // Créatif mais cohérent
   topP: 0.95,          // Diversité conservée
   maxTokens: 8192,     // Réponses complètes

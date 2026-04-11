@@ -1,0 +1,12 @@
+# Configuration locale pour QGISAI+
+# Généré automatiquement après test des versions Gemma 4
+
+RECOMMENDED_MODEL=gemma4:9b
+MODEL_TESTED=true
+TEST_DATE=2026-04-11
+
+# Paramètres optimaux pour gemma4:9b
+TEMPERATURE=0.7
+TOP_P=0.95
+MAX_TOKENS=8192
+NUM_GPU=-1

@@ -19,11 +19,12 @@ try {
 }
 
 # Liste des versions à tester
+# Note : Gemma 2 est la dernière version disponible (pas Gemma 4 encore)
 $versions = @(
-    @{ Name = "gemma4:4b"; Description = "Version légère (4B params, ~2.5GB)"; RAM = "6GB+" }
-    @{ Name = "gemma4:9b"; Description = "Version standard (9B params, ~5.5GB)"; RAM = "12GB+" }
-    @{ Name = "gemma4:12b"; Description = "Version avancée (12B params, ~7.5GB)"; RAM = "16GB+" }
-    @{ Name = "gemma4:27b"; Description = "Version maximale (27B params, ~17GB)"; RAM = "32GB+" }
+    @{ Name = "gemma2:2b"; Description = "Version ultra-légère (2B params, ~1.6GB)"; RAM = "4GB+" }
+    @{ Name = "gemma2:4b"; Description = "Version légère (4B params, ~2.5GB)"; RAM = "6GB+" }
+    @{ Name = "gemma2:9b"; Description = "Version standard (9B params, ~5.5GB)"; RAM = "12GB+" }
+    @{ Name = "gemma2:27b"; Description = "Version maximale (27B params, ~17GB)"; RAM = "32GB+" }
 )
 
 Write-Host ""

@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet("gemma4:4b", "gemma4:9b", "gemma4:12b", "gemma4:27b")]
+    [ValidateSet("gemma2:2b", "gemma2:4b", "gemma2:9b", "gemma2:27b")]
     [string]$KeepModel
 )
 
@@ -25,7 +25,7 @@ try {
 }
 
 # Liste des modèles à supprimer (tous sauf le gagnant)
-$gemmaVersions = @("gemma4:4b", "gemma4:9b", "gemma4:12b", "gemma4:27b")
+$gemmaVersions = @("gemma2:2b", "gemma2:4b", "gemma2:9b", "gemma2:27b")
 $modelsToRemove = $gemmaVersions | Where-Object { $_ -ne $KeepModel }
 
 # Autres gros modèles à supprimer
