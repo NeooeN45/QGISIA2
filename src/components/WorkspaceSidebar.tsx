@@ -34,6 +34,14 @@ import {
   MessageSquare,
   Database,
   Network,
+  Filter,
+  X,
+  Wrench,
+  Building2,
+  AlertTriangle,
+  FileText,
+  BookOpen,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,8 +49,6 @@ import { cn } from "@/src/lib/utils";
 
 import { ChatConversation, LayerContextScope } from "../lib/chat-history";
 import {
-  ALL_DATA_SOURCES,
-  CARTOGRAPHIC_CATALOG,
   RemoteServiceConfig,
   RemoteServiceType,
   SUPPORTED_REMOTE_SERVICE_TYPES,
@@ -250,6 +256,57 @@ function CollapsibleSection({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SERVICES TAB — META & HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type ServicesSubTab = "catalog" | "favorites" | "tools" | "custom";
+type ServiceTypeFilter = "all" | "WMS" | "WMTS" | "WFS" | "XYZ";
+
+const CATEGORY_META: Record<string, { icon: ReactNode; tone: string; ring: string }> = {
+  base: { icon: <Map size={13} />, tone: "text-cyan-600 dark:text-cyan-300", ring: "ring-cyan-500/20" },
+  topographic: { icon: <Mountain size={13} />, tone: "text-amber-600 dark:text-amber-300", ring: "ring-amber-500/20" },
+  satellite: { icon: <Globe size={13} />, tone: "text-sky-600 dark:text-sky-300", ring: "ring-sky-500/20" },
+  lidar: { icon: <Layers3 size={13} />, tone: "text-violet-600 dark:text-violet-300", ring: "ring-violet-500/20" },
+  administrative: { icon: <Building2 size={13} />, tone: "text-blue-600 dark:text-blue-300", ring: "ring-blue-500/20" },
+  infrastructure: { icon: <Network size={13} />, tone: "text-fuchsia-600 dark:text-fuchsia-300", ring: "ring-fuchsia-500/20" },
+  forestry: { icon: <TreePine size={13} />, tone: "text-emerald-600 dark:text-emerald-300", ring: "ring-emerald-500/20" },
+  risks: { icon: <AlertTriangle size={13} />, tone: "text-red-600 dark:text-red-300", ring: "ring-red-500/20" },
+  biodiversity: { icon: <Leaf size={13} />, tone: "text-green-600 dark:text-green-300", ring: "ring-green-500/20" },
+  urbanPlanning: { icon: <FileText size={13} />, tone: "text-indigo-600 dark:text-indigo-300", ring: "ring-indigo-500/20" },
+  hydrography: { icon: <Waves size={13} />, tone: "text-blue-500 dark:text-blue-300", ring: "ring-blue-400/20" },
+  landcover: { icon: <MapPin size={13} />, tone: "text-orange-600 dark:text-orange-300", ring: "ring-orange-500/20" },
+  demography: { icon: <Database size={13} />, tone: "text-slate-600 dark:text-slate-300", ring: "ring-slate-500/20" },
+};
+
+const SERVICE_TYPE_BADGE: Record<string, string> = {
+  WMS: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  WMTS: "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+  WFS: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  XYZ: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  WCS: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  TMS: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  ArcGISMapServer: "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  ArcGISFeatureServer: "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+};
+
+const FAVORITE_SERVICES_KEY = "qgisia-favorite-services";
+
+function loadFavoriteServiceIds(): string[] {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(FAVORITE_SERVICES_KEY) : null;
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistFavoriteServiceIds(ids: string[]) {
+  try {
+    if (typeof window !== "undefined") window.localStorage.setItem(FAVORITE_SERVICES_KEY, JSON.stringify(ids));
+  } catch {}
+}
+
 const COMMON_CRS = [
   { code: "EPSG:2154", label: "RGF93 / Lambert-93 (France)" },
   { code: "EPSG:4326", label: "WGS 84 (lat/lon)" },
@@ -302,22 +359,8 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   const [conversationQuery, setConversationQuery] = useState("");
   const [layerQuery, setLayerQuery] = useState("");
   const [serviceQuery, setServiceQuery] = useState("");
-  const [selectedCatalogId, setSelectedCatalogId] = useState(CARTOGRAPHIC_CATALOG[0]?.id || "");
   const [selectedCrs, setSelectedCrs] = useState("EPSG:2154");
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-    base: true,
-    forestry: true,
-    topographic: false,
-    satellite: false,
-    environmental: false,
-    administrative: false,
-    geology: false,
-    infrastructure: false,
-    urban: false,
-    soil: false,
-    demography: false,
-  });
   const [opacityDrafts, setOpacityDrafts] = useState<Record<string, number>>({});
   const [serviceDraft, setServiceDraft] =
     useState<CustomServiceDraft>(DEFAULT_SERVICE_DRAFT);
@@ -364,6 +407,75 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   );
   const [inventoryClipToSource, setInventoryClipToSource] = useState(true);
 
+  // Services tab — sub-tabs, filters, favorites
+  const [servicesSubTab, setServicesSubTab] = useState<ServicesSubTab>("catalog");
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<ServiceTypeFilter>("all");
+  const [reliableOnly, setReliableOnly] = useState(true);
+  const [favoriteServiceIds, setFavoriteServiceIds] = useState<string[]>(() => loadFavoriteServiceIds());
+  const [addingServiceId, setAddingServiceId] = useState<string | null>(null);
+  const [collapsedCatalogCategories, setCollapsedCatalogCategories] = useState<Record<string, boolean>>({});
+
+  const toggleFavoriteService = (id: string) => {
+    setFavoriteServiceIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      persistFavoriteServiceIds(next);
+      return next;
+    });
+  };
+
+  const handleAddServiceCard = async (source: import("../lib/catalog").CatalogItem) => {
+    setAddingServiceId(source.id);
+    try {
+      await onAddRemoteService(source);
+      toast.success(`${source.name} ajouté à la carte`);
+    } catch (err) {
+      toast.error(`Échec : ${err instanceof Error ? err.message : "service indisponible"}`);
+    } finally {
+      setAddingServiceId(null);
+    }
+  };
+
+  const allServiceSourcesFlat = useMemo(() => {
+    return Object.entries(DATA_SOURCE_CATEGORIES).flatMap(([key, cat]) =>
+      cat.sources.map((s) => ({ source: s, categoryKey: key })),
+    );
+  }, []);
+
+  const filteredServiceSources = useMemo(() => {
+    const q = serviceQuery.toLowerCase().trim();
+    return allServiceSourcesFlat.filter(({ source }) => {
+      if (reliableOnly && !source.reliable) return false;
+      if (serviceTypeFilter !== "all" && source.serviceType !== serviceTypeFilter) return false;
+      if (q) {
+        const hay = `${source.name} ${source.provider ?? ""} ${source.description ?? ""} ${source.id}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allServiceSourcesFlat, serviceQuery, reliableOnly, serviceTypeFilter]);
+
+  const filteredByCategory = useMemo(() => {
+    const grouped: Record<string, { name: string; description: string; sources: import("../lib/catalog").CatalogItem[] }> = {};
+    for (const { source, categoryKey } of filteredServiceSources) {
+      const cat = DATA_SOURCE_CATEGORIES[categoryKey as keyof typeof DATA_SOURCE_CATEGORIES];
+      if (!grouped[categoryKey]) {
+        grouped[categoryKey] = { name: cat.name, description: cat.description, sources: [] };
+      }
+      grouped[categoryKey].sources.push(source);
+    }
+    return grouped;
+  }, [filteredServiceSources]);
+
+  const favoriteSources = useMemo(() => {
+    return allServiceSourcesFlat
+      .filter(({ source }) => favoriteServiceIds.includes(source.id))
+      .map(({ source }) => source);
+  }, [allServiceSourcesFlat, favoriteServiceIds]);
+
+  const toggleCatalogCategory = (key: string) => {
+    setCollapsedCatalogCategories((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const toggleFavorite = useFavoriteLayersStore((s) => s.toggleFavorite);
   const isFavorite = useFavoriteLayersStore((s) => s.isFavorite);
 
@@ -404,34 +516,6 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
         .includes(query),
     );
   }, [conversationQuery, conversations]);
-
-  type DataSourceCategories = typeof DATA_SOURCE_CATEGORIES;
-  const filteredSources = useMemo((): Partial<DataSourceCategories> => {
-    const q = serviceQuery.toLowerCase().trim();
-    if (!q) return DATA_SOURCE_CATEGORIES;
-    const result: Partial<DataSourceCategories> = {};
-    (Object.keys(DATA_SOURCE_CATEGORIES) as Array<keyof DataSourceCategories>).forEach((key) => {
-      const category = DATA_SOURCE_CATEGORIES[key];
-      const matched = category.sources.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.provider?.toLowerCase().includes(q) ||
-          s.description?.toLowerCase().includes(q) ||
-          s.id.toLowerCase().includes(q),
-      );
-      if (matched.length > 0) {
-        result[key] = { ...category, sources: matched } as DataSourceCategories[typeof key];
-      }
-    });
-    return result;
-  }, [serviceQuery]);
-
-  const toggleCategory = (categoryId: string) => {
-    setExpandedCategories((prev) => ({
-      ...prev,
-      [categoryId]: !prev[categoryId],
-    }));
-  };
 
   const rasterLayers = useMemo(
     () => layers.filter((layer) => layer.type.toLowerCase() === "raster"),
@@ -944,12 +1028,6 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   const toggleSection = (key: string) =>
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const handleAddCatalogSource = async () => {
-    const item = ALL_DATA_SOURCES.find((c) => c.id === selectedCatalogId);
-    if (!item) return;
-    await onAddRemoteService(item);
-  };
-
   const handleSetProjectCrs = async () => {
     const result = await setProjectCrs(selectedCrs);
     if (result) {
@@ -968,78 +1046,342 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     { label: "Sentiers", query: '[out:json][timeout:25];\narea[name="Bretagne"]->.a;\n(way[highway=footway](area.a);way[highway=path](area.a););\nout geom;', layerName: "Sentiers_OSM" },
   ];
 
-  const renderServicesTab = () => (
-    <div className="space-y-4">
-      {/* ── Sources officielles ── */}
-      <CollapsibleSection
-        title="Sources officielles"
-        accentClassName="text-emerald-600 dark:text-emerald-300/80"
-        icon={<TreePine size={14} />}
-        isOpen={expandedSections["sources"] ?? true}
-        onToggle={() => toggleSection("sources")}
+  // ─────────────────────────────────────────────────────────────────────────
+  // SERVICES TAB — Premium UI: Catalogue / Favoris / Outils / Custom
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const renderServiceCard = (source: import("../lib/catalog").CatalogItem) => {
+    const isFav = favoriteServiceIds.includes(source.id);
+    const isLoading = addingServiceId === source.id;
+    const typeBadge = SERVICE_TYPE_BADGE[source.serviceType] ?? "border-gray-500/30 bg-gray-500/10 text-gray-700";
+    return (
+      <div
+        key={source.id}
+        className="group relative flex flex-col rounded-2xl border border-gray-200 dark:border-white/[0.07] bg-white/70 dark:bg-white/[0.025] p-3 transition-all duration-200 hover:border-cyan-400/40 dark:hover:border-cyan-500/30 hover:shadow-md hover:shadow-cyan-500/10"
       >
-        <div className="relative mb-3">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 dark:text-gray-300/30" size={14} />
+        <div className="flex items-start gap-2 mb-2">
+          <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+            <span className={cn("rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider", typeBadge)}>
+              {source.serviceType}
+            </span>
+            {source.reliable ? (
+              <span className="inline-flex items-center gap-0.5 rounded-full border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-green-700 dark:text-green-300" title="Source vérifiée fiable">
+                <ShieldCheck size={9} />Fiable
+              </span>
+            ) : (
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 dark:text-amber-300" title="Beta — non testée">
+                β Beta
+              </span>
+            )}
+            {source.requiresKey && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 dark:text-amber-300" title="Clé API requise">
+                🔑
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => toggleFavoriteService(source.id)}
+            className={cn(
+              "shrink-0 rounded-lg p-1 transition-all",
+              isFav ? "text-amber-400" : "text-gray-300 dark:text-white/20 hover:text-amber-400",
+            )}
+            title={isFav ? "Retirer des favoris" : "Ajouter aux favoris"}
+          >
+            <Star size={12} className={isFav ? "fill-current" : ""} />
+          </button>
+        </div>
+        <p className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-100 leading-tight mb-0.5 line-clamp-2">
+          {source.name}
+        </p>
+        <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-white/35 mb-2">
+          {source.provider}
+        </p>
+        {source.description ? (
+          <p className="text-[11px] text-gray-600 dark:text-white/45 line-clamp-2 mb-2.5 flex-1">
+            {source.description}
+          </p>
+        ) : (
+          <div className="flex-1" />
+        )}
+        <button
+          onClick={() => void handleAddServiceCard(source)}
+          disabled={isLoading}
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-cyan-500/30 bg-gradient-to-r from-cyan-500/12 to-cyan-600/8 px-2 py-1.5 text-[11px] font-bold text-cyan-700 dark:text-cyan-300 transition-all hover:from-cyan-500/22 hover:to-cyan-600/15 hover:shadow-md hover:shadow-cyan-500/15 disabled:opacity-50 disabled:cursor-wait"
+        >
+          {isLoading ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+          {isLoading ? "Chargement..." : "Ajouter à la carte"}
+        </button>
+      </div>
+    );
+  };
+
+  const renderCatalogSubTab = () => {
+    const totalVisible = filteredServiceSources.length;
+    const totalAll = allServiceSourcesFlat.length;
+    const reliableCount = allServiceSourcesFlat.filter(({ source }) => source.reliable).length;
+    const filterChips: Array<{ id: ServiceTypeFilter; label: string }> = [
+      { id: "all", label: "Tous" },
+      { id: "WMS", label: "WMS" },
+      { id: "WMTS", label: "WMTS" },
+      { id: "WFS", label: "WFS" },
+      { id: "XYZ", label: "XYZ" },
+    ];
+    return (
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30" size={14} />
           <input
             value={serviceQuery}
             onChange={(e) => setServiceQuery(e.target.value)}
-            placeholder="Rechercher une source (forêt, RUM, géologie...)"
-            className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 py-2 pl-9 pr-3 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/28 focus:border-emerald-500/40"
+            placeholder="Rechercher (nom, fournisseur, thème...)"
+            className="w-full rounded-2xl border border-gray-200 dark:border-white/[0.07] bg-gray-50 dark:bg-white/[0.03] py-2 pl-9 pr-9 text-[13px] text-gray-700 dark:text-gray-200 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-white/30 focus:border-cyan-400/50 focus:bg-white dark:focus:bg-white/[0.05]"
           />
+          {serviceQuery && (
+            <button
+              onClick={() => setServiceQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/60"
+            >
+              <X size={12} />
+            </button>
+          )}
         </div>
-        <div className="space-y-3">
-          {(Object.entries(filteredSources) as Array<[keyof DataSourceCategories, { name: string; description: string; sources: import("../lib/catalog").CatalogItem[] }]>).map(([categoryId, category]) => (
-            <div key={categoryId} className="rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900">
-              <button
-                onClick={() => toggleCategory(categoryId)}
-                className="flex w-full items-center justify-between rounded-t-2xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:bg-gray-800"
-              >
-                <div className="flex items-center gap-2">
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform ${expandedCategories[categoryId] ? 'rotate-180' : ''}`}
-                  />
-                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{category.name}</span>
-                  <span className="text-[10px] text-gray-700 dark:text-gray-300/40">({category.sources.length})</span>
-                </div>
-              </button>
-              {expandedCategories[categoryId] && (
-                <div className="space-y-2 p-3 pt-1">
-                  <p className="text-[11px] text-gray-700 dark:text-gray-300/40 italic">{category.description}</p>
-                  {category.sources.map((source) => (
-                    <div key={source.id} className="rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-200 dark:bg-gray-800 p-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-200">
-                          {source.serviceType}
-                        </span>
-                        {source.requiresKey && (
-                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
-                            🔑 Clé API
-                          </span>
-                        )}
-                        {source.reliable && (
-                          <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:text-green-300">
-                            ✓ Fiable
-                          </span>
-                        )}
-                        <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-300">{source.name}</p>
-                      </div>
-                      <p className="mt-1 text-xs text-gray-700 dark:text-gray-300/40">{source.provider} — {source.description}</p>
-                      <button
-                        onClick={() => void onAddRemoteService(source)}
-                        className="mt-2 rounded-xl border border-emerald-500/25 bg-emerald-500/12 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-emerald-500/18"
-                      >
-                        {source.requiresKey ? "🔑 Configurer clé" : "Ajouter"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <Filter size={11} className="shrink-0 text-gray-400 dark:text-white/30" />
+          {filterChips.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setServiceTypeFilter(id)}
+              className={cn(
+                "shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-all",
+                serviceTypeFilter === id
+                  ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-700 dark:text-cyan-300"
+                  : "border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] text-gray-500 dark:text-white/40 hover:border-cyan-400/30 hover:text-cyan-600 dark:hover:text-cyan-300",
               )}
-            </div>
+            >
+              {label}
+            </button>
           ))}
         </div>
-      </CollapsibleSection>
 
+        <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-white/[0.02] px-3 py-2">
+          <label className="flex items-center gap-2 cursor-pointer text-[11px] font-medium text-gray-600 dark:text-white/55">
+            <input
+              type="checkbox"
+              checked={reliableOnly}
+              onChange={(e) => setReliableOnly(e.target.checked)}
+              className="h-3.5 w-3.5 accent-green-500"
+            />
+            <ShieldCheck size={12} className="text-green-500" />
+            Sources fiables uniquement
+          </label>
+          <span className="text-[10px] tabular-nums text-gray-400 dark:text-white/30">
+            {totalVisible} / {reliableOnly ? reliableCount : totalAll}
+          </span>
+        </div>
+
+        {totalVisible === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/[0.07] bg-gray-50/60 dark:bg-white/[0.01] p-6 text-center">
+            <BookOpen size={22} className="mx-auto mb-2 text-gray-300 dark:text-white/20" />
+            <p className="text-[12px] text-gray-400 dark:text-white/30">Aucun résultat</p>
+            <p className="mt-1 text-[10px] text-gray-400 dark:text-white/25">
+              Essaie de désactiver « Fiables uniquement » ou modifier ta recherche.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {Object.entries(filteredByCategory).map(([catKey, cat]) => {
+              const meta = CATEGORY_META[catKey] ?? { icon: <Database size={13} />, tone: "text-gray-500", ring: "ring-gray-500/20" };
+              const isCollapsed = collapsedCatalogCategories[catKey];
+              return (
+                <div key={catKey} className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50/40 dark:bg-white/[0.015] overflow-hidden">
+                  <button
+                    onClick={() => toggleCatalogCategory(catKey)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left transition-all hover:bg-gray-100/50 dark:hover:bg-white/[0.03]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={cn("flex h-6 w-6 items-center justify-center rounded-lg ring-1", meta.tone, meta.ring)}>
+                        {meta.icon}
+                      </span>
+                      <div>
+                        <p className="text-[11.5px] font-bold text-gray-700 dark:text-gray-200">{cat.name}</p>
+                        <p className="text-[9px] text-gray-400 dark:text-white/30">{cat.sources.length} source{cat.sources.length > 1 ? "s" : ""}</p>
+                      </div>
+                    </div>
+                    <ChevronDown size={13} className={cn("text-gray-400 dark:text-white/30 transition-transform", isCollapsed ? "" : "rotate-180")} />
+                  </button>
+                  {!isCollapsed && (
+                    <div className="grid grid-cols-2 gap-2 border-t border-gray-200 dark:border-white/[0.05] p-2">
+                      {cat.sources.map((s) => renderServiceCard(s))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderFavoritesSubTab = () => {
+    if (favoriteSources.length === 0) {
+      return (
+        <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/[0.07] bg-gray-50/60 dark:bg-white/[0.01] p-8 text-center">
+          <Star size={26} className="mx-auto mb-3 text-gray-300 dark:text-white/20" />
+          <p className="text-[13px] font-semibold text-gray-500 dark:text-white/40">Aucun favori</p>
+          <p className="mt-1.5 text-[11px] text-gray-400 dark:text-white/30 leading-relaxed">
+            Clique sur l'étoile d'une source<br />pour l'ajouter à tes favoris.
+          </p>
+        </div>
+      );
+    }
+    return (
+      <div className="grid grid-cols-2 gap-2">
+        {favoriteSources.map((s) => renderServiceCard(s))}
+      </div>
+    );
+  };
+
+  const renderCustomSubTab = () => (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/8 to-cyan-600/4 p-3.5">
+        <div className="flex items-start gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-300">
+            <Server size={15} />
+          </div>
+          <div>
+            <p className="text-[12px] font-bold text-gray-800 dark:text-gray-100">Service personnalisé</p>
+            <p className="mt-0.5 text-[10.5px] text-gray-500 dark:text-white/45 leading-relaxed">
+              Connecte un serveur WMS, WMTS, WFS, WCS ou ArcGIS REST.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-white/40">Nom *</span>
+          <input
+            value={serviceDraft.name}
+            onChange={(e) => setServiceDraft((c) => ({ ...c, name: e.target.value }))}
+            className="mt-1 w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] px-3 py-2 text-[13px] text-gray-700 dark:text-gray-200 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-white/25 focus:border-cyan-400/50"
+            placeholder="Ex : Mon serveur WMS"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-white/40">Type de service</span>
+          <select
+            value={serviceDraft.serviceType}
+            onChange={(e) => setServiceDraft((c) => ({ ...c, serviceType: e.target.value as RemoteServiceType }))}
+            className="mt-1 w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] px-3 py-2 text-[13px] text-gray-700 dark:text-gray-200 outline-none focus:border-cyan-400/50"
+          >
+            {SUPPORTED_REMOTE_SERVICE_TYPES.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-white/40">URL *</span>
+          <input
+            value={serviceDraft.url}
+            onChange={(e) => setServiceDraft((c) => ({ ...c, url: e.target.value }))}
+            className="mt-1 w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] px-3 py-2 font-mono text-[12px] text-gray-700 dark:text-gray-200 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-white/25 focus:border-cyan-400/50"
+            placeholder="https://..."
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-white/40">Couche (optionnel)</span>
+          <input
+            value={serviceDraft.layerName}
+            onChange={(e) => setServiceDraft((c) => ({ ...c, layerName: e.target.value }))}
+            className="mt-1 w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] px-3 py-2 text-[13px] text-gray-700 dark:text-gray-200 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-white/25 focus:border-cyan-400/50"
+            placeholder="Ex : workspace:layer"
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-white/40">CRS</span>
+            <input
+              value={serviceDraft.crs}
+              onChange={(e) => setServiceDraft((c) => ({ ...c, crs: e.target.value }))}
+              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] px-3 py-2 text-[13px] text-gray-700 dark:text-gray-200 outline-none focus:border-cyan-400/50"
+              placeholder="EPSG:3857"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-white/40">Format</span>
+            <input
+              value={serviceDraft.format}
+              onChange={(e) => setServiceDraft((c) => ({ ...c, format: e.target.value }))}
+              className="mt-1 w-full rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.03] px-3 py-2 text-[13px] text-gray-700 dark:text-gray-200 outline-none focus:border-cyan-400/50"
+              placeholder="image/png"
+            />
+          </label>
+        </div>
+
+        <button
+          onClick={() => void submitCustomService()}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/35 bg-gradient-to-r from-cyan-500/15 to-cyan-600/10 px-3 py-2.5 text-[13px] font-bold text-cyan-700 dark:text-cyan-300 transition-all hover:from-cyan-500/25 hover:to-cyan-600/18 hover:shadow-lg hover:shadow-cyan-500/15"
+        >
+          <Link2 size={14} />
+          Ajouter le service
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderServicesTab = () => {
+    const subTabs: Array<{ id: ServicesSubTab; label: string; icon: ReactNode; badge?: number }> = [
+      { id: "catalog", label: "Catalogue", icon: <BookOpen size={12} /> },
+      { id: "favorites", label: "Favoris", icon: <Star size={12} />, badge: favoriteServiceIds.length },
+      { id: "tools", label: "Outils", icon: <Wrench size={12} /> },
+      { id: "custom", label: "Custom", icon: <Server size={12} /> },
+    ];
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-4 gap-1 rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-100/60 dark:bg-white/[0.02] p-1">
+          {subTabs.map(({ id, label, icon, badge }) => (
+            <button
+              key={id}
+              onClick={() => setServicesSubTab(id)}
+              className={cn(
+                "relative flex flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-bold transition-all",
+                servicesSubTab === id
+                  ? "bg-white dark:bg-white/[0.08] text-cyan-600 dark:text-cyan-300 shadow-sm"
+                  : "text-gray-500 dark:text-white/40 hover:text-gray-700 dark:hover:text-white/60",
+              )}
+            >
+              <span className="flex items-center gap-1">
+                {icon}
+                {label}
+              </span>
+              {badge != null && badge > 0 && (
+                <span className={cn(
+                  "absolute -top-1 -right-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-1 text-[8px] font-bold tabular-nums",
+                  servicesSubTab === id ? "bg-cyan-500 text-white" : "bg-gray-300 dark:bg-white/15 text-gray-600 dark:text-white/60",
+                )}>
+                  {badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {servicesSubTab === "catalog" && renderCatalogSubTab()}
+        {servicesSubTab === "favorites" && renderFavoritesSubTab()}
+        {servicesSubTab === "tools" && renderToolsSubTab()}
+        {servicesSubTab === "custom" && renderCustomSubTab()}
+      </div>
+    );
+  };
+
+  const renderToolsSubTab = () => (
+    <div className="space-y-4">
       {/* ── Inventaire forestier ── */}
       <CollapsibleSection
         title="Inventaire forestier"
@@ -1066,95 +1408,6 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
           </div>
         )}
       </CollapsibleSection>
-
-      {/* ── Fonds de carte ── */}
-      <SidebarSection
-        title="Fonds de carte"
-        description="Accès rapide aux fonds de carte les plus utilisés."
-        accentClassName="text-cyan-600 dark:text-cyan-300/80"
-      >
-        <div className="space-y-3">
-          {/* Accès rapide — 6 basemaps fiables en grille */}
-          <div className="grid grid-cols-3 gap-1.5">
-            {[
-              { id: "osm-standard", label: "OSM", sublabel: "Standard", color: "emerald" },
-              { id: "geopf-wms-raster", label: "IGN", sublabel: "Ortho", color: "blue" },
-              { id: "geopf-wmts-planign", label: "IGN", sublabel: "Plan V2", color: "sky" },
-              { id: "carto-dark", label: "Carto", sublabel: "Dark", color: "violet" },
-              { id: "carto-positron", label: "Carto", sublabel: "Light", color: "slate" },
-              { id: "esri-world-imagery", label: "Esri", sublabel: "Imagery", color: "orange" },
-            ].map(({ id, label, sublabel, color }) => {
-              const item = ALL_DATA_SOURCES.find((c) => c.id === id);
-              if (!item) return null;
-              return (
-                <button
-                  key={id}
-                  onClick={() => void onAddRemoteService(item)}
-                  title={item.name}
-                  className={cn(
-                    "flex flex-col items-center gap-0.5 rounded-xl border px-1 py-2 text-center transition-all hover:shadow-md",
-                    color === "emerald" && "border-emerald-500/25 bg-emerald-500/8 hover:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-                    color === "blue" && "border-blue-500/25 bg-blue-500/8 hover:bg-blue-500/15 text-blue-700 dark:text-blue-300",
-                    color === "sky" && "border-sky-500/25 bg-sky-500/8 hover:bg-sky-500/15 text-sky-700 dark:text-sky-300",
-                    color === "violet" && "border-violet-500/25 bg-violet-500/8 hover:bg-violet-500/15 text-violet-700 dark:text-violet-300",
-                    color === "slate" && "border-gray-400/25 bg-gray-100 dark:bg-gray-800/40 hover:bg-gray-200 dark:hover:bg-gray-700/40 text-gray-700 dark:text-gray-300",
-                    color === "orange" && "border-orange-500/25 bg-orange-500/8 hover:bg-orange-500/15 text-orange-700 dark:text-orange-300",
-                  )}
-                >
-                  <Map size={14} />
-                  <span className="text-[10px] font-bold leading-none">{label}</span>
-                  <span className="text-[9px] text-gray-500 dark:text-gray-400 leading-none">{sublabel}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Sélecteur étendu — tout le catalogue */}
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Autres sources ({ALL_DATA_SOURCES.filter(s => ["XYZ","WMS","WMTS","ArcGISMapServer"].includes(s.serviceType)).length})
-            </p>
-            <select
-              value={selectedCatalogId}
-              onChange={(e) => setSelectedCatalogId(e.target.value)}
-              className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-cyan-500/40"
-            >
-              {ALL_DATA_SOURCES
-                .filter(s => ["XYZ","WMS","WMTS","ArcGISMapServer"].includes(s.serviceType))
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} — {item.provider}
-                  </option>
-                ))}
-            </select>
-            {(() => {
-              const sel = ALL_DATA_SOURCES.find((c) => c.id === selectedCatalogId);
-              return sel ? (
-                <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-600 dark:text-white/45">
-                  <div className="flex flex-wrap gap-1 mb-1">
-                    <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-700 dark:text-cyan-200">
-                      {sel.serviceType}
-                    </span>
-                    {sel.requiresKey && (
-                      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
-                        🔑 Clé API requise
-                      </span>
-                    )}
-                  </div>
-                  {sel.description}
-                </div>
-              ) : null;
-            })()}
-            <button
-              onClick={() => void handleAddCatalogSource()}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/25 bg-cyan-500/12 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-cyan-500/18"
-            >
-              <Map size={15} />
-              Ajouter à la carte
-            </button>
-          </div>
-        </div>
-      </SidebarSection>
 
       {/* ── Cadastre ── */}
       <SidebarSection
@@ -1362,28 +1615,6 @@ area[name='Rennes']->.searchArea;
 out geom;" />
           <input value={overpassLayerName} onChange={(e) => setOverpassLayerName(e.target.value)} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-orange-500/40" placeholder="Nom de la couche (ex: Routes_Rennes)" />
           <button onClick={() => void submitOverpassSearch()} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-orange-500/25 bg-orange-500/12 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-orange-500/18"><Plus size={15} /> Extraire données OSM</button>
-        </div>
-      </CollapsibleSection>
-
-      {/* ── Service personnalisé ── */}
-      <CollapsibleSection
-        title="Service personnalisé"
-        description="Ajoutez votre propre serveur WMS, WMTS, WFS ou WCS"
-        accentClassName="text-cyan-600 dark:text-cyan-300/80"
-        icon={<Server size={14} />}
-        isOpen={expandedSections["custom"] ?? false}
-        onToggle={() => toggleSection("custom")}
-      >
-        <div className="space-y-3">
-          <p className="text-[10px] text-gray-700 dark:text-gray-300/35">Connectez un serveur cartographique externe (WMS, WMTS, WFS, WCS, ArcGIS)</p>
-          <input value={serviceDraft.name} onChange={(e) => setServiceDraft((c) => ({ ...c, name: e.target.value }))} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-cyan-500/40" placeholder="Nom du service" />
-          <select value={serviceDraft.serviceType} onChange={(e) => setServiceDraft((c) => ({ ...c, serviceType: e.target.value as RemoteServiceType }))} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-cyan-500/40">
-            {SUPPORTED_REMOTE_SERVICE_TYPES.map((s) => (<option key={s.id} value={s.id}>{s.label}</option>))}
-          </select>
-          <input value={serviceDraft.url} onChange={(e) => setServiceDraft((c) => ({ ...c, url: e.target.value }))} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-cyan-500/40" placeholder="URL du serveur (https://...)" />
-          <input value={serviceDraft.layerName} onChange={(e) => setServiceDraft((c) => ({ ...c, layerName: e.target.value }))} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-cyan-500/40" placeholder="Nom de la couche (optionnel)" />
-          <input value={serviceDraft.crs} onChange={(e) => setServiceDraft((c) => ({ ...c, crs: e.target.value }))} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-cyan-500/40" placeholder="CRS (ex: EPSG:3857)" />
-          <button onClick={() => void submitCustomService()} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-500/25 bg-cyan-500/12 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-cyan-500/18"><Link2 size={15} /> Ajouter le service</button>
         </div>
       </CollapsibleSection>
 
