@@ -167,6 +167,10 @@ interface RawQgisBridge {
     layerName: string,
     callback?: QgisCallback<string>,
   ) => string | void;
+  segmentRasterWithSAM?: (
+    optionsJson: string,
+    callback?: QgisCallback<string>,
+  ) => string | void;
   calculateRasterFormula?: (
     layerIdsJson: string,
     formula: string,
@@ -426,6 +430,15 @@ function getHttpBridge(): RawQgisBridge | undefined {
       void postJson<string>("/api/qgis/addRasterFile", {
         filePath,
         layerName,
+      }).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
+        }
+      });
+    },
+    segmentRasterWithSAM: (optionsJson, callback) => {
+      void postJson<string>("/api/qgis/segmentRasterWithSAM", {
+        options: optionsJson,
       }).then((result) => {
         if (callback) {
           callback(typeof result === "string" ? result : "");
@@ -1274,6 +1287,39 @@ export async function addGeoJsonLayer(
     "",
   );
 
+  return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export interface SamSegmentationOptions {
+  /** Chemin local du raster (GeoTIFF georef) */
+  rasterPath: string;
+  /** Chemin où sauvegarder le GeoJSON résultat */
+  outputGeojson: string;
+  /** "automatic" (sans prompt) ou "text_prompt" (LangSAM) */
+  mode?: "automatic" | "text_prompt";
+  /** Texte de prompt si mode="text_prompt" (ex: "trees", "buildings") */
+  textPrompt?: string;
+  /** Modèle SAM : vit_h (qualité) | vit_l | vit_b (rapide) */
+  model?: "vit_h" | "vit_l" | "vit_b";
+  /** Filtre polygones < N pixels (défaut 200) */
+  minAreaPx?: number;
+  /** Nom de la couche QGIS résultante */
+  layerName?: string;
+}
+
+export async function segmentRasterWithSAM(
+  options: SamSegmentationOptions,
+): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.segmentRasterWithSAM) {
+    return null;
+  }
+  const result = await callQgisWithResult<string>(
+    (callback) =>
+      bridge.segmentRasterWithSAM?.(JSON.stringify(options), callback),
+    "",
+    QGIS_SCRIPT_TIMEOUT_MS, // segmentation is slow → script timeout
+  );
   return typeof result === "string" && result.length > 0 ? result : null;
 }
 

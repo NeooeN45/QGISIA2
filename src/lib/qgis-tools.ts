@@ -19,6 +19,7 @@ import {
   mergeRasterBands,
   reprojectLayer,
   runScript,
+  segmentRasterWithSAM,
   setLayerLabels,
   setLayerOpacity,
   setLayerVisibility,
@@ -1011,6 +1012,48 @@ const OPENAI_QGIS_TOOLS: OpenAiToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "segmentRasterWithSAM",
+      description:
+        "Segmenter un raster (image satellite, orthophoto) avec Segment Anything (SAM). Génère des polygones GeoJSON soit automatiquement (tous masques), soit guidés par prompt texte (ex: 'trees', 'buildings', 'water'). Nécessite samgeo + torch côté backend.",
+      parameters: {
+        type: "object",
+        properties: {
+          rasterPath: {
+            type: "string",
+            description: "Chemin local du raster GeoTIFF géoréférencé",
+          },
+          outputGeojson: {
+            type: "string",
+            description: "Chemin de sortie pour le GeoJSON polygons",
+          },
+          mode: {
+            type: "string",
+            enum: ["automatic", "text_prompt"],
+            description: "automatic = tous masques, text_prompt = guidé par prompt",
+          },
+          textPrompt: {
+            type: "string",
+            description: "Prompt texte si mode=text_prompt (ex: 'trees', 'buildings')",
+          },
+          model: {
+            type: "string",
+            enum: ["vit_h", "vit_l", "vit_b"],
+            description: "vit_h = qualité (lent), vit_b = rapide",
+          },
+          minAreaPx: {
+            type: "number",
+            description: "Filtre polygones plus petits que N pixels (défaut 200)",
+          },
+          layerName: { type: "string", description: "Nom de couche QGIS" },
+        },
+        required: ["rasterPath", "outputGeojson"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "loadDvfTransactions",
       description:
         "Charger les transactions immobilières DVF (data.gouv.fr) géoréférencées sur une commune ou code postal en couche QGIS.",
@@ -1682,6 +1725,38 @@ export async function executeQgisToolCall(
         count: result.count,
         message: result.message,
         layer: status ?? layerName,
+      };
+    }
+    case "segmentRasterWithSAM": {
+      const rasterPath = requireString(args, "rasterPath", "Le chemin raster");
+      const outputGeojson = requireString(args, "outputGeojson", "Le chemin de sortie GeoJSON");
+      const mode = (typeof args.mode === "string" ? args.mode : "automatic") as
+        | "automatic"
+        | "text_prompt";
+      if (mode === "text_prompt" && (!args.textPrompt || typeof args.textPrompt !== "string")) {
+        throw new Error("mode='text_prompt' exige textPrompt non vide.");
+      }
+      const status = await segmentRasterWithSAM({
+        rasterPath,
+        outputGeojson,
+        mode,
+        textPrompt: typeof args.textPrompt === "string" ? args.textPrompt : undefined,
+        model:
+          args.model === "vit_h" || args.model === "vit_l" || args.model === "vit_b"
+            ? args.model
+            : undefined,
+        minAreaPx: typeof args.minAreaPx === "number" ? args.minAreaPx : undefined,
+        layerName: typeof args.layerName === "string" ? args.layerName : undefined,
+      });
+      if (!status) {
+        throw new Error(
+          "Segmentation SAM indisponible (samgeo/torch absent côté QGIS ou erreur backend).",
+        );
+      }
+      return {
+        ok: true,
+        tool: "segmentRasterWithSAM",
+        status,
       };
     }
     case "loadDvfTransactions": {
