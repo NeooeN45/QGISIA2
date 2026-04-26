@@ -54,6 +54,7 @@ import {
   SUPPORTED_REMOTE_SERVICE_TYPES,
 } from "../lib/catalog";
 import { DATA_SOURCE_CATEGORIES } from "../lib/additional-sources";
+import { checkServiceHealth } from "../lib/service-health";
 import { LayerSummary, setProjectCrs } from "../lib/qgis";
 import {
   type CadastreParcelSearchOptions,
@@ -425,11 +426,34 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
 
   const handleAddServiceCard = async (source: import("../lib/catalog").CatalogItem) => {
     setAddingServiceId(source.id);
+    const probeToastId = toast.loading(`Vérification de ${source.name}...`);
     try {
+      // Pré-check de reachability avant de solliciter QGIS
+      const health = await checkServiceHealth(source);
+      if (!health.ok) {
+        toast.error(health.message, {
+          id: probeToastId,
+          description:
+            health.reason === "requires-key"
+              ? "Va dans Paramètres → Clés API."
+              : health.reason === "timeout"
+                ? "Le serveur est peut-être surchargé ou hors-ligne."
+                : health.reason === "network"
+                  ? "Problème réseau ou serveur inaccessible."
+                  : undefined,
+          duration: 6000,
+        });
+        return;
+      }
+
+      // Service joignable — on délègue à QGIS (Chat.tsx affiche son propre toast)
+      toast.dismiss(probeToastId);
       await onAddRemoteService(source);
-      toast.success(`${source.name} ajouté à la carte`);
     } catch (err) {
-      toast.error(`Échec : ${err instanceof Error ? err.message : "service indisponible"}`);
+      toast.error(
+        `Échec : ${err instanceof Error ? err.message : "service indisponible"}`,
+        { id: probeToastId },
+      );
     } finally {
       setAddingServiceId(null);
     }
