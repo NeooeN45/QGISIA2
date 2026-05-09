@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { maskApiKey } from "../lib/encryption";
-import type { ApiKeys, BudgetSnapshot, ModelAlias } from "../lib/litellm-client";
+import type { ApiKeys, BudgetSnapshot, ModelAlias, LayerImportLog } from "../lib/litellm-client";
 import { useGatewayStore } from "../stores/useGatewayStore";
 import { useLLMGateway } from "../hooks/useLLMGateway";
 
@@ -109,6 +109,8 @@ export function GatewaySettingsPanel() {
     vendor_dir: string; vendor_exists: boolean; marker_exists: boolean;
     vendor_ready: boolean; sys_path: string[]; pip_path: string | null;
     debug_file?: string | null;
+    layer_import_logs: LayerImportLog[];
+    layer_import_error_count: number;
   } | null>(null);
   const [localLogs, setLocalLogs] = useState<{stage: string; message: string; level: string; time: number}[]>([]);
   const [installing, setInstalling] = useState(false);
@@ -500,6 +502,55 @@ export function GatewaySettingsPanel() {
               <span className="text-slate-700 dark:text-slate-300">{diagnostic.pip_path || "Non détecté"}</span>
             </div>
           </div>
+
+          {/* Logs d'import de couche */}
+          <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-slate-500" />
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Erreurs d'import de couche
+                  {diagnostic.layer_import_error_count > 0 && (
+                    <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700 dark:bg-rose-950 dark:text-rose-400">
+                      {diagnostic.layer_import_error_count}
+                    </span>
+                  )}
+                </h4>
+              </div>
+              {diagnostic.layer_import_error_count > 0 && (
+                <button
+                  onClick={async () => {
+                    // Appel pour effacer les logs
+                    try {
+                      await fetch("/api/qgis/clearLayerImportLogs", { method: "POST" });
+                      setDiagnostic(prev => prev ? { ...prev, layer_import_logs: [], layer_import_error_count: 0 } : null);
+                    } catch { /* ignore */ }
+                  }}
+                  className="text-xs text-slate-500 hover:text-rose-600"
+                >
+                  Effacer
+                </button>
+              )}
+            </div>
+
+            {diagnostic.layer_import_logs && diagnostic.layer_import_logs.length > 0 ? (
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50 p-2 dark:border-rose-900 dark:bg-rose-950/30">
+                {diagnostic.layer_import_logs.map((log, i) => (
+                  <div key={i} className="mb-2 text-[11px] last:mb-0">
+                    <div className="flex items-center gap-1 text-rose-700 dark:text-rose-400">
+                      <span className="font-mono opacity-60">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                      <span className="font-semibold">[{log.source}]</span>
+                    </div>
+                    <div className="text-slate-700 dark:text-slate-300">{log.layer_name}</div>
+                    <div className="text-rose-600 dark:text-rose-400">{log.error}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">Aucune erreur d'import enregistrée.</p>
+            )}
+          </div>
+
           {diagnostic.debug_file && (
             <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
               <FileText className="h-3 w-3" />

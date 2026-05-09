@@ -214,10 +214,13 @@ class QgisBridge(BridgeQObject):
     """Bridge between the embedded web app and the active QGIS session."""
 
     DIAGNOSTIC_SAMPLE_LIMIT = 1500
+    MAX_LAYER_IMPORT_LOGS = 50
 
     def __init__(self, iface):
         super().__init__()
         self.iface = iface
+        # Log des erreurs d'import de couche pour diagnostic
+        self._layer_import_logs: list = []
 
     def _find_layer(self, layer_ref):
         if not layer_ref:
@@ -487,8 +490,35 @@ class QgisBridge(BridgeQObject):
             return encoded.decode("utf-8")
         return str(encoded)
 
-    def _add_layer_to_project(self, layer, layer_name=None):
-        if layer is None or not layer.isValid():
+    def _log_layer_import_error(self, source: str, error_message: str, layer_name: str = None):
+        """Log une erreur d'import de couche pour diagnostic."""
+        import datetime
+        log_entry = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "source": source,
+            "layer_name": layer_name or "Unknown",
+            "error": error_message,
+        }
+        self._layer_import_logs.append(log_entry)
+        # Garder seulement les MAX_LAYER_IMPORT_LOGS derniers
+        if len(self._layer_import_logs) > self.MAX_LAYER_IMPORT_LOGS:
+            self._layer_import_logs = self._layer_import_logs[-self.MAX_LAYER_IMPORT_LOGS:]
+        # Also log to QGIS message log
+        QgsMessageLog.logMessage(
+            f"Layer import error [{source}]: {error_message}",
+            "QGISAI+",
+            level=Qgis.Warning
+        )
+
+    def _add_layer_to_project(self, layer, layer_name=None, source: str = "Unknown"):
+        if layer is None:
+            error_msg = "Layer is None"
+            self._log_layer_import_error(source, error_msg, layer_name)
+            return None
+
+        if not layer.isValid():
+            error_msg = self._layer_error_message(layer) or "Layer is invalid (no details)"
+            self._log_layer_import_error(source, error_msg, layer_name or layer.name())
             return None
 
         if layer_name:
@@ -720,7 +750,7 @@ class QgisBridge(BridgeQObject):
         if not raster_layer.isValid():
             raise RuntimeError("Le raster calculé n'est pas exploitable.")
 
-        self._add_layer_to_project(raster_layer, output_name)
+        self._add_layer_to_project(raster_layer, output_name, source="RasterCalculator")
         return {
             "outputLayerName": raster_layer.name(),
             "outputPath": output_value,
@@ -750,7 +780,7 @@ class QgisBridge(BridgeQObject):
         if not raster_layer.isValid():
             raise RuntimeError("Le raster fusionne n'est pas exploitable.")
 
-        self._add_layer_to_project(raster_layer, output_name)
+        self._add_layer_to_project(raster_layer, output_name, source="RasterMerge")
         return {
             "outputLayerName": raster_layer.name(),
             "outputPath": output_value,
@@ -1054,7 +1084,8 @@ class QgisBridge(BridgeQObject):
             self._notify(message, Qgis.Warning, duration=6)
             return message
 
-        if self._add_layer_to_project(layer, config.get("name")) is None:
+        service_type = config.get("service_type", "Unknown")
+        if self._add_layer_to_project(layer, config.get("name"), source=f"RemoteService:{service_type}") is None:
             reason = self._layer_error_message(layer)
             message = "Le service distant n'a pas pu être chargé dans QGIS."
             if reason:
@@ -1076,7 +1107,7 @@ class QgisBridge(BridgeQObject):
 
         final_name = str(layer_name or "").strip() or Path(file_path).stem
         layer = QgsRasterLayer(file_path, final_name)
-        if self._add_layer_to_project(layer, final_name) is None:
+        if self._add_layer_to_project(layer, final_name, source=f"FileImport:{file_path}") is None:
             message = "Le raster n'a pas pu être chargé."
             self._notify(message, Qgis.Warning)
             return message
@@ -1104,7 +1135,7 @@ class QgisBridge(BridgeQObject):
         final_name = str(layer_name or "").strip() or "GeoJSON"
         file_path = self._write_temp_geojson(normalized_geojson, final_name)
         layer = QgsVectorLayer(file_path, final_name, "ogr")
-        if self._add_layer_to_project(layer, final_name) is None:
+        if self._add_layer_to_project(layer, final_name, source="GeoJSONImport") is None:
             message = "Le GeoJSON n'a pas pu etre charge."
             self._notify(message, Qgis.Warning)
             return message
@@ -1249,8 +1280,9 @@ class QgisBridge(BridgeQObject):
         for tif_path in result.geotiff_paths:
             try:
                 var_name = Path(tif_path).stem
-                layer = QgsRasterLayer(tif_path, f"{layer_prefix}_{var_name}", "gdal")
-                if self._add_layer_to_project(layer, layer.name()) is not None:
+                layer_name = f"{layer_prefix}_{var_name}"
+                layer = QgsRasterLayer(tif_path, layer_name, "gdal")
+                if self._add_layer_to_project(layer, layer_name, source="Earth2Forecast") is not None:
                     loaded += 1
             except Exception as e:  # noqa: BLE001
                 QgsMessageLog.logMessage(
@@ -1903,6 +1935,20 @@ class QgisBridge(BridgeQObject):
         return json.dumps(system_capabilities.to_dict())
 
     @BridgeSlot(result=str)
+    def getLayerImportLogs(self):
+        """Retourne les logs d'erreurs d'import de couche pour diagnostic."""
+        return json.dumps({
+            "logs": self._layer_import_logs,
+            "count": len(self._layer_import_logs),
+        }, ensure_ascii=False)
+
+    @BridgeSlot(result=str)
+    def clearLayerImportLogs(self):
+        """Efface les logs d'erreurs d'import de couche."""
+        self._layer_import_logs.clear()
+        return json.dumps({"success": True})
+
+    @BridgeSlot(result=str)
     def getOllamaStatus(self):
         """Retourne le statut d'Ollama"""
         if ollama_installer is None:
@@ -1996,6 +2042,71 @@ class QgisBridge(BridgeQObject):
             })
         except Exception as e:
             return json.dumps({"error": str(e)})
+
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # Fonctions pour la gestion des dépendances NVIDIA (torch CUDA + earth2studio)
+    # ═══════════════════════════════════════════════════════════════════════════════
+
+    @BridgeSlot(result=str)
+    def getNvidiaDepsStatus(self):
+        """
+        Retourne le statut des dépendances NVIDIA (torch CUDA + earth2studio).
+        """
+        try:
+            from .earth2_tool import is_available
+        except ImportError:
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(__file__))
+            from earth2_tool import is_available
+        
+        ok, reason = is_available()
+        
+        # Info sur torch si disponible
+        torch_info = {}
+        try:
+            import torch
+            torch_info = {
+                "version": str(torch.__version__),
+                "cuda_available": torch.cuda.is_available(),
+                "cuda_version": str(torch.version.cuda) if torch.version.cuda else None,
+            }
+        except:
+            pass
+        
+        return json.dumps({
+            "available": ok,
+            "reason": reason if not ok else "",
+            "torch": torch_info,
+        })
+
+    @BridgeSlot(bool, result=str)
+    def installNvidiaDeps(self, force=False):
+        """
+        Installe les dépendances NVIDIA (torch CUDA + earth2studio).
+        
+        Args:
+            force: Force la réinstallation même si déjà présent
+            
+        Returns:
+            JSON avec success, error, already_installed
+        """
+        try:
+            from .earth2_tool import install_dependencies
+        except ImportError:
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(__file__))
+            from earth2_tool import install_dependencies
+        
+        try:
+            result = install_dependencies(force=force)
+            return json.dumps(result)
+        except Exception as e:
+            return json.dumps({
+                "success": False,
+                "error": str(e),
+            })
 
 
 class ScriptWorker(QObject):
@@ -2465,6 +2576,14 @@ class ThreadedAssetServer:
                 else:
                     self._send_json(handler, 200, {"ok": False, "source": "unavailable"})
                     return True
+            elif route == "/api/qgis/getLayerImportLogs":
+                result = self._bridge_call("getLayerImportLogs")
+                self._send_json(handler, 200, {"ok": True, "result": result})
+                return True
+            elif route == "/api/qgis/clearLayerImportLogs":
+                result = self._bridge_call("clearLayerImportLogs")
+                self._send_json(handler, 200, {"ok": True, "result": result})
+                return True
             else:
                 return False
         except Exception as exc:
@@ -2538,10 +2657,12 @@ class ThreadedAssetServer:
                     "vendor_ready": llm_installer.is_vendor_ready(),
                     "sys_path": sys.path[:5],  # First 5 entries
                     "pip_path": None,
+                    "layer_import_logs": getattr(self, '_layer_import_logs', []),
+                    "layer_import_error_count": len(getattr(self, '_layer_import_logs', [])),
                 }
                 try:
                     import subprocess
-                    r = subprocess.run([sys.executable, "-m", "pip", "--version"], 
+                    r = subprocess.run([sys.executable, "-m", "pip", "--version"],
                                      capture_output=True, text=True, timeout=10)
                     diag["pip_path"] = r.stdout.strip() if r.returncode == 0 else f"error: {r.stderr}"
                 except Exception as e:

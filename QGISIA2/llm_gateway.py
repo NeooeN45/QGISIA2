@@ -23,7 +23,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
 
-from .llm_installer import ensure_vendor_on_path, is_vendor_ready
+try:
+    from .llm_installer import ensure_vendor_on_path, is_vendor_ready
+except ImportError:
+    # Fallback pour import absolu (standalone)
+    from llm_installer import ensure_vendor_on_path, is_vendor_ready
 
 ensure_vendor_on_path()
 
@@ -149,6 +153,9 @@ def _build_completion_kwargs(
     # Ollama : URL par defaut, surchargeable
     if provider == "ollama":
         kwargs["api_base"] = api_keys.get("ollama_base_url", "http://localhost:11434")
+    # NVIDIA NIM : URL OpenAI-compatible requise
+    if provider == "nvidia_nim":
+        kwargs["api_base"] = "https://integrate.api.nvidia.com/v1"
     return kwargs
 
 

@@ -175,6 +175,13 @@ export async function getInstallStatus(): Promise<InstallStatus> {
   return apiFetch<InstallStatus>("/api/llm/install_status");
 }
 
+export interface LayerImportLog {
+  timestamp: string;
+  source: string;
+  layer_name: string;
+  error: string;
+}
+
 export interface DiagnosticInfo {
   python_version: string;
   platform: string;
@@ -186,6 +193,8 @@ export interface DiagnosticInfo {
   sys_path: string[];
   pip_path: string | null;
   debug_file?: string | null;
+  layer_import_logs: LayerImportLog[];
+  layer_import_error_count: number;
 }
 
 export async function runDiagnostic(): Promise<DiagnosticInfo> {

@@ -74,6 +74,11 @@ def is_available() -> tuple[bool, str]:
     """
     try:
         import torch  # noqa: F401
+        # Vérifier que c'est bien la version CUDA
+        if not torch.cuda.is_available():
+            # Vérifier si c'est la version CPU
+            if hasattr(torch, '_C') and 'cpu' in str(torch.__file__).lower():
+                return False, "torch CPU détecté - version CUDA requise"
     except ImportError as e:
         return False, f"torch non installé : {e}"
     try:
@@ -94,6 +99,28 @@ def _ensure_available() -> None:
     ok, reason = is_available()
     if not ok:
         raise Earth2UnavailableError(reason)
+
+
+def install_dependencies(force: bool = False) -> dict:
+    """
+    Installe automatiquement les dépendances NVIDIA (torch CUDA + earth2studio).
+    
+    Args:
+        force: Force la réinstallation même si déjà présent
+        
+    Returns:
+        Dict avec success, error, logs, already_installed
+    """
+    try:
+        from .nvidia_deps_installer import install_nvidia_deps
+    except ImportError:
+        # Fallback si import relatif échoue
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(__file__))
+        from nvidia_deps_installer import install_nvidia_deps
+    
+    return install_nvidia_deps(force=force)
 
 
 # ─── Validation des paramètres ────────────────────────────────────────────────

@@ -226,6 +226,13 @@ interface RawQgisBridge {
     outputName: string,
     callback?: QgisCallback<string>,
   ) => string | void;
+  /** Status des dépendances NVIDIA (torch CUDA + earth2studio) */
+  getNvidiaDepsStatus?: (callback?: QgisCallback<string>) => string | void;
+  /** Installation des dépendances NVIDIA */
+  installNvidiaDeps?: (
+    force: boolean,
+    callback?: QgisCallback<string>,
+  ) => string | void;
 }
 
 declare global {
@@ -581,7 +588,21 @@ function getHttpBridge(): RawQgisBridge | undefined {
         outputName,
       }).then((result) => {
         if (callback) {
-          callback(typeof result === "string" ? result : "");
+          callback(result ?? "");
+        }
+      });
+    },
+    getNvidiaDepsStatus: (callback) => {
+      void postJson<string>("/api/qgis/getNvidiaDepsStatus", {}).then((result) => {
+        if (callback) {
+          callback(result ?? "{}");
+        }
+      });
+    },
+    installNvidiaDeps: (force, callback) => {
+      void postJson<string>("/api/qgis/installNvidiaDeps", { force }).then((result) => {
+        if (callback) {
+          callback(result ?? "{}");
         }
       });
     },
@@ -1607,4 +1628,66 @@ export async function splitSelectedLayerByLine(
   );
 
   return typeof result === "string" && result.length > 0 ? result : null;
+}
+
+export interface NvidiaDepsStatus {
+  available: boolean;
+  reason?: string;
+  torch?: {
+    version: string;
+    cuda_available: boolean;
+    cuda_version?: string;
+  };
+}
+
+export async function getNvidiaDepsStatus(): Promise<NvidiaDepsStatus | null> {
+  const bridge = getBridge();
+  if (!bridge?.getNvidiaDepsStatus) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.getNvidiaDepsStatus?.(callback),
+    "{}",
+  );
+
+  if (typeof result !== "string" || result.length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(result) as NvidiaDepsStatus;
+  } catch {
+    return null;
+  }
+}
+
+export async function installNvidiaDeps(force = false): Promise<{
+  success: boolean;
+  error?: string;
+  already_installed?: boolean;
+} | null> {
+  const bridge = getBridge();
+  if (!bridge?.installNvidiaDeps) {
+    return null;
+  }
+
+  const result = await callQgisWithResult<string>(
+    (callback) => bridge.installNvidiaDeps?.(force, callback),
+    "{}",
+  );
+
+  if (typeof result !== "string" || result.length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(result) as {
+      success: boolean;
+      error?: string;
+      already_installed?: boolean;
+    };
+  } catch {
+    return null;
+  }
 }

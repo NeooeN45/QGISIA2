@@ -809,7 +809,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
                 "group w-full cursor-pointer rounded-2xl border p-3.5 text-left transition-all duration-200",
                 isActive
                   ? "border-blue-500/40 bg-gradient-to-br from-blue-500/12 to-blue-600/6 shadow-md shadow-blue-500/10"
-                  : "border-gray-200 dark:border-white/[0.06] bg-white/60 dark:bg-white/[0.02] hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:border-gray-300 dark:hover:border-white/[0.10]",
+                  : "border-gray-200 dark:border-white/[0.06] bg-white/60 dark:bg-white/[0.02] hover:bg-gray-50 dark:hover:bg-white/[0.04] hover:border-gray-300 dark:hover:border-white/[0.06]",
               )}
             >
               <div className="flex items-start justify-between gap-2">
@@ -896,7 +896,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
                 ? "text-blue-500 dark:text-blue-400 border-blue-500/30 bg-blue-500/10"
                 : "text-emerald-500 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10";
           return (
-            <div key={layer.id} className="group rounded-2xl border border-gray-200 dark:border-white/[0.07] bg-white/70 dark:bg-white/[0.02] p-3.5 transition-all hover:border-gray-300 dark:hover:border-white/[0.11] hover:bg-white dark:hover:bg-white/[0.04]">
+            <div key={layer.id} className="group rounded-2xl border border-gray-200 dark:border-white/[0.07] bg-white/70 dark:bg-white/[0.02] p-3.5 transition-all hover:border-gray-300 dark:hover:border-white/[0.06] hover:bg-white dark:hover:bg-white/[0.04]">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -955,7 +955,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
                   className={cn(
                     "flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-medium transition-all",
                     layer.visible
-                      ? "border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] text-gray-600 dark:text-white/50 hover:border-gray-300 dark:hover:border-white/[0.14]"
+                      ? "border-gray-200 dark:border-white/[0.08] bg-gray-100 dark:bg-white/[0.04] text-gray-600 dark:text-white/50 hover:border-gray-300 dark:hover:border-white/[0.06]"
                       : "border-orange-400/30 bg-orange-400/10 text-orange-500 dark:text-orange-400"
                   )}
                 >

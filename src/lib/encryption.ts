@@ -8,7 +8,36 @@
 const ENCRYPTION_KEY = "GeoAI-QGIS-2024-Encryption-Key";
 
 /**
- * Chiffre une chaîne avec XOR
+ * Encode une chaîne UTF-8 en base64 (compatible avec tous les caractères)
+ */
+function utf8ToBase64(str: string): string {
+  try {
+    const utf8Bytes = new TextEncoder().encode(str);
+    const binaryString = Array.from(utf8Bytes, (byte) => String.fromCharCode(byte)).join("");
+    return btoa(binaryString);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Décode une chaîne base64 en UTF-8
+ */
+function base64ToUtf8(base64: string): string {
+  try {
+    const binaryString = atob(base64);
+    const utf8Bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      utf8Bytes[i] = binaryString.charCodeAt(i);
+    }
+    return new TextDecoder().decode(utf8Bytes);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Chiffre une chaîne avec XOR (compatible UTF-8)
  */
 function xorEncrypt(text: string, key: string): string {
   let result = "";
@@ -17,23 +46,43 @@ function xorEncrypt(text: string, key: string): string {
       text.charCodeAt(i) ^ key.charCodeAt(i % key.length)
     );
   }
-  // Encoder en base64 pour le stockage
-  return btoa(result);
+  // Encoder en base64 via UTF-8 pour supporter tous les caractères
+  return utf8ToBase64(result);
 }
 
 /**
- * Déchiffre une chaîne XOR
+ * Déchiffre une chaîne XOR (compatible UTF-8) avec fallback ancien format
  */
 function xorDecrypt(encrypted: string, key: string): string {
   try {
-    const decoded = atob(encrypted);
-    let result = "";
-    for (let i = 0; i < decoded.length; i++) {
-      result += String.fromCharCode(
-        decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length)
-      );
+    // Essayer d'abord le nouveau format UTF-8
+    const decoded = base64ToUtf8(encrypted);
+    if (decoded) {
+      let result = "";
+      for (let i = 0; i < decoded.length; i++) {
+        result += String.fromCharCode(
+          decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length)
+        );
+      }
+      // Vérifier si le résultat semble valide (pas de caractères de contrôle bizarres)
+      if (result && !/[\x00-\x08\x0b-\x0c\x0e-\x1f]/.test(result)) {
+        return result;
+      }
     }
-    return result;
+    
+    // Fallback: ancien format avec atob direct (pour compatibilité)
+    try {
+      const legacyDecoded = atob(encrypted);
+      let result = "";
+      for (let i = 0; i < legacyDecoded.length; i++) {
+        result += String.fromCharCode(
+          legacyDecoded.charCodeAt(i) ^ key.charCodeAt(i % key.length)
+        );
+      }
+      return result;
+    } catch {
+      return "";
+    }
   } catch {
     return "";
   }
