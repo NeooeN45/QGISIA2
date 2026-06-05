@@ -16,11 +16,12 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parent.parent
 PLUGIN_DIR = ROOT / "QGISIA2"
 WEB_DIR = PLUGIN_DIR / "web"
 
-# Injecte le plugin dans le path
+# Injecte la racine (imports QGISIA2.x) et le plugin dans le path
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(PLUGIN_DIR))
 
 logging.basicConfig(

@@ -4,7 +4,7 @@ import sys
 import os
 
 # Ajouter QGISIA2 au path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'QGISIA2'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'QGISIA2'))
 
 from llm_installer import install_if_needed, get_install_status
 

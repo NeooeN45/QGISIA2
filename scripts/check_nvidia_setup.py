@@ -5,7 +5,7 @@ Usage: python check_nvidia_setup.py [VOTRE_CLE_API]
 import sys
 import os
 
-PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENDOR_DIR = os.path.join(PLUGIN_DIR, "QGISIA2", "vendor")
 QGISIA2_DIR = os.path.join(PLUGIN_DIR, "QGISIA2")
 

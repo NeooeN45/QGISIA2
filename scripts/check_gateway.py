@@ -2,8 +2,8 @@
 """Vérification du Gateway IA et des alias NVIDIA"""
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'QGISIA2'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'QGISIA2', 'vendor'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'QGISIA2'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'QGISIA2', 'vendor'))
 
 # Import direct depuis les fichiers
 from llm_installer import ensure_vendor_on_path, is_vendor_ready, VENDOR_DIR, MARKER_FILE
@@ -13,7 +13,7 @@ print(f'Marker file exists: {MARKER_FILE.exists()}')
 
 # Charger config manuellement
 import json
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'QGISIA2', 'config', 'models.json')
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'QGISIA2', 'config', 'models.json')
 config = json.load(open(CONFIG_PATH, encoding='utf-8'))
 
 aliases = [
