@@ -1,0 +1,129 @@
+{
+  "timestamp": "2026-04-26 20:39:04",
+  "api_key_preview": "nvapi-0Y...NfN3",
+  "total_models": 15,
+  "working_models": 7,
+  "failed_models": 8,
+  "results": [
+    {
+      "model": "meta/llama-3.1-8b-instruct",
+      "category": "text",
+      "success": false,
+      "error": "TIMEOUT",
+      "latency_ms": 0,
+      "response": ""
+    },
+    {
+      "model": "meta/llama-3.1-70b-instruct",
+      "category": "text",
+      "success": true,
+      "error": null,
+      "latency_ms": 977.7,
+      "response": "\"OK\" signifie \"d'accord\""
+    },
+    {
+      "model": "meta/llama-3.1-405b-instruct",
+      "category": "text",
+      "success": true,
+      "error": null,
+      "latency_ms": 12324.8,
+      "response": "\"OK\" est une expression qui signifie \""
+    },
+    {
+      "model": "meta/llama-3.3-70b-instruct",
+      "category": "text",
+      "success": true,
+      "error": null,
+      "latency_ms": 497.8,
+      "response": "Oui, c'est d'accord."
+    },
+    {
+      "model": "nvidia/llama-3.1-nemotron-70b-instruct",
+      "category": "text",
+      "success": false,
+      "error": "NOT_FOUND (modèle non accessible)",
+      "latency_ms": 0,
+      "response": ""
+    },
+    {
+      "model": "nvidia/nemotron-mini-4b-instruct",
+      "category": "text",
+      "success": true,
+      "error": null,
+      "latency_ms": 322.3,
+      "response": "Sure, I'd be happy to help you"
+    },
+    {
+      "model": "mistralai/mixtral-8x22b-instruct-v0.1",
+      "category": "text",
+      "success": true,
+      "error": null,
+      "latency_ms": 438.0,
+      "response": " Il s'agit d'une expression qui"
+    },
+    {
+      "model": "mistralai/mistral-large-2-instruct",
+      "category": "text",
+      "success": false,
+      "error": "NOT_FOUND (modèle non accessible)",
+      "latency_ms": 0,
+      "response": ""
+    },
+    {
+      "model": "microsoft/phi-3-medium-128k-instruct",
+      "category": "text",
+      "success": false,
+      "error": "litellm.APIError: APIError: Nvidia_nimException - ",
+      "latency_ms": 0,
+      "response": ""
+    },
+    {
+      "model": "google/gemma-2-27b-it",
+      "category": "text",
+      "success": false,
+      "error": "litellm.APIError: APIError: Nvidia_nimException - ",
+      "latency_ms": 0,
+      "response": ""
+    },
+    {
+      "model": "qwen/qwen2-72b-instruct",
+      "category": "text",
+      "success": false,
+      "error": "NOT_FOUND (modèle non accessible)",
+      "latency_ms": 0,
+      "response": ""
+    },
+    {
+      "model": "microsoft/phi-3-vision-128k-instruct",
+      "category": "vision",
+      "success": false,
+      "error": "NOT_FOUND (modèle non accessible)",
+      "latency_ms": 0,
+      "response": ""
+    },
+    {
+      "model": "nvidia/llava-v1.6-34b",
+      "category": "vision",
+      "success": false,
+      "error": "NOT_FOUND (modèle non accessible)",
+      "latency_ms": 0,
+      "response": ""
+    },
+    {
+      "model": "meta/llama-3.2-11b-vision-instruct",
+      "category": "vision",
+      "success": true,
+      "error": null,
+      "latency_ms": 572.1,
+      "response": "Une carte IGN (Institut Géographique National) est"
+    },
+    {
+      "model": "meta/llama-3.2-90b-vision-instruct",
+      "category": "vision",
+      "success": true,
+      "error": null,
+      "latency_ms": 3339.4,
+      "response": "Une carte IGN (Institut Géographique National) est"
+    }
+  ]
+}
