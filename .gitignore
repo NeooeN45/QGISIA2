@@ -5,6 +5,7 @@ coverage/
 qgis_plugin/web/
 QGISIA2/vendor/
 *.zip
+releases/
 *.json
 !package.json
 !tsconfig.json
