@@ -248,8 +248,7 @@ def main():
     if not api_key:
         print("\nUsage: python test_federation_live.py <NVIDIA_API_KEY>")
         print("   ou: set NVIDIA_API_KEY=votre_cle && python test_federation_live.py")
-        print("\nTest avec la derniere cle utilisee: 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")
-        api_key = "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"
+        sys.exit(1)
     
     print(f"\nCle API: {api_key[:8]}...{api_key[-4:]}")
     

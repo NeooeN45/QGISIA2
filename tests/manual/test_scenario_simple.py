@@ -20,7 +20,10 @@ def test_simple_real():
     print("TEST RAPIDE - CAS REEL SIMPLE")
     print("=" * 70)
     
-    api_key = "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"
+    api_key = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("NVIDIA_API_KEY")
+    if not api_key:
+        print("ERREUR: cle requise. Usage: python test_scenario_simple.py <NVIDIA_API_KEY>  (ou set NVIDIA_API_KEY=...)")
+        sys.exit(1)
     api_keys = {"nvidia_nim": api_key}
     
     print("\nSCENARIO: Buffer de 500m + Analyse de surface")
