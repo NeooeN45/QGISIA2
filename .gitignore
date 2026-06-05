@@ -6,6 +6,7 @@ qgis_plugin/web/
 QGISIA2/vendor/
 *.zip
 releases/
+QGISIA2/data/
 *.json
 !package.json
 !tsconfig.json
