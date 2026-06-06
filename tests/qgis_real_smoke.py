@@ -322,6 +322,21 @@ def main():
         except Exception as exc:
             rec("bridge.loadSatelliteBands", False, str(exc))
 
+        # Mise en page pro : exporter une planche cartographique PNG
+        try:
+            import tempfile
+            png = os.path.join(tempfile.gettempdir(), "layout_test.png")
+            if os.path.exists(png):
+                os.remove(png)
+            raw_lay = bridge.exportPrintLayout("Carte de test QGISIA", png, "png")
+            play = json.loads(raw_lay) if raw_lay else {}
+            size = os.path.getsize(png) if os.path.exists(png) else 0
+            rec("bridge.exportPrintLayout",
+                play.get("ok") is True and size > 1000,
+                f"path={play.get('path')} size={size} layers={play.get('layers')}")
+        except Exception as exc:
+            rec("bridge.exportPrintLayout", False, str(exc))
+
         _finish(plugin)
     except Exception:
         tb = traceback.format_exc()

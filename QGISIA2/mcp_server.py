@@ -504,6 +504,24 @@ TOOL_CATALOG: list[McpToolSpec] = [
         endpoint="/api/qgis/saveVectorLayer",
         payload_builder=_direct_payload,
     ),
+    McpToolSpec(
+        name="exportPrintLayout",
+        description=(
+            "Generer une planche cartographique professionnelle (titre, carte, legende, "
+            "echelle) des couches affichees et l'exporter en PNG ou PDF."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "outputPath": {"type": "string"},
+                "format": {"type": "string", "enum": ["png", "pdf"]},
+            },
+            "required": ["outputPath"],
+        },
+        endpoint="/api/qgis/exportPrintLayout",
+        payload_builder=_direct_payload,
+    ),
 ]
 
 

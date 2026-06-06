@@ -2223,6 +2223,81 @@ class QgisBridge(BridgeQObject):
                            "features": layer.featureCount()}, ensure_ascii=False)
 
     @BridgeSlot(str, str, str, result=str)
+    def exportPrintLayout(self, title, output_path, fmt):
+        """Genere une planche cartographique pro (titre, carte, legende, echelle) a partir
+        des couches affichees et l'exporte en PNG ou PDF (mise en page automatique)."""
+        from qgis.core import (
+            QgsPrintLayout, QgsLayoutItemMap, QgsLayoutItemLabel, QgsLayoutItemLegend,
+            QgsLayoutItemScaleBar, QgsLayoutPoint, QgsLayoutSize, QgsUnitTypes,
+            QgsLayoutExporter,
+        )
+        project = QgsProject.instance()
+        canvas = self.iface.mapCanvas()
+        layers = canvas.layers() or list(project.mapLayers().values())
+        if not layers:
+            self._notify("Aucune couche a mettre en page.", Qgis.Warning)
+            return ""
+        out = str(output_path or "").strip()
+        if not out:
+            self._notify("Chemin de sortie requis.", Qgis.Warning)
+            return ""
+        fmt = str(fmt or "png").strip().lower()
+
+        layout = QgsPrintLayout(project)
+        layout.initializeDefaults()
+        layout.setName(title or "Carte QGISIA")
+        mm = QgsUnitTypes.LayoutMillimeters
+
+        m = QgsLayoutItemMap(layout)
+        m.attemptMove(QgsLayoutPoint(10, 22, mm))
+        m.attemptResize(QgsLayoutSize(190, 235, mm))
+        m.setLayers(layers)
+        extent = canvas.extent()
+        if extent is None or extent.isEmpty():
+            extent = layers[0].extent()
+        m.setExtent(extent)
+        m.setFrameEnabled(True)
+        layout.addLayoutItem(m)
+
+        label = QgsLayoutItemLabel(layout)
+        label.setText(title or "Carte QGISIA+")
+        label.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        label.adjustSizeToText()
+        label.attemptMove(QgsLayoutPoint(10, 8, mm))
+        layout.addLayoutItem(label)
+
+        legend = QgsLayoutItemLegend(layout)
+        legend.setLinkedMap(m)
+        legend.setTitle("Legende")
+        legend.attemptMove(QgsLayoutPoint(150, 200, mm))
+        layout.addLayoutItem(legend)
+
+        scalebar = QgsLayoutItemScaleBar(layout)
+        scalebar.setStyle("Single Box")
+        scalebar.setLinkedMap(m)
+        scalebar.applyDefaultSize()
+        scalebar.attemptMove(QgsLayoutPoint(10, 262, mm))
+        layout.addLayoutItem(scalebar)
+
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        exporter = QgsLayoutExporter(layout)
+        try:
+            if fmt == "pdf":
+                res = exporter.exportToPdf(out, QgsLayoutExporter.PdfExportSettings())
+            else:
+                res = exporter.exportToImage(out, QgsLayoutExporter.ImageExportSettings())
+        except Exception as exc:  # noqa: BLE001
+            self._notify(f"Erreur export mise en page : {exc}", Qgis.Critical)
+            return ""
+        if res != QgsLayoutExporter.Success:
+            self._notify("Echec de l'export de la mise en page.", Qgis.Warning)
+            return ""
+
+        self._notify(f"Planche cartographique exportee : {Path(out).name}.", Qgis.Success)
+        return json.dumps({"ok": True, "path": out, "format": fmt,
+                           "layers": len(layers)}, ensure_ascii=False)
+
+    @BridgeSlot(str, str, str, result=str)
     def mergeRasterBands(self, layer_ids_json, output_name, output_path):
         try:
             layer_ids = json.loads(layer_ids_json) if layer_ids_json else []
@@ -3120,6 +3195,13 @@ class ThreadedAssetServer:
                     body.get("layerId", ""),
                     body.get("outputPath", ""),
                     body.get("driver", "GPKG"),
+                )
+            elif route == "/api/qgis/exportPrintLayout":
+                result = self._bridge_call(
+                    "exportPrintLayout",
+                    body.get("title", ""),
+                    body.get("outputPath", ""),
+                    body.get("format", "png"),
                 )
             elif route == "/api/qgis/mergeRasterBands":
                 result = self._bridge_call(
