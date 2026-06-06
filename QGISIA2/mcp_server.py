@@ -516,6 +516,11 @@ TOOL_CATALOG: list[McpToolSpec] = [
                 "title": {"type": "string"},
                 "outputPath": {"type": "string"},
                 "format": {"type": "string", "enum": ["png", "pdf"]},
+                "template": {
+                    "type": "string",
+                    "enum": ["a4_portrait_simple", "a4_paysage_pro", "a3_paysage_atlas"],
+                    "description": "Gabarit de mise en page (optionnel)",
+                },
             },
             "required": ["outputPath"],
         },

@@ -1272,10 +1272,12 @@ class QgisBridge(BridgeQObject):
         computeSpectralIndex pour un NDVI sur vrai Sentinel (P1-S2)."""
         try:
             from native_tools import EARTH_SEARCH_STAC, _default_get_json
-            from stac_assets import band_assets, normalize_datetime
+            from stac_assets import normalize_datetime, resolve_asset_href
+            from stac_collections import asset_key_for
         except ImportError:
             from .native_tools import EARTH_SEARCH_STAC, _default_get_json
-            from .stac_assets import band_assets, normalize_datetime
+            from .stac_assets import normalize_datetime, resolve_asset_href
+            from .stac_collections import asset_key_for
 
         bbox = str(bbox or "").strip()
         if not bbox:
@@ -1307,8 +1309,19 @@ class QgisBridge(BridgeQObject):
         feats.sort(key=lambda f: (f.get("properties", {}) or {}).get("eo:cloud_cover", 100))
         item = feats[0]
 
+        # Resolution multi-capteurs : mapping bande->asset selon la collection
+        # (stac_collections), avec repli generique (stac_assets).
+        assets = item.get("assets", {}) or {}
         loaded = {}
-        for band, href in band_assets(item, bands).items():
+        for band in bands:
+            href = None
+            key = asset_key_for(collection, band)
+            if key and isinstance(assets.get(key), dict):
+                href = assets[key].get("href")
+            if not href:
+                href = resolve_asset_href(item, band)
+            if not href:
+                continue
             name = f"{collection}_{band}"
             msg = self.addRemoteRaster(href, name)
             if "charge" in msg.lower():
@@ -2222,14 +2235,15 @@ class QgisBridge(BridgeQObject):
         return json.dumps({"ok": True, "path": out, "driver": driver,
                            "features": layer.featureCount()}, ensure_ascii=False)
 
-    @BridgeSlot(str, str, str, result=str)
-    def exportPrintLayout(self, title, output_path, fmt):
-        """Genere une planche cartographique pro (titre, carte, legende, echelle) a partir
-        des couches affichees et l'exporte en PNG ou PDF (mise en page automatique)."""
+    @BridgeSlot(str, str, str, str, result=str)
+    def exportPrintLayout(self, title, output_path, fmt, template_id):
+        """Genere une planche cartographique pro et l'exporte (PNG/PDF). Si template_id est
+        fourni (voir layout_specs.list_templates : a4_portrait_simple, a4_paysage_pro,
+        a3_paysage_atlas), la page et le placement des elements suivent ce gabarit."""
         from qgis.core import (
             QgsPrintLayout, QgsLayoutItemMap, QgsLayoutItemLabel, QgsLayoutItemLegend,
-            QgsLayoutItemScaleBar, QgsLayoutPoint, QgsLayoutSize, QgsUnitTypes,
-            QgsLayoutExporter,
+            QgsLayoutItemScaleBar, QgsLayoutItemPicture, QgsLayoutPoint, QgsLayoutSize,
+            QgsUnitTypes, QgsLayoutExporter,
         )
         project = QgsProject.instance()
         canvas = self.iface.mapCanvas()
@@ -2243,41 +2257,91 @@ class QgisBridge(BridgeQObject):
             return ""
         fmt = str(fmt or "png").strip().lower()
 
+        template = None
+        template_id = str(template_id or "").strip()
+        if template_id:
+            try:
+                from layout_specs import get_template, page_dimensions_mm
+            except ImportError:
+                from .layout_specs import get_template, page_dimensions_mm
+            template = get_template(template_id)
+
         layout = QgsPrintLayout(project)
         layout.initializeDefaults()
         layout.setName(title or "Carte QGISIA")
         mm = QgsUnitTypes.LayoutMillimeters
 
-        m = QgsLayoutItemMap(layout)
-        m.attemptMove(QgsLayoutPoint(10, 22, mm))
-        m.attemptResize(QgsLayoutSize(190, 235, mm))
-        m.setLayers(layers)
+        if template:
+            w, h = page_dimensions_mm(template["page_size"], template["orientation"])
+            layout.pageCollection().pages()[0].setPageSize(QgsLayoutSize(w, h, mm))
+            elements = template.get("elements", [])
+        else:
+            elements = [
+                {"type": "title", "x": 10, "y": 8, "width": 190, "height": 12},
+                {"type": "map", "x": 10, "y": 22, "width": 190, "height": 235},
+                {"type": "legend", "x": 150, "y": 200, "width": 50, "height": 60},
+                {"type": "scalebar", "x": 10, "y": 262, "width": 80, "height": 15},
+            ]
+
         extent = canvas.extent()
         if extent is None or extent.isEmpty():
             extent = layers[0].extent()
-        m.setExtent(extent)
-        m.setFrameEnabled(True)
-        layout.addLayoutItem(m)
 
-        label = QgsLayoutItemLabel(layout)
-        label.setText(title or "Carte QGISIA+")
-        label.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        label.adjustSizeToText()
-        label.attemptMove(QgsLayoutPoint(10, 8, mm))
-        layout.addLayoutItem(label)
+        # 1er passage : la carte (les autres elements s'y rattachent)
+        map_item = None
+        for el in elements:
+            if el.get("type") != "map":
+                continue
+            map_item = QgsLayoutItemMap(layout)
+            map_item.attemptMove(QgsLayoutPoint(el.get("x", 10), el.get("y", 22), mm))
+            map_item.attemptResize(QgsLayoutSize(el.get("width", 190), el.get("height", 235), mm))
+            map_item.setLayers(layers)
+            map_item.setExtent(extent)
+            map_item.setFrameEnabled(True)
+            layout.addLayoutItem(map_item)
+            break
 
-        legend = QgsLayoutItemLegend(layout)
-        legend.setLinkedMap(m)
-        legend.setTitle("Legende")
-        legend.attemptMove(QgsLayoutPoint(150, 200, mm))
-        layout.addLayoutItem(legend)
-
-        scalebar = QgsLayoutItemScaleBar(layout)
-        scalebar.setStyle("Single Box")
-        scalebar.setLinkedMap(m)
-        scalebar.applyDefaultSize()
-        scalebar.attemptMove(QgsLayoutPoint(10, 262, mm))
-        layout.addLayoutItem(scalebar)
+        # 2e passage : les autres elements
+        for el in elements:
+            etype = el.get("type")
+            x, y = el.get("x", 10), el.get("y", 10)
+            w_, h_ = el.get("width", 50), el.get("height", 20)
+            if etype in ("title", "text"):
+                lab = QgsLayoutItemLabel(layout)
+                txt = el.get("text") or (title or "Carte QGISIA+") if etype == "title" \
+                    else el.get("text", "")
+                lab.setText(txt)
+                size = 16 if etype == "title" else 10
+                lab.setFont(QFont("Segoe UI", size, QFont.Bold if etype == "title" else QFont.Normal))
+                lab.attemptMove(QgsLayoutPoint(x, y, mm))
+                lab.attemptResize(QgsLayoutSize(w_, h_, mm))
+                layout.addLayoutItem(lab)
+            elif etype == "legend" and map_item is not None:
+                leg = QgsLayoutItemLegend(layout)
+                leg.setLinkedMap(map_item)
+                leg.setTitle("Legende")
+                leg.attemptMove(QgsLayoutPoint(x, y, mm))
+                layout.addLayoutItem(leg)
+            elif etype == "scalebar" and map_item is not None:
+                sb = QgsLayoutItemScaleBar(layout)
+                sb.setStyle("Single Box")
+                sb.setLinkedMap(map_item)
+                sb.applyDefaultSize()
+                sb.attemptMove(QgsLayoutPoint(x, y, mm))
+                layout.addLayoutItem(sb)
+            elif etype in ("north", "image"):
+                try:
+                    pic = QgsLayoutItemPicture(layout)
+                    if etype == "north":
+                        pic.setPicturePath(os.path.join(
+                            QgsApplication.pkgDataPath(), "svg", "arrows", "NorthArrow_02.svg"))
+                    elif el.get("path"):
+                        pic.setPicturePath(el["path"])
+                    pic.attemptMove(QgsLayoutPoint(x, y, mm))
+                    pic.attemptResize(QgsLayoutSize(w_, h_, mm))
+                    layout.addLayoutItem(pic)
+                except Exception:  # noqa: BLE001 - element decoratif best-effort
+                    pass
 
         Path(out).parent.mkdir(parents=True, exist_ok=True)
         exporter = QgsLayoutExporter(layout)
@@ -2295,7 +2359,8 @@ class QgisBridge(BridgeQObject):
 
         self._notify(f"Planche cartographique exportee : {Path(out).name}.", Qgis.Success)
         return json.dumps({"ok": True, "path": out, "format": fmt,
-                           "layers": len(layers)}, ensure_ascii=False)
+                           "layers": len(layers), "template": template_id or None},
+                          ensure_ascii=False)
 
     @BridgeSlot(str, str, result=str)
     def classifyRaster(self, layer_ref, scheme_id):
@@ -3240,6 +3305,7 @@ class ThreadedAssetServer:
                     body.get("title", ""),
                     body.get("outputPath", ""),
                     body.get("format", "png"),
+                    body.get("template", ""),
                 )
             elif route == "/api/qgis/classifyRaster":
                 result = self._bridge_call(

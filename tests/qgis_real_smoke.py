@@ -328,12 +328,13 @@ def main():
             png = os.path.join(tempfile.gettempdir(), "layout_test.png")
             if os.path.exists(png):
                 os.remove(png)
-            raw_lay = bridge.exportPrintLayout("Carte de test QGISIA", png, "png")
+            raw_lay = bridge.exportPrintLayout(
+                "Carte de test QGISIA", png, "png", "a4_paysage_pro")
             play = json.loads(raw_lay) if raw_lay else {}
             size = os.path.getsize(png) if os.path.exists(png) else 0
             rec("bridge.exportPrintLayout",
-                play.get("ok") is True and size > 1000,
-                f"path={play.get('path')} size={size} layers={play.get('layers')}")
+                play.get("ok") is True and size > 1000 and play.get("template") == "a4_paysage_pro",
+                f"path={play.get('path')} size={size} layers={play.get('layers')} tmpl={play.get('template')}")
         except Exception as exc:
             rec("bridge.exportPrintLayout", False, str(exc))
 
