@@ -337,6 +337,18 @@ def main():
         except Exception as exc:
             rec("bridge.exportPrintLayout", False, str(exc))
 
+        # Classification thematique (analyse) : raster -> classes (style discret)
+        try:
+            raw_cls = bridge.classifyRaster("s2_red", "ndvi_vegetation")
+            pcls = json.loads(raw_cls) if raw_cls else {}
+            rl = QgsProject.instance().mapLayersByName("s2_red")
+            rtype = rl[0].renderer().type() if rl and rl[0].renderer() else ""
+            rec("bridge.classifyRaster",
+                pcls.get("ok") is True and rtype == "singlebandpseudocolor",
+                f"scheme={pcls.get('scheme')} renderer={rtype}")
+        except Exception as exc:
+            rec("bridge.classifyRaster", False, str(exc))
+
         _finish(plugin)
     except Exception:
         tb = traceback.format_exc()

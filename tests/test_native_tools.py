@@ -127,7 +127,8 @@ def test_to_openai_tools_and_names():
     assert set(names) == {
         "geocode", "weather", "elevation", "search_satellite_imagery",
         "wikipedia", "generate_layer_style", "list_symbology_presets",
-        "list_data_sources", "list_dossiers"}
+        "list_data_sources", "list_dossiers",
+        "list_report_templates", "generate_report"}
     for t in tools:
         assert t["type"] == "function"
         assert t["function"]["parameters"]["type"] == "object"
@@ -155,3 +156,17 @@ def test_list_dossiers_tool():
     out = nt._list_dossiers({}, None)
     assert out["count"] >= 3
     assert any(d["id"] == "urbanisme" for d in out["dossiers"])
+
+
+def test_list_report_templates_tool():
+    out = nt._list_report_templates({}, None)
+    assert any(t["id"] == "diagnostic_vegetation" for t in out["templates"])
+
+
+def test_generate_report_tool():
+    out = nt._generate_report(
+        {"template_id": "diagnostic_vegetation",
+         "context": {"commune": "Toulouse", "date": "2026", "ndvi_moyen": "0.62"}}, None)
+    assert "Toulouse" in out["markdown"]
+    assert "{" not in out["markdown"]  # tous les placeholders fournis -> aucun restant
+    assert "commune" in out["required_keys"]

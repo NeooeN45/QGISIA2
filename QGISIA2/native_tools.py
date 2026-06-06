@@ -138,6 +138,28 @@ def _list_dossiers(args: dict, get_json: Callable) -> dict:
     return {"count": len(dossiers), "dossiers": dossiers}
 
 
+def _list_report_templates(args: dict, get_json: Callable) -> dict:
+    try:
+        from report_templates import list_templates  # type: ignore
+    except ImportError:
+        from .report_templates import list_templates  # type: ignore
+    return {"templates": list_templates()}
+
+
+def _generate_report(args: dict, get_json: Callable) -> dict:
+    try:
+        from report_templates import render_report, required_keys  # type: ignore
+    except ImportError:
+        from .report_templates import render_report, required_keys  # type: ignore
+    template_id = args.get("template_id") or args.get("template") or ""
+    context = args.get("context") or {}
+    return {
+        "template": template_id,
+        "required_keys": sorted(required_keys(template_id)),
+        "markdown": render_report(template_id, context),
+    }
+
+
 def _generate_layer_style(args: dict, get_json: Callable) -> dict:
     """Genere un style QGIS (.qml) a partir d'une legende [{label,color,geometry}]."""
     try:
@@ -259,6 +281,31 @@ NATIVE_TOOLS: List[NativeTool] = [
         ),
         input_schema={"type": "object", "properties": {}},
         executor=_list_dossiers,
+    ),
+    NativeTool(
+        name="list_report_templates",
+        description=(
+            "Lister les gabarits de rapport de diagnostic territorial (vegetation, risques, "
+            "urbanisme). A utiliser avec generate_report."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        executor=_list_report_templates,
+    ),
+    NativeTool(
+        name="generate_report",
+        description=(
+            "Generer un rapport markdown de diagnostic a partir d'un gabarit et d'un contexte "
+            "(ex: {commune, date, ndvi_moyen}). Renvoie le markdown + les cles requises."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "template_id": {"type": "string", "description": "ex: diagnostic_vegetation"},
+                "context": {"type": "object", "description": "valeurs des placeholders"},
+            },
+            "required": ["template_id"],
+        },
+        executor=_generate_report,
     ),
     NativeTool(
         name="list_symbology_presets",

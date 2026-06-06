@@ -522,6 +522,23 @@ TOOL_CATALOG: list[McpToolSpec] = [
         endpoint="/api/qgis/exportPrintLayout",
         payload_builder=_direct_payload,
     ),
+    McpToolSpec(
+        name="classifyRaster",
+        description=(
+            "Appliquer une classification thematique a un raster continu : "
+            "'ndvi_vegetation', 'dnbr_severite', 'pente_degres' (style discret colore)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "layerId": {"type": "string"},
+                "schemeId": {"type": "string", "enum": ["ndvi_vegetation", "dnbr_severite", "pente_degres"]},
+            },
+            "required": ["layerId", "schemeId"],
+        },
+        endpoint="/api/qgis/classifyRaster",
+        payload_builder=_direct_payload,
+    ),
 ]
 
 

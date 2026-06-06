@@ -2297,6 +2297,44 @@ class QgisBridge(BridgeQObject):
         return json.dumps({"ok": True, "path": out, "format": fmt,
                            "layers": len(layers)}, ensure_ascii=False)
 
+    @BridgeSlot(str, str, result=str)
+    def classifyRaster(self, layer_ref, scheme_id):
+        """Applique une classification thematique a un raster continu (ex: NDVI -> classes
+        de vegetation, dNBR -> severite du feu, pente -> classes de degres) via un style
+        discret. Voir classification.list_schemes pour les id."""
+        raster = self._ensure_raster_layer(str(layer_ref or "").strip())
+        if raster is None:
+            self._notify(f"Raster introuvable : {layer_ref}", Qgis.Warning)
+            return ""
+        try:
+            from classification import build_discrete_pseudocolor_qml, get_scheme
+        except ImportError:
+            from .classification import build_discrete_pseudocolor_qml, get_scheme
+        scheme_id = str(scheme_id or "").strip()
+        if get_scheme(scheme_id) is None:
+            self._notify(f"Schema de classification inconnu : {scheme_id}", Qgis.Warning)
+            return ""
+        try:
+            qml = build_discrete_pseudocolor_qml(scheme_id, band=1)
+        except Exception as exc:  # noqa: BLE001
+            self._notify(f"Erreur classification : {exc}", Qgis.Warning)
+            return ""
+
+        from qgis.PyQt.QtXml import QDomDocument
+        doc = QDomDocument()
+        if not doc.setContent(qml):
+            self._notify("QML de classification invalide.", Qgis.Warning)
+            return ""
+        ok, err = raster.importNamedStyle(doc)
+        if not ok:
+            self._notify(f"Echec application classification : {err}", Qgis.Warning)
+            return ""
+        self._refresh_layer_rendering(raster)
+        message = f"Classification '{scheme_id}' appliquee sur {raster.name()}."
+        self._notify(message, Qgis.Success)
+        return json.dumps({"ok": True, "layer": raster.name(), "scheme": scheme_id},
+                          ensure_ascii=False)
+
     @BridgeSlot(str, str, str, result=str)
     def mergeRasterBands(self, layer_ids_json, output_name, output_path):
         try:
@@ -3202,6 +3240,12 @@ class ThreadedAssetServer:
                     body.get("title", ""),
                     body.get("outputPath", ""),
                     body.get("format", "png"),
+                )
+            elif route == "/api/qgis/classifyRaster":
+                result = self._bridge_call(
+                    "classifyRaster",
+                    body.get("layerId", ""),
+                    body.get("schemeId", ""),
                 )
             elif route == "/api/qgis/mergeRasterBands":
                 result = self._bridge_call(
