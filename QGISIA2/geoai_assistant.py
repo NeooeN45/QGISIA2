@@ -2357,10 +2357,24 @@ class QgisBridge(BridgeQObject):
             self._notify("Echec de l'export de la mise en page.", Qgis.Warning)
             return ""
 
+        # layout_meta exploitable par vision_critique (boucle d'auto-correction)
+        present = {el.get("type") for el in elements}
+        extent_list = None
+        if map_item is not None:
+            ext = map_item.extent()
+            extent_list = [ext.xMinimum(), ext.yMinimum(), ext.xMaximum(), ext.yMaximum()]
+        layout_meta = {
+            "title": title or ("title" in present or "text" in present),
+            "map": {"extent": extent_list} if map_item is not None else None,
+            "legend": "legend" in present,
+            "scalebar": "scalebar" in present,
+            "north": "north" in present,
+        }
+
         self._notify(f"Planche cartographique exportee : {Path(out).name}.", Qgis.Success)
         return json.dumps({"ok": True, "path": out, "format": fmt,
-                           "layers": len(layers), "template": template_id or None},
-                          ensure_ascii=False)
+                           "layers": len(layers), "template": template_id or None,
+                           "layout_meta": layout_meta}, ensure_ascii=False)
 
     @BridgeSlot(str, str, result=str)
     def classifyRaster(self, layer_ref, scheme_id):

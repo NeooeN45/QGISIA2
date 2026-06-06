@@ -160,6 +160,24 @@ def _generate_report(args: dict, get_json: Callable) -> dict:
     }
 
 
+def _critique_layout(args: dict, get_json: Callable) -> dict:
+    try:
+        from vision_critique import (  # type: ignore
+            build_critique_prompt, completeness_score, suggest_fixes)
+    except ImportError:
+        from .vision_critique import (  # type: ignore
+            build_critique_prompt, completeness_score, suggest_fixes)
+    intent = args.get("intent", "")
+    layout_meta = args.get("layout_meta") or {}
+    score = completeness_score(layout_meta)
+    return {
+        "score": score["score"],
+        "missing": score["missing"],
+        "fixes": suggest_fixes(layout_meta),
+        "vlm_prompt": build_critique_prompt(intent, layout_meta),
+    }
+
+
 def _generate_layer_style(args: dict, get_json: Callable) -> dict:
     """Genere un style QGIS (.qml) a partir d'une legende [{label,color,geometry}]."""
     try:
@@ -306,6 +324,23 @@ NATIVE_TOOLS: List[NativeTool] = [
             "required": ["template_id"],
         },
         executor=_generate_report,
+    ),
+    NativeTool(
+        name="critique_layout",
+        description=(
+            "Boucle vision : evaluer une mise en page (score de completude + elements "
+            "manquants + correctifs) et obtenir le prompt a envoyer a un VLM pour critiquer "
+            "le rendu. layout_meta ex: {title, map:{extent:[...]}, legend, scalebar, north}."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "intent": {"type": "string", "description": "intention de la carte"},
+                "layout_meta": {"type": "object"},
+            },
+            "required": ["layout_meta"],
+        },
+        executor=_critique_layout,
     ),
     NativeTool(
         name="list_symbology_presets",

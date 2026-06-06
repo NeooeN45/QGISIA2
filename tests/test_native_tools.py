@@ -128,7 +128,7 @@ def test_to_openai_tools_and_names():
         "geocode", "weather", "elevation", "search_satellite_imagery",
         "wikipedia", "generate_layer_style", "list_symbology_presets",
         "list_data_sources", "list_dossiers",
-        "list_report_templates", "generate_report"}
+        "list_report_templates", "generate_report", "critique_layout"}
     for t in tools:
         assert t["type"] == "function"
         assert t["function"]["parameters"]["type"] == "object"
@@ -170,3 +170,14 @@ def test_generate_report_tool():
     assert "Toulouse" in out["markdown"]
     assert "{" not in out["markdown"]  # tous les placeholders fournis -> aucun restant
     assert "commune" in out["required_keys"]
+
+
+def test_critique_layout_tool():
+    full = {"title": "X", "map": {"extent": [0, 0, 1, 1]},
+            "legend": True, "scalebar": True, "north": True}
+    out = nt._critique_layout({"intent": "carte des forets", "layout_meta": full}, None)
+    assert out["score"] == 1.0 and out["missing"] == []
+    assert "forets" in out["vlm_prompt"]
+    poor = nt._critique_layout({"intent": "x", "layout_meta": {}}, None)
+    assert poor["score"] < 1.0 and "map" in poor["missing"]
+    assert poor["fixes"]

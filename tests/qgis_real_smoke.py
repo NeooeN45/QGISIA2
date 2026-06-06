@@ -332,9 +332,12 @@ def main():
                 "Carte de test QGISIA", png, "png", "a4_paysage_pro")
             play = json.loads(raw_lay) if raw_lay else {}
             size = os.path.getsize(png) if os.path.exists(png) else 0
+            meta = play.get("layout_meta") or {}
+            has_meta = isinstance(meta.get("map"), dict)
             rec("bridge.exportPrintLayout",
-                play.get("ok") is True and size > 1000 and play.get("template") == "a4_paysage_pro",
-                f"path={play.get('path')} size={size} layers={play.get('layers')} tmpl={play.get('template')}")
+                play.get("ok") is True and size > 1000
+                and play.get("template") == "a4_paysage_pro" and has_meta,
+                f"size={size} tmpl={play.get('template')} meta_map={meta.get('map')}")
         except Exception as exc:
             rec("bridge.exportPrintLayout", False, str(exc))
 
