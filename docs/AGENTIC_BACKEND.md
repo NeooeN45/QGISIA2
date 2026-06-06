@@ -63,7 +63,8 @@ Re-valider à tout moment : `python scripts/validate_nvidia_models.py`
 `filterLayer`, `reprojectLayer`, `applyQmlStyle`, `applySymbologyPreset`,
 `addDataSource`, `addRemoteRaster` (COG `/vsicurl/`), `computeSpectralIndex`
 (NDVI/NDWI/… + auto-style), `computeRasterDifference` (détection de changement),
-`zonalStatistics` (stats par zone), `runDossier` (dossier territorial 1-clic),
+`zonalStatistics` (stats par zone), `bufferLayer` (zone tampon),
+`saveVectorLayer` (export GPKG/GeoJSON/SHP), `runDossier` (dossier territorial 1-clic),
 `segmentRasterWithSAM`, `forecastWeatherWithEarth2`, `exportProjectReport`,
 `runScript` (gardé), …
 
