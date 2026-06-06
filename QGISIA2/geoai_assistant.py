@@ -1550,6 +1550,38 @@ class QgisBridge(BridgeQObject):
         self._notify(message, Qgis.Success)
         return message
 
+    @BridgeSlot(str, str, result=str)
+    def applyQmlStyle(self, layer_ref, qml_xml):
+        """Applique un style QGIS (.qml fourni en chaine XML) a une couche.
+
+        Utilise par la reproduction de carte (legende VLM -> QML -> style).
+        """
+        layer = self._find_layer(layer_ref)
+        if layer is None:
+            message = "Couche introuvable pour appliquer le style."
+            self._notify(message, Qgis.Warning)
+            return message
+        try:
+            from qgis.PyQt.QtXml import QDomDocument
+            doc = QDomDocument()
+            if not doc.setContent(qml_xml):
+                message = "QML invalide (XML non analysable)."
+                self._notify(message, Qgis.Warning)
+                return message
+            ok, err = layer.importNamedStyle(doc)
+            if not ok:
+                message = f"Echec application du style: {err}"
+                self._notify(message, Qgis.Warning)
+                return message
+            self._refresh_layer_rendering(layer)
+            message = f"Style applique sur {layer.name()}."
+            self._notify(message, Qgis.Success)
+            return message
+        except Exception as exc:  # noqa: BLE001
+            message = f"Erreur application style: {exc}"
+            self._notify(message, Qgis.Warning)
+            return message
+
     @BridgeSlot(str, str, str, result=str)
     def splitSelectedLayerByLine(self, layer_ref, line_wkt, output_name):
         layer = self._find_layer(layer_ref)
@@ -2530,6 +2562,12 @@ class ThreadedAssetServer:
                     body.get("layerId", ""),
                     body.get("fieldName", ""),
                     bool(body.get("enabled", True)),
+                )
+            elif route == "/api/qgis/applyQmlStyle":
+                result = self._bridge_call(
+                    "applyQmlStyle",
+                    body.get("layerId", ""),
+                    body.get("qml", ""),
                 )
             elif route == "/api/qgis/splitSelectedLayerByLine":
                 result = self._bridge_call(

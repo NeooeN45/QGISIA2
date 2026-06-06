@@ -281,6 +281,23 @@ TOOL_CATALOG: list[McpToolSpec] = [
         endpoint="/api/qgis/reprojectLayer",
         payload_builder=_direct_payload,
     ),
+    McpToolSpec(
+        name="applyQmlStyle",
+        description=(
+            "Appliquer un style QGIS (.qml fourni en chaine XML) a une couche. "
+            "Utilise pour reproduire la symbologie d'une carte (legende -> QML)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "layerId": {"type": "string"},
+                "qml": {"type": "string", "description": "Contenu XML du style QML categorise"},
+            },
+            "required": ["layerId", "qml"],
+        },
+        endpoint="/api/qgis/applyQmlStyle",
+        payload_builder=_direct_payload,
+    ),
 ]
 
 

@@ -112,6 +112,22 @@ def main():
         except Exception as exc:
             rec("bridge.reprojectLayer", False, str(exc))
 
+        # Reproduction de carte (A-S6) : generer un QML categorise et l'appliquer
+        try:
+            from QGISIA2 import map_repro
+            legend = [
+                {"label": "A", "color": "#228B22", "geometry": "point"},
+                {"label": "B", "color": "#1E90FF", "geometry": "point"},
+            ]
+            qml = map_repro.legend_to_qml(legend, field="name")
+            style_msg = bridge.applyQmlStyle("smoke_layer", qml)
+            renderer = layer.renderer()
+            rtype = renderer.type() if renderer is not None else ""
+            rec("bridge.applyQmlStyle", rtype == "categorizedSymbol",
+                f"{style_msg} | renderer={rtype}")
+        except Exception as exc:
+            rec("bridge.applyQmlStyle", False, str(exc))
+
         _finish(plugin)
     except Exception:
         tb = traceback.format_exc()
