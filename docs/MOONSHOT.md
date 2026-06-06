@@ -25,6 +25,10 @@ reproduction de carte (légende→QML) · dossiers territoriaux 1-clic · export
 - **Étude territoriale 100% autonome** : 20→100 étapes, l'agent planifie, exécute,
   s'auto-corrige via **boucle vision** (rendu canvas → VLM critique → ajuste) jusqu'à
   la perfection visuelle.
+  - 🔩 Briques livrées (vérifiées QGIS) : `renderMapView` (vue→PNG), `critique_layout`
+    (score de complétude + correctifs + prompt VLM), `exportPrintLayout` renvoyant un
+    `layout_meta`. Reste : câbler l'appel VLM image (modèle vision NVIDIA) dans la boucle
+    de l'agent pour fermer l'auto-correction.
 - **« Décris, l'IA réalise »** : reproduction pixel-perfect d'une carte depuis n'importe
   quelle image/PDF (symbologie, légende, étiquetage, géoréférencement) sur la zone voulue.
 - **Prédictif** : Earth-2 (météo) + détection de changement → projection d'évolution
