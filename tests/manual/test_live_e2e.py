@@ -96,6 +96,21 @@ tools_called = [t["tool"] for t in res["trace"]]
 check("le LLM a appele >=1 outil QGIS", len(res["trace"]) > 0, str(tools_called))
 check("reponse finale non vide", len(res["content"]) > 0, res["content"][:60])
 
+# 4) Web/geo-grounding : l'agent utilise l'outil natif geocode (Nominatim reel)
+print("\n--- 4) Web/geo-grounding (geocode live) ---")
+geo_bridge = _FakeBridge()
+res_geo = run_tool_loop(
+    [{"role": "user",
+      "content": "Donne les coordonnees (lat/lon) de Toulouse, France en utilisant l'outil geocode."}],
+    API_KEYS,
+    model="smart-default",
+    http_client=geo_bridge,
+    max_iters=3,
+)
+geo_tools = [t["tool"] for t in res_geo["trace"]]
+check("le LLM a appele l'outil geocode", "geocode" in geo_tools, str(geo_tools))
+check("reponse mentionne Toulouse/coordonnees", len(res_geo["content"]) > 0, res_geo["content"][:60])
+
 # Bilan
 passed = sum(1 for _, ok in results if ok)
 total = len(results)
