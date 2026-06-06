@@ -272,6 +272,45 @@ export async function smartProcess(req: SmartRequest): Promise<SmartResult> {
   return data.result;
 }
 
+// ---------------------------------------------------------------------------
+// Boucle agentique tool-calling (POST /api/llm/agent)
+// ---------------------------------------------------------------------------
+
+export interface AgentToolTrace {
+  tool: string;
+  arguments: Record<string, unknown>;
+  result: string;
+}
+
+export interface AgentLoopResult {
+  content: string;
+  trace: AgentToolTrace[];
+  iterations: number;
+}
+
+export interface AgentRequest {
+  query?: string;
+  messages?: ChatMessage[];
+  model?: string;
+  max_iters?: number;
+  api_keys?: ApiKeys;
+  signal?: AbortSignal;
+}
+
+/** Lance la boucle agentique : le LLM appelle des outils QGIS jusqu'a la reponse finale. */
+export async function runAgent(req: AgentRequest): Promise<AgentLoopResult> {
+  const { signal, ...body } = req;
+  const data = await apiFetch<{ ok: boolean; result: AgentLoopResult }>(
+    "/api/llm/agent",
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal,
+    },
+  );
+  return data.result;
+}
+
 /**
  * Configuration du streaming robuste.
  */
