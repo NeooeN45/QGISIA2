@@ -1912,20 +1912,62 @@ class QgisBridge(BridgeQObject):
             self._notify(msg, Qgis.Warning)
             return ""
 
+        # Calcul via QgsRasterCalculator (band-aware, independant du provider gdal
+        # processing). band_map : {"NIR":"couche@8","RED":"couche@4"} ou {"NIR":"couche"} (bande 1).
         try:
-            expression = build_expression(index_id, band_map)
+            from qgis.analysis import QgsRasterCalculator, QgsRasterCalculatorEntry
+        except ImportError:
+            self._notify("QgsRasterCalculator indisponible.", Qgis.Critical)
+            return ""
+
+        entries = []
+        ref_map = {}
+        base_layer = None
+        for band, spec in band_map.items():
+            spec = str(spec)
+            if "@" in spec:
+                lname, _, bnum_s = spec.rpartition("@")
+                try:
+                    bnum = int(bnum_s)
+                except ValueError:
+                    lname, bnum = spec, 1
+            else:
+                lname, bnum = spec, 1
+            layer = self._ensure_raster_layer(lname)
+            if layer is None:
+                self._notify(f"Raster introuvable pour la bande {band}: {lname}", Qgis.Warning)
+                return ""
+            base_layer = base_layer or layer
+            ref = f"{lname}@{bnum}"
+            entry = QgsRasterCalculatorEntry()
+            entry.ref = ref
+            entry.raster = layer
+            entry.bandNumber = bnum
+            entries.append(entry)
+            ref_map[band] = f'"{ref}"'
+
+        try:
+            expression = build_expression(index_id, ref_map)
         except ValueError as exc:
             self._notify(str(exc), Qgis.Warning)
             return ""
 
         output_name = f"{index_id.upper()}_{layer_ref}"
-        raw = self.calculateRasterFormula(
-            json.dumps([layer_ref]), expression, output_name, output_path)
-        if not raw:
-            return ""  # erreur deja notifiee par calculateRasterFormula
+        out_path = str(output_path or "").strip() or str(
+            self._runtime_directory() / f"{output_name}.tif")
+        calc = QgsRasterCalculator(
+            expression, out_path, "GTiff", base_layer.extent(),
+            base_layer.width(), base_layer.height(), entries)
+        if calc.processCalculation() != 0:
+            self._notify("Echec du calcul d'indice spectral.", Qgis.Critical)
+            return ""
 
-        payload = json.loads(raw)
-        out_layer = payload.get("outputLayerName", output_name)
+        out_rl = QgsRasterLayer(out_path, output_name)
+        if self._add_layer_to_project(out_rl, output_name, source="SpectralIndex") is None:
+            self._notify("Indice calcule mais non chargeable.", Qgis.Warning)
+            return ""
+        out_layer = out_rl.name()
+        payload = {"outputLayerName": out_layer, "outputPath": out_path}
 
         # Auto-stylage pseudocolor selon l'indice (plage -1..1 typique des indices normalises)
         try:

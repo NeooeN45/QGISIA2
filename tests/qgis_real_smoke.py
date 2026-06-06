@@ -199,6 +199,40 @@ def main():
         except Exception as exc:
             rec("bridge.runDossier.unknown", False, str(exc))
 
+        # Diagnostic satellite (P1) : 2 rasters mono-bande (RED, NIR) -> NDVI -> style
+        try:
+            import tempfile
+            from osgeo import gdal, osr
+
+            def _make_band(path, value):
+                ds = gdal.GetDriverByName("GTiff").Create(path, 4, 4, 1, gdal.GDT_Float32)
+                ds.SetGeoTransform([600000, 10, 0, 6200000, 0, -10])
+                srs = osr.SpatialReference(); srs.ImportFromEPSG(2154)
+                ds.SetProjection(srs.ExportToWkt())
+                ds.GetRasterBand(1).Fill(value)
+                ds.FlushCache()
+
+            red_tif = os.path.join(tempfile.gettempdir(), "s2_red.tif")
+            nir_tif = os.path.join(tempfile.gettempdir(), "s2_nir.tif")
+            _make_band(red_tif, 0.2)
+            _make_band(nir_tif, 0.6)
+            m_red = bridge.addRasterFile(red_tif, "s2_red")
+            m_nir = bridge.addRasterFile(nir_tif, "s2_nir")
+            red_ok = bool(QgsProject.instance().mapLayersByName("s2_red"))
+            nir_ok = bool(QgsProject.instance().mapLayersByName("s2_nir"))
+
+            out_tif = os.path.join(tempfile.gettempdir(), "s2_ndvi.tif")
+            band_map = json.dumps({"NIR": "s2_nir", "RED": "s2_red"})
+            raw = bridge.computeSpectralIndex("scene", "ndvi", band_map, out_tif)
+            payload = json.loads(raw) if raw else {}
+            out_name = payload.get("outputLayerName", "")
+            created = bool(out_name) and bool(QgsProject.instance().mapLayersByName(out_name))
+            rec("bridge.computeSpectralIndex",
+                created and payload.get("index") == "ndvi",
+                f"red={red_ok}({m_red}) nir={nir_ok}({m_nir}) raw={raw[:150]!r} out={out_name}")
+        except Exception as exc:
+            rec("bridge.computeSpectralIndex", False, str(exc))
+
         _finish(plugin)
     except Exception:
         tb = traceback.format_exc()
