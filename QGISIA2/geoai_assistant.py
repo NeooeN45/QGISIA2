@@ -2934,6 +2934,7 @@ class ThreadedAssetServer:
                 model = body.get("model", "smart-default")
                 max_iters = int(body.get("max_iters", 5))
                 auto_mode = bool(body.get("auto_mode", False))
+                system = body.get("system")
                 # Le bridge QGIS est servi par ce meme serveur (multi-thread) : on
                 # route les appels d'outils vers notre propre hote.
                 host = handler.headers.get("Host", "127.0.0.1")
@@ -2947,7 +2948,7 @@ class ThreadedAssetServer:
                 result = run_tool_loop(
                     messages, api_keys,
                     model=model, max_iters=max_iters, auto_mode=auto_mode,
-                    bridge_url=bridge_url,
+                    system=system, bridge_url=bridge_url,
                 )
                 self._send_json(handler, 200, {"ok": True, "result": result})
                 return True

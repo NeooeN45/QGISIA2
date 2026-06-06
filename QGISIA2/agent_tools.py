@@ -125,6 +125,16 @@ def safety_check(name: str, arguments: dict, auto_mode: bool = False) -> tuple:
     return False, getattr(result, "message", "") or "Action bloquee par la securite."
 
 
+DEFAULT_AGENT_SYSTEM = (
+    "Tu es un agent SIG expert integre dans QGIS. Pour accomplir la demande de "
+    "l'utilisateur, raisonne brievement (1-3 etapes) puis APPELLE les outils QGIS "
+    "disponibles (lister/filtrer/zoomer/styler les couches, executer un traitement, "
+    "etc.). Ancre tes actions sur le contexte fourni (couches du projet, documents "
+    "joints). N'invente pas d'identifiants de couche : utilise getLayersList si besoin. "
+    "Quand la tache est accomplie, reponds en francais avec un resume clair et concis."
+)
+
+
 def run_tool_loop(
     messages: List[dict],
     api_keys: dict,
@@ -132,6 +142,7 @@ def run_tool_loop(
     model: str = "smart-default",
     max_iters: int = 5,
     auto_mode: bool = False,
+    system: Optional[str] = None,
     bridge_url: str = DEFAULT_BRIDGE_URL,
     chat_fn: Any = None,
     http_client: Any = None,
@@ -151,6 +162,9 @@ def run_tool_loop(
 
     tools = to_openai_tools()
     msgs: List[dict] = list(messages)
+    # Amorce de planification/grounding si aucun message systeme n'est fourni.
+    if not any(m.get("role") == "system" for m in msgs):
+        msgs.insert(0, {"role": "system", "content": system or DEFAULT_AGENT_SYSTEM})
     trace: List[dict] = []
 
     for iteration in range(1, max_iters + 1):

@@ -694,7 +694,9 @@ async function generateViaFederation(
     streamingStore.startStreaming(createMessageId());
 
     const result = await gatewaySmartProcess({
+      // Message clair pour le routage ; contexte couches passe a part pour l'execution.
       query: input.latestUserMessage,
+      context: input.layerContext ? { contexte_sig: input.layerContext } : undefined,
       api_keys: gateway.apiKeys,
       signal: input.signal,
     });
@@ -750,7 +752,8 @@ async function generateViaAgent(
     streamingStore.startStreaming(createMessageId());
 
     const result = await gatewayRunAgent({
-      query: input.latestUserMessage,
+      // Prompt complet : message utilisateur + contexte couches + documents joints.
+      query: input.prompt,
       model: gateway.defaultAlias,
       max_iters: 5,
       auto_mode: gateway.autoMode,

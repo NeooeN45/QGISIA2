@@ -202,6 +202,33 @@ def test_run_tool_loop_blocks_dangerous_script_without_calling_bridge():
     assert bridge.calls == []  # le bridge QGIS n'a jamais ete appele
 
 
+def test_run_tool_loop_prepends_default_system_prompt():
+    captured = {}
+
+    def fake_chat(model, messages, api_keys, tools=None, stream=False, **kw):
+        captured["messages"] = list(messages)
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    at.run_tool_loop([{"role": "user", "content": "liste les couches"}], {}, chat_fn=fake_chat)
+    assert captured["messages"][0]["role"] == "system"
+    assert "agent SIG" in captured["messages"][0]["content"]
+
+
+def test_run_tool_loop_respects_provided_system_message():
+    captured = {}
+
+    def fake_chat(model, messages, api_keys, tools=None, stream=False, **kw):
+        captured["messages"] = list(messages)
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    at.run_tool_loop(
+        [{"role": "system", "content": "SYSTEME PERSONNALISE"},
+         {"role": "user", "content": "x"}],
+        {}, chat_fn=fake_chat,
+    )
+    assert captured["messages"][0]["content"] == "SYSTEME PERSONNALISE"
+
+
 def test_run_tool_loop_respects_max_iters():
     def always_calls(model, messages, api_keys, tools=None, stream=False, **kw):
         return {"choices": [{"message": {
