@@ -318,6 +318,37 @@ TOOL_CATALOG: list[McpToolSpec] = [
         endpoint="/api/qgis/applySymbologyPreset",
         payload_builder=_direct_payload,
     ),
+    McpToolSpec(
+        name="list_data_sources",
+        description=(
+            "Lister les sources cartographiques mondiales gratuites du catalogue "
+            "(fonds, satellite, occupation du sol, IGN/Cadastre France...). "
+            "Filtre optionnel 'category'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"category": {"type": "string"}},
+        },
+        endpoint="/api/qgis/listDataSources",
+        payload_builder=_direct_payload,
+    ),
+    McpToolSpec(
+        name="addDataSource",
+        description=(
+            "Charger une source du catalogue mondial dans QGIS (fond OSM/CARTO/ESRI, "
+            "satellite, ESA WorldCover, IGN/Cadastre...). Voir list_data_sources pour les id."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "sourceId": {"type": "string", "description": "ex: 'osm-standard', 'esri-world-imagery', 'ign-cadastre'"},
+                "name": {"type": "string", "description": "Nom de couche optionnel"},
+            },
+            "required": ["sourceId"],
+        },
+        endpoint="/api/qgis/addDataSource",
+        payload_builder=_direct_payload,
+    ),
 ]
 
 

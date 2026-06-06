@@ -1098,6 +1098,64 @@ class QgisBridge(BridgeQObject):
         return message
 
     @BridgeSlot(str, str, result=str)
+    def addDataSource(self, source_id, layer_name):
+        """Charge une source du catalogue mondial (config/data_sources.json) dans QGIS.
+
+        Adapte la config generique de data_catalog vers le schema attendu par
+        _create_service_layer (serviceType / layerName / zMin / zMax camelCase).
+        """
+        try:
+            from data_catalog import get_source, build_service_config
+        except ImportError:
+            from .data_catalog import get_source, build_service_config
+
+        source = get_source(str(source_id or "").strip())
+        if source is None:
+            message = f"Source de donnees inconnue : {source_id}"
+            self._notify(message, Qgis.Warning)
+            return message
+
+        generic = build_service_config(source)
+        st = generic.get("service_type", "")
+        qgis_cfg = {
+            "serviceType": st,
+            "url": generic.get("url", ""),
+            "name": str(layer_name or "").strip() or generic.get("name", source["id"]),
+        }
+        if st in ("XYZ", "TMS"):
+            qgis_cfg["zMin"] = generic.get("zmin", 0)
+            qgis_cfg["zMax"] = generic.get("zmax", 22)
+        elif st == "WMS":
+            qgis_cfg["layerName"] = generic.get("layers", "")
+            qgis_cfg["format"] = generic.get("format", "image/png")
+            qgis_cfg["crs"] = generic.get("crs", "EPSG:3857")
+        elif st == "WMTS":
+            qgis_cfg["layerName"] = generic.get("layer", "")
+            qgis_cfg["tileMatrixSet"] = generic.get("tileMatrixSet", "PM")
+            qgis_cfg["format"] = generic.get("format", "image/png")
+            qgis_cfg["style"] = generic.get("style", "normal")
+
+        try:
+            layer = self._create_service_layer(qgis_cfg)
+        except Exception as exc:  # noqa: BLE001
+            message = f"Impossible de preparer la source : {exc}"
+            self._notify(message, Qgis.Warning, duration=6)
+            return message
+
+        if self._add_layer_to_project(layer, qgis_cfg.get("name"),
+                                      source=f"Catalog:{source['id']}") is None:
+            reason = self._layer_error_message(layer)
+            message = f"La source '{source['id']}' n'a pas pu etre chargee."
+            if reason:
+                message = f"{message} Cause: {reason}"
+            self._notify(message, Qgis.Warning, duration=6)
+            return message
+
+        message = f"Source ajoutee : {layer.name()} ({source.get('provider', '')})."
+        self._notify(message, Qgis.Success)
+        return message
+
+    @BridgeSlot(str, str, result=str)
     def addRasterFile(self, file_path, layer_name):
         file_path = str(file_path or "").strip()
         if not file_path or not Path(file_path).exists():
@@ -2531,6 +2589,20 @@ class ThreadedAssetServer:
                     "addServiceLayer",
                     body.get("config", ""),
                 )
+            elif route == "/api/qgis/addDataSource":
+                result = self._bridge_call(
+                    "addDataSource",
+                    body.get("sourceId", ""),
+                    body.get("name", ""),
+                )
+            elif route == "/api/qgis/listDataSources":
+                try:
+                    from data_catalog import list_sources
+                except ImportError:
+                    from .data_catalog import list_sources
+                category = body.get("category") or (query.get("category", [None])[0])
+                result = json.dumps(
+                    {"sources": list_sources(category)}, ensure_ascii=False)
             elif route == "/api/qgis/addRasterFile":
                 result = self._bridge_call(
                     "addRasterFile",
