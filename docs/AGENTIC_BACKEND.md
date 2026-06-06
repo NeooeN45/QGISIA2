@@ -61,8 +61,10 @@ Re-valider à tout moment : `python scripts/validate_nvidia_models.py`
 ### Outils QGIS (bridge, `mcp_server.py` → `/api/qgis/*`)
 `getLayersList`, `setLayerVisibility`, `setLayerOpacity`, `zoomToLayer`,
 `filterLayer`, `reprojectLayer`, `applyQmlStyle`, `applySymbologyPreset`,
-`addDataSource`, `addRemoteRaster` (COG `/vsicurl/`), `segmentRasterWithSAM`,
-`forecastWeatherWithEarth2`, `exportProjectReport`, `runScript` (gardé), …
+`addDataSource`, `addRemoteRaster` (COG `/vsicurl/`), `computeSpectralIndex`
+(NDVI/NDWI/… + auto-style), `runDossier` (dossier territorial 1-clic),
+`segmentRasterWithSAM`, `forecastWeatherWithEarth2`, `exportProjectReport`,
+`runScript` (gardé), …
 
 ### Outils natifs web/geo/data (`native_tools.py`, en-process, sans clé)
 | Outil | Source |
@@ -74,12 +76,19 @@ Re-valider à tout moment : `python scripts/validate_nvidia_models.py`
 | `generate_layer_style` | Légende → QML (reproduction de carte) |
 | `list_symbology_presets` | Symbologies institutionnelles FR (ONF/IGN/PLU/Cadastre/CLC/PPRi) |
 | `list_data_sources` | **Catalogue mondial** (`data_catalog.py` / `config/data_sources.json`) |
+| `list_dossiers` | Dossiers territoriaux pré-assemblés (`dossier_blueprint.py`) |
 
-### Catalogue mondial de données (`data_catalog.py`, P3-S1)
-≈16 sources gratuites (XYZ/WMTS/WMS) : fonds OSM/CARTO/ESRI, satellite (ESRI imagery,
-Sentinel-2 cloudless EOX), relief, occupation du sol (ESA WorldCover), France
-(IGN Plan/Ortho/SCAN25, Cadastre). L'agent les découvre via `list_data_sources` et les
-charge via `addDataSource` (slot bridge → `_create_service_layer`). Vérifié en QGIS réel.
+### Piliers fonctionnels (vérifiés QGIS réel)
+- **P3 — Catalogue mondial** (`data_catalog.py`) : ≈28 sources gratuites (XYZ/WMTS/WMS) —
+  OSM/CARTO/ESRI, Sentinel-2 cloudless, ESA WorldCover, IGN/Cadastre, NASA/USGS… +
+  raster distant COG via `addRemoteRaster` (`/vsicurl/`, P3-S2).
+- **P2 — Dossier territorial 1-clic** (`dossier_blueprint.py` + `runDossier`) : urbanisme,
+  risques, forêt, environnement → charge les couches + symbologies en un appel.
+- **P1 — Diagnostic satellite** (`spectral_indices.py` + `raster_style.py` +
+  `computeSpectralIndex`) : NDVI/NDWI/NDBI/NBR/EVI via `QgsRasterCalculator`, auto-stylé
+  pseudocolor. Bandes mappées `couche@N` (assets COG Sentinel B04/B08…).
+- **Symbologies institutionnelles FR** (`symbology_presets.py`) : 13 presets (ONF, IGN,
+  PLU, Cadastre, CLC, PPRi/PPRn, Natura 2000, TVB, BRGM, DCE…).
 
 Le même catalogue alimente **le tool-calling LLM** ET **le serveur MCP** (Claude
 Desktop, Cursor…) — source unique de vérité.
