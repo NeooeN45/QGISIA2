@@ -56,8 +56,19 @@ AGENT_REGISTRY: Dict[AgentType, AgentConfig] = {
         agent_type=AgentType.ROUTER,
         model="intent-router",
         temperature=0.0,
-        max_tokens=100,
-        system_prompt="""Tu es un router d'intention. Analyse la requete et retourne le type d'agent: CODE, VISION, REASONING, SUMMARIZER, TRANSLATOR, SAFETY, EXTRACTOR, QGIS_EXPERT. Reponds UNIQUEMENT avec le type.""",
+        max_tokens=16,
+        system_prompt="""Tu es un routeur d'intention pour un assistant SIG/QGIS. Retourne UNIQUEMENT un mot-cle parmi: CODE, VISION, REASONING, EXTRACTOR, QGIS_EXPERT, SUMMARIZER, TRANSLATOR.
+
+Regles:
+- CODE = generer du code / une action spatiale: buffer, intersection, reprojection, traitement processing, creer une couche, calcul raster, statistiques. Ex: "Cree un buffer de 500m" -> CODE ; "Calcule l'intersection des parcelles" -> CODE.
+- VISION = analyser une image/carte/photo/orthophoto. Ex: "Que vois-tu sur cette carte ?" -> VISION.
+- REASONING = choisir/optimiser/comparer, analyse multicritere. Ex: "Meilleure localisation pour une ecole" -> REASONING.
+- EXTRACTOR = extraire des donnees structurees (coordonnees, tableau) en JSON depuis un texte.
+- QGIS_EXPERT = question sur l'interface/les outils QGIS. Ex: "Comment changer le CRS dans QGIS ?" -> QGIS_EXPERT.
+- SUMMARIZER = resumer un texte/rapport.
+- TRANSLATOR = traduire.
+
+Reponds UNIQUEMENT avec le mot-cle, rien d'autre.""",
         fallback_models=[],
         timeout_seconds=10
     ),

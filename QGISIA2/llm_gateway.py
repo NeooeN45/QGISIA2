@@ -148,6 +148,19 @@ def _build_completion_kwargs(
 
     provider = _extract_provider(model)
     api_key = api_keys.get(provider)
+
+    # Tool calling : le provider 'nvidia_nim' de LiteLLM rejette le parametre
+    # 'tools'. L'API NVIDIA NIM etant OpenAI-compatible, on route alors via le
+    # provider 'openai/' (qui supporte le function calling) avec l'api_base NVIDIA.
+    if provider == "nvidia_nim" and tools:
+        rest = model.split("/", 1)[1] if "/" in model else model
+        kwargs["model"] = f"openai/{rest}"
+        kwargs["api_base"] = "https://integrate.api.nvidia.com/v1"
+        kwargs["tool_choice"] = "auto"
+        if api_key:
+            kwargs["api_key"] = api_key
+        return kwargs
+
     if api_key:
         kwargs["api_key"] = api_key
     # Ollama : URL par defaut, surchargeable
@@ -156,6 +169,8 @@ def _build_completion_kwargs(
     # NVIDIA NIM : URL OpenAI-compatible requise
     if provider == "nvidia_nim":
         kwargs["api_base"] = "https://integrate.api.nvidia.com/v1"
+    if tools:
+        kwargs["tool_choice"] = "auto"
     return kwargs
 
 
