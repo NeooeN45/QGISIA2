@@ -1155,6 +1155,61 @@ class QgisBridge(BridgeQObject):
         self._notify(message, Qgis.Success)
         return message
 
+    def _find_vector_layer_with_field(self, field_name):
+        """Retourne le NOM d'une couche vectorielle ayant le champ donne, sinon None."""
+        if not field_name:
+            return None
+        for layer in QgsProject.instance().mapLayers().values():
+            if isinstance(layer, QgsVectorLayer) and layer.fields().indexOf(field_name) >= 0:
+                return layer.name()
+        return None
+
+    @BridgeSlot(str, result=str)
+    def runDossier(self, dossier_id):
+        """Deroule un dossier territorial pre-assemble (P2, 1 clic) : charge les couches
+        du catalogue et applique les symbologies institutionnelles. Renvoie un rapport JSON.
+        """
+        try:
+            from dossier_blueprint import expand_dossier, get_dossier
+        except ImportError:
+            from .dossier_blueprint import expand_dossier, get_dossier
+
+        dossier_id = str(dossier_id or "").strip()
+        if get_dossier(dossier_id) is None:
+            msg = f"Dossier inconnu : {dossier_id}"
+            self._notify(msg, Qgis.Warning)
+            return json.dumps({"ok": False, "error": msg}, ensure_ascii=False)
+
+        report = []
+        for step in expand_dossier(dossier_id):
+            action = step.get("action")
+            if action == "addDataSource":
+                m = self.addDataSource(step.get("sourceId", ""), "")
+                report.append({"action": action, "target": step.get("sourceId"), "message": m})
+            elif action == "applySymbologyPreset":
+                field = step.get("field", "")
+                target = self._find_vector_layer_with_field(field)
+                if target is None:
+                    report.append({
+                        "action": action, "preset": step.get("presetId"), "skipped": True,
+                        "message": f"Aucune couche vectorielle avec le champ '{field}' "
+                                   "(symbologie a appliquer ulterieurement).",
+                    })
+                else:
+                    m = self.applySymbologyPreset(target, step.get("presetId", ""), field)
+                    report.append({"action": action, "preset": step.get("presetId"),
+                                   "layer": target, "message": m})
+            else:
+                report.append({"action": action, "skipped": True, "message": "action inconnue"})
+
+        loaded = sum(1 for r in report
+                     if r.get("action") == "addDataSource" and "ajout" in r.get("message", "").lower())
+        summary = (f"Dossier '{dossier_id}' deroule : {loaded} couche(s) chargee(s), "
+                   f"{len(report)} etapes.")
+        self._notify(summary, Qgis.Success)
+        return json.dumps({"ok": True, "dossier": dossier_id, "steps": report,
+                           "summary": summary}, ensure_ascii=False)
+
     @BridgeSlot(str, str, result=str)
     def addRasterFile(self, file_path, layer_name):
         file_path = str(file_path or "").strip()
@@ -2635,6 +2690,14 @@ class ThreadedAssetServer:
                 category = body.get("category") or (query.get("category", [None])[0])
                 result = json.dumps(
                     {"sources": list_sources(category)}, ensure_ascii=False)
+            elif route == "/api/qgis/runDossier":
+                result = self._bridge_call("runDossier", body.get("dossierId", ""))
+            elif route == "/api/qgis/listDossiers":
+                try:
+                    from dossier_blueprint import list_dossiers
+                except ImportError:
+                    from .dossier_blueprint import list_dossiers
+                result = json.dumps({"dossiers": list_dossiers()}, ensure_ascii=False)
             elif route == "/api/qgis/addRasterFile":
                 result = self._bridge_call(
                     "addRasterFile",

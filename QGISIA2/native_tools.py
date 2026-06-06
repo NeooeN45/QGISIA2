@@ -129,6 +129,15 @@ def _list_data_sources(args: dict, get_json: Callable) -> dict:
     return {"count": len(sources), "sources": sources}
 
 
+def _list_dossiers(args: dict, get_json: Callable) -> dict:
+    try:
+        from dossier_blueprint import list_dossiers  # type: ignore
+    except ImportError:
+        from .dossier_blueprint import list_dossiers  # type: ignore
+    dossiers = list_dossiers()
+    return {"count": len(dossiers), "dossiers": dossiers}
+
+
 def _generate_layer_style(args: dict, get_json: Callable) -> dict:
     """Genere un style QGIS (.qml) a partir d'une legende [{label,color,geometry}]."""
     try:
@@ -240,6 +249,16 @@ NATIVE_TOOLS: List[NativeTool] = [
             "properties": {"category": {"type": "string", "description": "ex: basemap, satellite, france, occupation_sol, relief"}},
         },
         executor=_list_data_sources,
+    ),
+    NativeTool(
+        name="list_dossiers",
+        description=(
+            "Lister les dossiers territoriaux pre-assembles (urbanisme, risques, foret, "
+            "environnement...). Chaque dossier charge un jeu de couches + symbologies en 1 appel "
+            "via runDossier. Renvoie id, nom, description, nb d'etapes."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        executor=_list_dossiers,
     ),
     NativeTool(
         name="list_symbology_presets",

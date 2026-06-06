@@ -366,6 +366,31 @@ TOOL_CATALOG: list[McpToolSpec] = [
         endpoint="/api/qgis/addRemoteRaster",
         payload_builder=_direct_payload,
     ),
+    McpToolSpec(
+        name="list_dossiers",
+        description=(
+            "Lister les dossiers territoriaux pre-assembles (urbanisme, risques, foret, "
+            "environnement). Chacun charge un jeu de couches + symbologies via runDossier."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        endpoint="/api/qgis/listDossiers",
+        payload_builder=_direct_payload,
+    ),
+    McpToolSpec(
+        name="runDossier",
+        description=(
+            "Derouler un dossier territorial en 1 appel : charge les couches du catalogue "
+            "et applique les symbologies institutionnelles. id via list_dossiers "
+            "(ex: 'urbanisme', 'risques', 'foret', 'environnement')."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"dossierId": {"type": "string"}},
+            "required": ["dossierId"],
+        },
+        endpoint="/api/qgis/runDossier",
+        payload_builder=_direct_payload,
+    ),
 ]
 
 
