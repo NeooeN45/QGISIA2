@@ -177,6 +177,28 @@ def main():
         except Exception as exc:
             rec("bridge.addRemoteRaster", False, str(exc))
 
+        # Dossier territorial 1-clic (P2) : derouler un dossier
+        try:
+            n0 = len(QgsProject.instance().mapLayers())
+            res_dossier = json.loads(bridge.runDossier("foret"))
+            n1 = len(QgsProject.instance().mapLayers())
+            steps = res_dossier.get("steps", [])
+            loaded_ok = any("ajout" in (s.get("message", "").lower())
+                            for s in steps if s.get("action") == "addDataSource")
+            rec("bridge.runDossier",
+                res_dossier.get("ok") is True and len(steps) == 3 and loaded_ok and n1 > n0,
+                f"{res_dossier.get('summary')} | layers {n0}->{n1}")
+        except Exception as exc:
+            rec("bridge.runDossier", False, str(exc))
+
+        # Dossier inconnu -> erreur propre
+        try:
+            res_unknown = json.loads(bridge.runDossier("dossier-bidon"))
+            rec("bridge.runDossier.unknown", res_unknown.get("ok") is False,
+                res_unknown.get("error", ""))
+        except Exception as exc:
+            rec("bridge.runDossier.unknown", False, str(exc))
+
         _finish(plugin)
     except Exception:
         tb = traceback.format_exc()
