@@ -99,12 +99,39 @@ def execute_tool_call(
     )
 
 
+# Outils executant du code/SQL arbitraire : a passer au crible des guardrails.
+_CODE_EXEC_TOOLS = {"runScript", "runScriptDirect", "runScriptDetailed"}
+
+
+def safety_check(name: str, arguments: dict, auto_mode: bool = False) -> tuple:
+    """
+    Garde-fou avant execution d'un outil. Retourne (allowed: bool, reason: str).
+    Seuls les outils executant du code PyQGIS arbitraire sont audites via
+    agent_guardrails (BLOCK toujours refuse ; CONFIRM refuse hors mode auto).
+    """
+    if name not in _CODE_EXEC_TOOLS:
+        return True, ""
+    code = (arguments or {}).get("script") or (arguments or {}).get("code") or ""
+    try:
+        try:
+            from agent_guardrails import AgentGuardrails  # type: ignore
+        except ImportError:
+            from .agent_guardrails import AgentGuardrails  # type: ignore
+    except Exception:  # noqa: BLE001 - garde-fou indispo : best effort, on n'execute pas a l'aveugle
+        return False, "Module de securite indisponible : execution de code bloquee."
+    result = AgentGuardrails(auto_mode=auto_mode).check_pyqgis_code(code)
+    if getattr(result, "passed", False):
+        return True, ""
+    return False, getattr(result, "message", "") or "Action bloquee par la securite."
+
+
 def run_tool_loop(
     messages: List[dict],
     api_keys: dict,
     *,
     model: str = "smart-default",
     max_iters: int = 5,
+    auto_mode: bool = False,
     bridge_url: str = DEFAULT_BRIDGE_URL,
     chat_fn: Any = None,
     http_client: Any = None,
@@ -151,18 +178,28 @@ def run_tool_loop(
             "tool_calls": message.get("tool_calls"),
         })
         for call in calls:
-            try:
-                result = execute_tool_call(
-                    call["name"], call["arguments"],
-                    bridge_url=bridge_url, http_client=http_client,
-                )
-            except Exception as exc:  # noqa: BLE001
-                result = f"Erreur outil {call['name']}: {exc}"
-            trace.append({
-                "tool": call["name"],
-                "arguments": call["arguments"],
-                "result": result[:500],
-            })
+            allowed, reason = safety_check(call["name"], call["arguments"], auto_mode)
+            if not allowed:
+                result = f"BLOQUE PAR SECURITE: {reason}"
+                trace.append({
+                    "tool": call["name"],
+                    "arguments": call["arguments"],
+                    "result": result,
+                    "blocked": True,
+                })
+            else:
+                try:
+                    result = execute_tool_call(
+                        call["name"], call["arguments"],
+                        bridge_url=bridge_url, http_client=http_client,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    result = f"Erreur outil {call['name']}: {exc}"
+                trace.append({
+                    "tool": call["name"],
+                    "arguments": call["arguments"],
+                    "result": result[:500],
+                })
             msgs.append({
                 "role": "tool",
                 "tool_call_id": call["id"],

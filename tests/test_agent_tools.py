@@ -147,6 +147,61 @@ def test_run_tool_loop_no_tools_returns_directly():
     assert res["trace"] == []
 
 
+def test_safety_check_allows_non_code_tools():
+    allowed, _ = at.safety_check("zoomToLayer", {"layerId": "L1"})
+    assert allowed is True
+
+
+def test_safety_check_blocks_drop_table_even_in_auto():
+    args = {"script": "db.execute('DROP TABLE parcelles')"}
+    assert at.safety_check("runScript", args, auto_mode=False)[0] is False
+    assert at.safety_check("runScript", args, auto_mode=True)[0] is False
+
+
+def test_safety_check_confirm_blocked_unless_auto():
+    args = {"script": "layer.startEditing()\nlayer.deleteFeatures([1,2,3])\nlayer.commitChanges()"}
+    assert at.safety_check("runScript", args, auto_mode=False)[0] is False
+    # En mode auto, une action CONFIRM (non critique) passe.
+    assert at.safety_check("runScript", args, auto_mode=True)[0] is True
+
+
+def test_safety_check_allows_safe_script():
+    assert at.safety_check("runScript", {"script": "print(iface.activeLayer().name())"})[0] is True
+
+
+def test_run_tool_loop_blocks_dangerous_script_without_calling_bridge():
+    import json as _json
+    state = {"i": 0}
+
+    def fake_chat(model, messages, api_keys, tools=None, stream=False, **kw):
+        state["i"] += 1
+        if state["i"] == 1:
+            return {"choices": [{"message": {
+                "content": None,
+                "tool_calls": [{
+                    "id": "c1",
+                    "function": {
+                        "name": "runScript",
+                        "arguments": _json.dumps({"script": "db.execute('DROP TABLE parcelles')"}),
+                    },
+                }],
+            }}]}
+        return {"choices": [{"message": {"content": "Action refusee pour raison de securite."}}]}
+
+    bridge = _FakeClient("NE DOIT PAS ETRE APPELE")
+    res = at.run_tool_loop(
+        [{"role": "user", "content": "supprime la table parcelles"}],
+        api_keys={},
+        chat_fn=fake_chat,
+        http_client=bridge,
+        auto_mode=False,
+        max_iters=2,
+    )
+    assert res["trace"][0].get("blocked") is True
+    assert "SECURITE" in res["trace"][0]["result"]
+    assert bridge.calls == []  # le bridge QGIS n'a jamais ete appele
+
+
 def test_run_tool_loop_respects_max_iters():
     def always_calls(model, messages, api_keys, tools=None, stream=False, **kw):
         return {"choices": [{"message": {
