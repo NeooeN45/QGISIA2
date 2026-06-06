@@ -102,6 +102,87 @@
         {"value": "znieff1", "label": "ZNIEFF type 1", "color": "#A6DBA0"},
         {"value": "znieff2", "label": "ZNIEFF type 2", "color": "#D9F0D3"}
       ]
+    },
+    {
+      "id": "tvb-trame-verte-bleue",
+      "institution": "Environnement (TVB)",
+      "name": "Trame verte et bleue (TVB)",
+      "geometry": "polygon",
+      "field": "type_tvb",
+      "source": "Schema regional TVB",
+      "categories": [
+        {"value": "reservoir_bio", "label": "Reservoir biologique", "color": "#228B22"},
+        {"value": "corridor", "label": "Corridor ecologique", "color": "#32CD32"},
+        {"value": "cours_eau", "label": "Cours d'eau / zones humides", "color": "#1E90FF"}
+      ]
+    },
+    {
+      "id": "geologie-brgm",
+      "institution": "BRGM",
+      "name": "Carte geologique (lithologie)",
+      "geometry": "polygon",
+      "field": "litho",
+      "source": "BRGM - Carte geologique vectorisee",
+      "categories": [
+        {"value": "sedimentaire", "label": "Roches sedimentaires", "color": "#F5DEB3"},
+        {"value": "magmatique", "label": "Roches magmatiques", "color": "#CD5C5C"},
+        {"value": "metamorphique", "label": "Roches metamorphiques", "color": "#808080"}
+      ]
+    },
+    {
+      "id": "pprn-mouvement-terrain",
+      "institution": "Risques (PPRn)",
+      "name": "PPRn mouvement de terrain",
+      "geometry": "polygon",
+      "field": "alea",
+      "source": "PPRn - zonage mouvement de terrain",
+      "categories": [
+        {"value": "fort", "label": "Alea fort (zone rouge)", "color": "#E31A1C"},
+        {"value": "moyen", "label": "Alea moyen (zone orange)", "color": "#FD8D3C"},
+        {"value": "faible", "label": "Alea faible (zone jaune)", "color": "#FECC5C"}
+      ]
+    },
+    {
+      "id": "zonage-assainissement",
+      "institution": "Urbanisme / Assainissement",
+      "name": "Zonage assainissement",
+      "geometry": "polygon",
+      "field": "type_assain",
+      "source": "SPANC / PLU - zonage assainissement",
+      "categories": [
+        {"value": "collectif", "label": "Assainissement collectif", "color": "#4169E1"},
+        {"value": "non_collectif", "label": "Assainissement non collectif", "color": "#87CEEB"}
+      ]
+    },
+    {
+      "id": "qualite-eau-dce",
+      "institution": "DCE / Qualite de l'eau",
+      "name": "Qualite de l'eau (DCE 5 classes)",
+      "geometry": "polygon",
+      "field": "qualite",
+      "source": "Directive Cadre sur l'Eau - classes de qualite",
+      "categories": [
+        {"value": "tres_bon", "label": "Tres bon (classe 1)", "color": "#0000CD"},
+        {"value": "bon", "label": "Bon (classe 2)", "color": "#4169E1"},
+        {"value": "moyen", "label": "Moyen (classe 3)", "color": "#00BFFF"},
+        {"value": "mediocre", "label": "Mediocre (classe 4)", "color": "#FFD700"},
+        {"value": "mauvais", "label": "Mauvais (classe 5)", "color": "#DC143C"}
+      ]
+    },
+    {
+      "id": "osm-landuse",
+      "institution": "OpenStreetMap",
+      "name": "Usage du sol (landuse OSM)",
+      "geometry": "polygon",
+      "field": "landuse",
+      "source": "OpenStreetMap - tag landuse",
+      "categories": [
+        {"value": "residentiel", "label": "Residentiel", "color": "#E5C6A8"},
+        {"value": "industriel", "label": "Industriel / commercial", "color": "#B0B0B0"},
+        {"value": "foret", "label": "Foret", "color": "#228B22"},
+        {"value": "agricole", "label": "Agricole", "color": "#F5DEB3"},
+        {"value": "eau", "label": "Eau", "color": "#1E90FF"}
+      ]
     }
   ]
 }

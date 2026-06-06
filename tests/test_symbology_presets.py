@@ -52,3 +52,19 @@ def test_preset_to_qml_field_override():
 
 def test_preset_to_qml_unknown_returns_none():
     assert sp.preset_to_qml("inconnu") is None
+
+
+def test_all_presets_have_valid_schema_and_qml():
+    required_fields = {"id", "name", "geometry", "field", "categories"}
+    for preset in sp.load_presets():
+        assert required_fields.issubset(preset.keys()), f"champs manquants: {preset.get('id')}"
+        assert isinstance(preset["categories"], list)
+        assert preset["categories"], f"categories vides: {preset['id']}"
+        for cat in preset["categories"]:
+            assert "value" in cat, f"value manquant: {preset['id']}"
+            assert "label" in cat, f"label manquant: {preset['id']}"
+            assert "color" in cat, f"color manquant: {preset['id']}"
+            assert cat["color"].startswith("#") and len(cat["color"]) == 7
+        qml = sp.preset_to_qml(preset["id"])
+        assert qml is not None, f"QML null pour {preset['id']}"
+        assert "categorizedSymbol" in qml, f"categorizedSymbol absent dans QML: {preset['id']}"
