@@ -64,9 +64,15 @@ Re-valider à tout moment : `python scripts/validate_nvidia_models.py`
 `addDataSource`, `addRemoteRaster` (COG `/vsicurl/`), `computeSpectralIndex`
 (NDVI/NDWI/… + auto-style), `computeRasterDifference` (détection de changement),
 `zonalStatistics` (stats par zone), `bufferLayer` (zone tampon),
+`classifyRaster` (classes thématiques), `loadSatelliteBands` (Sentinel réel via STAC),
+`renderMapView` (vue→PNG, boucle vision), `exportPrintLayout` (planche PNG/PDF, templates),
 `saveVectorLayer` (export GPKG/GeoJSON/SHP), `runDossier` (dossier territorial 1-clic),
 `segmentRasterWithSAM`, `forecastWeatherWithEarth2`, `exportProjectReport`,
 `runScript` (gardé), …
+
+**Boucle vision** : `POST /api/llm/critiqueView` rend la vue (`renderMapView`) et envoie
+l'image au VLM NVIDIA → critique + score (`vision_critique`/`critique_layout`) + correctifs,
+pour l'auto-correction visuelle de l'agent.
 
 ### Outils natifs web/geo/data (`native_tools.py`, en-process, sans clé)
 | Outil | Source |
