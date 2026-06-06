@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Optional
 
 CATALOG_PATH = Path(__file__).parent / "config" / "data_sources.json"
-VALID_SERVICE_TYPES = {"XYZ", "WMTS", "WMS"}
+VALID_SERVICE_TYPES = {"XYZ", "WMTS", "WMS", "WFS"}
 
 
 def load_sources() -> List[dict]:
@@ -65,4 +65,8 @@ def build_service_config(source: dict) -> dict:
         cfg["tileMatrixSet"] = params.get("tileMatrixSet", "PM")
         cfg["format"] = params.get("format", "image/png")
         cfg["style"] = params.get("style", "normal")
+    elif st == "WFS":
+        cfg["layer"] = params.get("layer", "")  # typename
+        cfg["crs"] = params.get("crs", "EPSG:4326")
+        cfg["version"] = params.get("version", "2.0.0")
     return cfg

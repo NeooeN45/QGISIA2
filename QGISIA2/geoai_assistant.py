@@ -1134,6 +1134,10 @@ class QgisBridge(BridgeQObject):
             qgis_cfg["tileMatrixSet"] = generic.get("tileMatrixSet", "PM")
             qgis_cfg["format"] = generic.get("format", "image/png")
             qgis_cfg["style"] = generic.get("style", "normal")
+        elif st == "WFS":
+            qgis_cfg["layerName"] = generic.get("layer", "")
+            qgis_cfg["crs"] = generic.get("crs", "EPSG:4326")
+            qgis_cfg["version"] = generic.get("version", "2.0.0")
 
         try:
             layer = self._create_service_layer(qgis_cfg)

@@ -61,3 +61,16 @@ def test_build_service_config_wmts():
     assert cfg["service_type"] == "WMTS"
     assert cfg["layer"] == "GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2"
     assert cfg["tileMatrixSet"] == "PM"
+
+
+def test_build_service_config_wfs():
+    cfg = dc.build_service_config(dc.get_source("ign-communes-wfs"))
+    assert cfg["service_type"] == "WFS"
+    assert cfg["layer"] == "ADMINEXPRESS-COG-CARTO.LATEST:commune"
+    assert cfg["crs"] == "EPSG:4326"
+    assert cfg["version"] == "2.0.0"
+
+
+def test_catalog_has_vector_wfs_sources():
+    wfs = [s for s in dc.load_sources() if s["service_type"] == "WFS"]
+    assert len(wfs) >= 3
