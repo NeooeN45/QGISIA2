@@ -57,6 +57,30 @@ const baseSuggestions = [
     text: "Comparer les champs de mes couches forestières et détecter les incohérences de structure",
     accent: "group-hover:border-yellow-500/30",
   },
+  {
+    id: "sentinel-change",
+    icon: <Leaf size={18} className="text-green-400" />,
+    text: "Charger l'image Sentinel-2 réelle de la zone et détecter le changement de végétation (avant/après)",
+    accent: "group-hover:border-green-500/30",
+  },
+  {
+    id: "dossier-1clic",
+    icon: <LayersIcon size={18} className="text-emerald-400" />,
+    text: "Monter un dossier territorial en 1 clic (urbanisme, risques, forêt, environnement) avec symbologies officielles",
+    accent: "group-hover:border-emerald-500/30",
+  },
+  {
+    id: "layout-atlas",
+    icon: <ImageIcon size={18} className="text-cyan-400" />,
+    text: "Générer une planche cartographique professionnelle et un atlas PDF multi-pages",
+    accent: "group-hover:border-cyan-500/30",
+  },
+  {
+    id: "vision-improve",
+    icon: <Sparkles size={18} className="text-pink-400" />,
+    text: "Améliorer automatiquement la carte : rendu critiqué par l'IA vision jusqu'à la perfection",
+    accent: "group-hover:border-pink-500/30",
+  },
 ];
 
 const getDynamicSuggestions = (layers: Array<{ name: string; type?: string; geometryType?: string }>) => {
@@ -197,7 +221,9 @@ export default function WelcomeScreen({ onSendMessage, layers = [] }: WelcomeScr
         transition={{ delay: 0.16, duration: 0.6, ease: "easeOut" }}
         className="mt-4 max-w-2xl text-base leading-relaxed text-gray-600 dark:text-white/45"
       >
-        Accédez à 53 sources officielles (forêts, sols, géologie, topographie), analysez vos données forestières et automatisez vos workflows QGIS grâce à l'IA.
+        QGISIA+ : accédez aux données mondiales (forêts, sols, géologie, Sentinel-2 réel), réalisez
+        diagnostics satellite, détection de changement, dossiers 1-clic et mises en page pro — et
+        laissez l'agent IA s'auto-corriger via sa boucle vision.
       </motion.p>
 
       <motion.div

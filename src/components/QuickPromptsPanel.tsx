@@ -69,7 +69,7 @@ export default function QuickPromptsPanel({ onSelectPrompt }: QuickPromptsPanelP
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-white/55">
-          Actions GeoIA
+          Actions QGISIA+
         </p>
         <span className="text-[10px] text-gray-400 dark:text-white/40">
           {filtered.length} / {QUICK_PROMPTS.length}
