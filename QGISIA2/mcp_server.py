@@ -636,6 +636,42 @@ TOOL_CATALOG: list[McpToolSpec] = [
         payload_builder=_direct_payload,
     ),
     McpToolSpec(
+        name="computeTerrain",
+        description=(
+            "Analyse de terrain depuis un MNT : 'slope' (pente), 'aspect' (exposition), "
+            "'hillshade' (ombrage), 'ruggedness' (rugosite). Filtres QGIS natifs."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "demId": {"type": "string"},
+                "analysis": {"type": "string", "enum": ["slope", "aspect", "hillshade", "ruggedness"]},
+                "outputPath": {"type": "string"},
+            },
+            "required": ["demId", "analysis"],
+        },
+        endpoint="/api/qgis/computeTerrain",
+        payload_builder=_direct_payload,
+    ),
+    McpToolSpec(
+        name="clusterPoints",
+        description=(
+            "Clustering DBSCAN d'une couche de points (ajoute un champ 'cluster', -1=bruit). "
+            "eps en unite du CRS (auto si 0), minPts taille minimale d'un cluster."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "pointId": {"type": "string"},
+                "eps": {"type": "number"},
+                "minPts": {"type": "integer"},
+            },
+            "required": ["pointId"],
+        },
+        endpoint="/api/qgis/clusterPoints",
+        payload_builder=_direct_payload,
+    ),
+    McpToolSpec(
         name="renderMapView",
         description=(
             "Rendre la vue carte courante en image PNG (pour la boucle vision : faire "

@@ -411,6 +411,48 @@ def main():
         except Exception as exc:
             rec("bridge.exportAtlas", False, str(exc))
 
+        # Analyse de terrain (MNT -> pente) via filtres QGIS natifs
+        try:
+            import tempfile
+            import struct
+            from osgeo import gdal, osr
+            demp = os.path.join(tempfile.gettempdir(), "dem_test.tif")
+            ds = gdal.GetDriverByName("GTiff").Create(demp, 8, 8, 1, gdal.GDT_Float32)
+            ds.SetGeoTransform([600000, 10, 0, 6200000, 0, -10])
+            srs = osr.SpatialReference(); srs.ImportFromEPSG(2154)
+            ds.SetProjection(srs.ExportToWkt())
+            band = ds.GetRasterBand(1)
+            for r in range(8):
+                band.WriteRaster(0, r, 8, 1, struct.pack("f" * 8, *[float(r * 10 + c) for c in range(8)]))
+            band.FlushCache(); ds.FlushCache(); ds = None
+            bridge.addRasterFile(demp, "dem_test")
+            rawt = bridge.computeTerrain("dem_test", "slope", "")
+            pt = json.loads(rawt) if rawt else {}
+            rec("bridge.computeTerrain",
+                pt.get("ok") is True and bool(QgsProject.instance().mapLayersByName("slope_dem_test")),
+                f"layer={pt.get('layer')}")
+        except Exception as exc:
+            rec("bridge.computeTerrain", False, str(exc))
+
+        # Clustering DBSCAN d'une couche de points (2 amas)
+        try:
+            cpl = QgsVectorLayer("Point?crs=EPSG:2154", "cluster_test", "memory")
+            feats = []
+            for (x, y) in [(600000, 6200000), (600002, 6200001), (600001, 6200002),
+                           (600100, 6200100), (600102, 6200101), (600101, 6200102)]:
+                f = QgsFeature()
+                f.setGeometry(QgsGeometry.fromWkt(f"Point({x} {y})"))
+                feats.append(f)
+            cpl.dataProvider().addFeatures(feats); cpl.updateExtents()
+            QgsProject.instance().addMapLayer(cpl)
+            rawc = bridge.clusterPoints("cluster_test", "20", "2")
+            pc = json.loads(rawc) if rawc else {}
+            rec("bridge.clusterPoints",
+                pc.get("ok") is True and pc.get("clusters", 0) >= 2,
+                f"clusters={pc.get('clusters')} noise={pc.get('noise')}")
+        except Exception as exc:
+            rec("bridge.clusterPoints", False, str(exc))
+
         # Analyse de site (suitability) : somme ponderee de rasters criteres
         try:
             crit = json.dumps([{"layer": "s2_nir", "weight": 0.6},

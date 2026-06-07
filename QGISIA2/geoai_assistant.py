@@ -2711,6 +2711,123 @@ class QgisBridge(BridgeQObject):
                            "radius": rad}, ensure_ascii=False)
 
     @BridgeSlot(str, str, str, result=str)
+    def computeTerrain(self, dem_ref, analysis, output_path):
+        """Analyse de terrain depuis un MNT : 'slope', 'aspect', 'hillshade', 'ruggedness'
+        (filtres QGIS natifs). Voir terrain_formulas.list_terrain pour les options."""
+        from qgis.analysis import (
+            QgsSlopeFilter, QgsAspectFilter, QgsHillshadeFilter, QgsRuggednessFilter)
+        try:
+            from terrain_formulas import list_terrain
+        except ImportError:
+            from .terrain_formulas import list_terrain
+
+        raster = self._ensure_raster_layer(str(dem_ref or "").strip())
+        if raster is None:
+            self._notify(f"MNT introuvable : {dem_ref}", Qgis.Warning)
+            return ""
+        analysis = str(analysis or "slope").strip().lower()
+        if analysis not in list_terrain():
+            self._notify(f"Analyse de terrain inconnue : {analysis}", Qgis.Warning)
+            return ""
+
+        out_name = f"{analysis}_{raster.name()}"
+        out_path = str(output_path or "").strip() or str(
+            self._runtime_directory() / f"{out_name}.tif")
+        src = raster.source()
+        if analysis == "slope":
+            flt = QgsSlopeFilter(src, out_path, "GTiff")
+        elif analysis == "aspect":
+            flt = QgsAspectFilter(src, out_path, "GTiff")
+        elif analysis == "hillshade":
+            flt = QgsHillshadeFilter(src, out_path, "GTiff", 315.0, 45.0)
+        else:
+            flt = QgsRuggednessFilter(src, out_path, "GTiff")
+        try:
+            flt.setZFactor(1.0)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            res = flt.processRaster(None)
+        except TypeError:
+            res = flt.processRaster()
+        if res != 0:
+            self._notify(f"Echec de l'analyse de terrain ({analysis}).", Qgis.Critical)
+            return ""
+
+        rl = QgsRasterLayer(out_path, out_name)
+        if self._add_layer_to_project(rl, out_name, source="Terrain") is None:
+            self._notify("Analyse terrain calculee mais non chargeable.", Qgis.Warning)
+            return ""
+        try:
+            from raster_style import build_pseudocolor_qml
+        except ImportError:
+            from .raster_style import build_pseudocolor_qml
+        ramp = "greyscale" if analysis == "hillshade" else "rdylgn"
+        try:
+            sstat = rl.dataProvider().bandStatistics(1)
+            self.applyQmlStyle(out_name, build_pseudocolor_qml(
+                ramp, sstat.minimumValue, sstat.maximumValue, 1))
+        except Exception:  # noqa: BLE001
+            pass
+        self._notify(f"Analyse terrain '{analysis}' creee : {out_name}.", Qgis.Success)
+        return json.dumps({"ok": True, "layer": out_name, "analysis": analysis,
+                           "path": out_path}, ensure_ascii=False)
+
+    @BridgeSlot(str, str, str, result=str)
+    def clusterPoints(self, point_ref, eps, min_pts):
+        """Clustering DBSCAN d'une couche de points : ajoute un champ 'cluster' (-1 = bruit)."""
+        from qgis.core import QgsField
+        try:
+            from cluster_utils import dbscan, centroids
+        except ImportError:
+            from .cluster_utils import dbscan, centroids
+
+        pts = self._find_layer(str(point_ref or "").strip())
+        if not isinstance(pts, QgsVectorLayer) or pts.geometryType() != QgsWkbTypes.PointGeometry:
+            self._notify("Couche de points requise pour le clustering.", Qgis.Warning)
+            return ""
+
+        fids, coords = [], []
+        for feat in pts.getFeatures():
+            geom = feat.geometry()
+            if geom is None or geom.isEmpty():
+                continue
+            pt = geom.centroid().asPoint()
+            fids.append(feat.id())
+            coords.append((pt.x(), pt.y()))
+        if not coords:
+            self._notify("Aucun point a clusteriser.", Qgis.Warning)
+            return ""
+
+        try:
+            eps_v = float(str(eps).replace(",", ".")) if eps else 0.0
+        except ValueError:
+            eps_v = 0.0
+        if eps_v <= 0:
+            ext = pts.extent()
+            eps_v = (max(ext.width(), ext.height()) or 1.0) / 10.0
+        try:
+            mp = int(min_pts) if min_pts else 2
+        except ValueError:
+            mp = 2
+
+        labels = dbscan(coords, eps_v, mp)
+        dp = pts.dataProvider()
+        if pts.fields().indexOf("cluster") < 0:
+            dp.addAttributes([QgsField("cluster", QVariant.Int)])
+            pts.updateFields()
+        idx = pts.fields().indexOf("cluster")
+        dp.changeAttributeValues({fid: {idx: int(lbl)} for fid, lbl in zip(fids, labels)})
+        pts.triggerRepaint()
+
+        cents = centroids(coords, labels)
+        n_noise = sum(1 for lbl in labels if lbl == -1)
+        self._notify(f"Clustering : {len(cents)} cluster(s), {n_noise} bruit.", Qgis.Success)
+        return json.dumps({"ok": True, "layer": pts.name(), "clusters": len(cents),
+                           "noise": n_noise, "eps": eps_v, "field": "cluster"},
+                          ensure_ascii=False)
+
+    @BridgeSlot(str, str, str, result=str)
     def renderMapView(self, output_path, width, height):
         """Rend la vue carte courante en image PNG. Brique de la BOUCLE VISION : l'agent
         envoie ensuite cette image a un VLM (NVIDIA) qui la critique pour auto-correction."""
@@ -3709,6 +3826,20 @@ class ThreadedAssetServer:
                     body.get("pointId", ""),
                     str(body.get("radius", "")),
                     body.get("outputPath", ""),
+                )
+            elif route == "/api/qgis/computeTerrain":
+                result = self._bridge_call(
+                    "computeTerrain",
+                    body.get("demId", ""),
+                    body.get("analysis", "slope"),
+                    body.get("outputPath", ""),
+                )
+            elif route == "/api/qgis/clusterPoints":
+                result = self._bridge_call(
+                    "clusterPoints",
+                    body.get("pointId", ""),
+                    str(body.get("eps", "")),
+                    str(body.get("minPts", "")),
                 )
             elif route == "/api/qgis/mergeRasterBands":
                 result = self._bridge_call(
