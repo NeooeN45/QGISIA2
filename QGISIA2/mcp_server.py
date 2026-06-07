@@ -528,6 +528,26 @@ TOOL_CATALOG: list[McpToolSpec] = [
         payload_builder=_direct_payload,
     ),
     McpToolSpec(
+        name="exportLayoutSpec",
+        description=(
+            "Exporter une planche depuis une specification explicite d'elements positionnes "
+            "(mm) : spec = {page_size, orientation, elements:[{type,x,y,width,height}]}. "
+            "type in map/title/legend/scalebar/north/text/image."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "outputPath": {"type": "string"},
+                "format": {"type": "string", "enum": ["png", "pdf"]},
+                "spec": {"type": "object"},
+            },
+            "required": ["outputPath", "spec"],
+        },
+        endpoint="/api/qgis/exportLayoutSpec",
+        payload_builder=_direct_payload,
+    ),
+    McpToolSpec(
         name="classifyRaster",
         description=(
             "Appliquer une classification thematique a un raster continu : "

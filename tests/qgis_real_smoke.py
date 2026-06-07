@@ -353,6 +353,31 @@ def main():
         except Exception as exc:
             rec("bridge.classifyRaster", False, str(exc))
 
+        # Auto-amelioration : rendu d'une mise en page COMPLETE (spec explicite custom)
+        try:
+            import tempfile
+            els = [
+                {"type": "title", "x": 10, "y": 6, "width": 270, "height": 10},
+                {"type": "map", "x": 10, "y": 20, "width": 270, "height": 160},
+                {"type": "legend", "x": 240, "y": 185, "width": 50, "height": 50},
+                {"type": "scalebar", "x": 10, "y": 188, "width": 80, "height": 12},
+                {"type": "north", "x": 275, "y": 22, "width": 16, "height": 16},
+            ]
+            spec = {"page_size": "A4", "orientation": "landscape", "elements": els}
+            specpng = os.path.join(tempfile.gettempdir(), "spec_layout.png")
+            if os.path.exists(specpng):
+                os.remove(specpng)
+            raw_sp = bridge.exportLayoutSpec("Carte complete", specpng, "png", json.dumps(spec))
+            psp = json.loads(raw_sp) if raw_sp else {}
+            meta = psp.get("layout_meta") or {}
+            ssize = os.path.getsize(specpng) if os.path.exists(specpng) else 0
+            rec("bridge.exportLayoutSpec",
+                psp.get("ok") is True and ssize > 1000 and meta.get("north") is True
+                and isinstance(meta.get("map"), dict),
+                f"size={ssize} north={meta.get('north')} legend={meta.get('legend')}")
+        except Exception as exc:
+            rec("bridge.exportLayoutSpec", False, str(exc))
+
         # Classes de severite de changement (analyse) sur la carte dNDVI
         try:
             diff_layers = [lyr for lyr in QgsProject.instance().mapLayers().values()

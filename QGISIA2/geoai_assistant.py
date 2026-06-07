@@ -2235,11 +2235,17 @@ class QgisBridge(BridgeQObject):
         return json.dumps({"ok": True, "path": out, "driver": driver,
                            "features": layer.featureCount()}, ensure_ascii=False)
 
-    @BridgeSlot(str, str, str, str, result=str)
-    def exportPrintLayout(self, title, output_path, fmt, template_id):
-        """Genere une planche cartographique pro et l'exporte (PNG/PDF). Si template_id est
-        fourni (voir layout_specs.list_templates : a4_portrait_simple, a4_paysage_pro,
-        a3_paysage_atlas), la page et le placement des elements suivent ce gabarit."""
+    _DEFAULT_LAYOUT_ELEMENTS = [
+        {"type": "title", "x": 10, "y": 8, "width": 190, "height": 12},
+        {"type": "map", "x": 10, "y": 22, "width": 190, "height": 235},
+        {"type": "legend", "x": 150, "y": 200, "width": 50, "height": 60},
+        {"type": "scalebar", "x": 10, "y": 262, "width": 80, "height": 15},
+    ]
+
+    def _render_layout_to_file(self, title, out, fmt, page_w, page_h, elements):
+        """Construit une mise en page (carte + elements positionnes) et l'exporte (PNG/PDF).
+        Renvoie un payload dict (avec layout_meta) ou None apres notification d'echec.
+        Partage par exportPrintLayout et exportLayoutSpec."""
         from qgis.core import (
             QgsPrintLayout, QgsLayoutItemMap, QgsLayoutItemLabel, QgsLayoutItemLegend,
             QgsLayoutItemScaleBar, QgsLayoutItemPicture, QgsLayoutPoint, QgsLayoutSize,
@@ -2250,38 +2256,14 @@ class QgisBridge(BridgeQObject):
         layers = canvas.layers() or list(project.mapLayers().values())
         if not layers:
             self._notify("Aucune couche a mettre en page.", Qgis.Warning)
-            return ""
-        out = str(output_path or "").strip()
-        if not out:
-            self._notify("Chemin de sortie requis.", Qgis.Warning)
-            return ""
+            return None
         fmt = str(fmt or "png").strip().lower()
-
-        template = None
-        template_id = str(template_id or "").strip()
-        if template_id:
-            try:
-                from layout_specs import get_template, page_dimensions_mm
-            except ImportError:
-                from .layout_specs import get_template, page_dimensions_mm
-            template = get_template(template_id)
 
         layout = QgsPrintLayout(project)
         layout.initializeDefaults()
         layout.setName(title or "Carte QGISIA")
         mm = QgsUnitTypes.LayoutMillimeters
-
-        if template:
-            w, h = page_dimensions_mm(template["page_size"], template["orientation"])
-            layout.pageCollection().pages()[0].setPageSize(QgsLayoutSize(w, h, mm))
-            elements = template.get("elements", [])
-        else:
-            elements = [
-                {"type": "title", "x": 10, "y": 8, "width": 190, "height": 12},
-                {"type": "map", "x": 10, "y": 22, "width": 190, "height": 235},
-                {"type": "legend", "x": 150, "y": 200, "width": 50, "height": 60},
-                {"type": "scalebar", "x": 10, "y": 262, "width": 80, "height": 15},
-            ]
+        layout.pageCollection().pages()[0].setPageSize(QgsLayoutSize(page_w, page_h, mm))
 
         extent = canvas.extent()
         if extent is None or extent.isEmpty():
@@ -2352,29 +2334,87 @@ class QgisBridge(BridgeQObject):
                 res = exporter.exportToImage(out, QgsLayoutExporter.ImageExportSettings())
         except Exception as exc:  # noqa: BLE001
             self._notify(f"Erreur export mise en page : {exc}", Qgis.Critical)
-            return ""
+            return None
         if res != QgsLayoutExporter.Success:
             self._notify("Echec de l'export de la mise en page.", Qgis.Warning)
-            return ""
+            return None
 
-        # layout_meta exploitable par vision_critique (boucle d'auto-correction)
         present = {el.get("type") for el in elements}
         extent_list = None
         if map_item is not None:
             ext = map_item.extent()
             extent_list = [ext.xMinimum(), ext.yMinimum(), ext.xMaximum(), ext.yMaximum()]
         layout_meta = {
-            "title": title or ("title" in present or "text" in present),
+            "title": bool(title) or ("title" in present or "text" in present),
             "map": {"extent": extent_list} if map_item is not None else None,
             "legend": "legend" in present,
             "scalebar": "scalebar" in present,
             "north": "north" in present,
         }
-
         self._notify(f"Planche cartographique exportee : {Path(out).name}.", Qgis.Success)
-        return json.dumps({"ok": True, "path": out, "format": fmt,
-                           "layers": len(layers), "template": template_id or None,
-                           "layout_meta": layout_meta}, ensure_ascii=False)
+        return {"ok": True, "path": out, "format": fmt,
+                "layers": len(layers), "layout_meta": layout_meta}
+
+    @BridgeSlot(str, str, str, str, result=str)
+    def exportPrintLayout(self, title, output_path, fmt, template_id):
+        """Genere une planche cartographique pro et l'exporte (PNG/PDF). Si template_id est
+        fourni (voir layout_specs.list_templates : a4_portrait_simple, a4_paysage_pro,
+        a3_paysage_atlas), la page et le placement des elements suivent ce gabarit."""
+        out = str(output_path or "").strip()
+        if not out:
+            self._notify("Chemin de sortie requis.", Qgis.Warning)
+            return ""
+        template_id = str(template_id or "").strip()
+        page_w, page_h = 210.0, 297.0  # A4 portrait par defaut
+        elements = self._DEFAULT_LAYOUT_ELEMENTS
+        if template_id:
+            try:
+                from layout_specs import get_template, page_dimensions_mm
+            except ImportError:
+                from .layout_specs import get_template, page_dimensions_mm
+            template = get_template(template_id)
+            if template:
+                page_w, page_h = page_dimensions_mm(
+                    template["page_size"], template["orientation"])
+                elements = template.get("elements", [])
+            else:
+                template_id = ""
+
+        payload = self._render_layout_to_file(title, out, fmt, page_w, page_h, elements)
+        if payload is None:
+            return ""
+        payload["template"] = template_id or None
+        return json.dumps(payload, ensure_ascii=False)
+
+    @BridgeSlot(str, str, str, str, result=str)
+    def exportLayoutSpec(self, title, output_path, fmt, spec_json):
+        """Exporte une mise en page a partir d'une specification explicite d'elements
+        (utilisee par la boucle d'auto-amelioration). spec_json :
+        {page_size, orientation, elements:[{type,x,y,width,height,...}]}."""
+        out = str(output_path or "").strip()
+        if not out:
+            self._notify("Chemin de sortie requis.", Qgis.Warning)
+            return ""
+        try:
+            spec = json.loads(spec_json) if spec_json else {}
+        except (ValueError, TypeError):
+            spec = {}
+        elements = spec.get("elements") or []
+        if not elements:
+            self._notify("Specification d'elements vide.", Qgis.Warning)
+            return ""
+        try:
+            from layout_specs import page_dimensions_mm
+        except ImportError:
+            from .layout_specs import page_dimensions_mm
+        page_w, page_h = page_dimensions_mm(
+            spec.get("page_size", "A4"), spec.get("orientation", "portrait"))
+
+        payload = self._render_layout_to_file(title, out, fmt, page_w, page_h, elements)
+        if payload is None:
+            return ""
+        payload["elements"] = len(elements)
+        return json.dumps(payload, ensure_ascii=False)
 
     @BridgeSlot(str, str, result=str)
     def classifyRaster(self, layer_ref, scheme_id):
@@ -3509,6 +3549,17 @@ class ThreadedAssetServer:
                     body.get("format", "png"),
                     body.get("template", ""),
                 )
+            elif route == "/api/qgis/exportLayoutSpec":
+                spec = body.get("spec", "{}")
+                if isinstance(spec, (dict, list)):
+                    spec = json.dumps(spec)
+                result = self._bridge_call(
+                    "exportLayoutSpec",
+                    body.get("title", ""),
+                    body.get("outputPath", ""),
+                    body.get("format", "png"),
+                    spec,
+                )
             elif route == "/api/qgis/classifyRaster":
                 result = self._bridge_call(
                     "classifyRaster",
@@ -4074,9 +4125,10 @@ class ThreadedAssetServer:
                 return True
 
             if route == "/api/llm/autoImproveLayout":
-                # AUTO-AMELIORATION : choisit le gabarit le plus complet -> rend la planche
-                # -> critique VLM + score. Une iteration autonome de la boucle vision.
-                if not llm_installer.is_vendor_ready():
+                # AUTO-AMELIORATION MULTI-TOURS : part du meilleur gabarit, ajoute a chaque
+                # tour les elements manquants et re-rend jusqu'au score cible, puis critique
+                # le rendu final via le VLM (boucle vision autonome).
+                if not llm_installer.is_vendor_ready() and bool(body.get("with_vlm", True)):
                     self._send_json(handler, 503, {"ok": False, "error": "gateway_not_ready"})
                     return True
 
@@ -4084,47 +4136,77 @@ class ThreadedAssetServer:
                 intent = body.get("intent", "") or "carte cartographique"
                 title = body.get("title", "") or "Carte QGISIA+"
                 model = body.get("model") or "nvidia_nim/meta/llama-3.2-90b-vision-instruct"
+                target = float(body.get("target_score", 1.0))
+                max_iters = max(1, min(int(body.get("max_iters", 4)), 8))
+                with_vlm = bool(body.get("with_vlm", True))
                 try:
-                    from layout_auto import pick_best_template
-                    from vision_critique import (
-                        build_critique_prompt, completeness_score, suggest_fixes)
+                    from layout_auto import (
+                        pick_best_template, augment_to_complete, score_elements)
+                    from layout_specs import get_template
+                    from vision_critique import build_critique_prompt, suggest_fixes
                 except ImportError:
-                    from .layout_auto import pick_best_template
-                    from .vision_critique import (
-                        build_critique_prompt, completeness_score, suggest_fixes)
+                    from .layout_auto import (
+                        pick_best_template, augment_to_complete, score_elements)
+                    from .layout_specs import get_template
+                    from .vision_critique import build_critique_prompt, suggest_fixes
 
                 best = pick_best_template(prefer=body.get("prefer"))
+                tmpl = get_template(best["template"]) or {}
+                elements = list(tmpl.get("elements", []))
+                page_size = tmpl.get("page_size", "A4")
+                orientation = tmpl.get("orientation", "landscape")
                 out = os.path.join(os.path.realpath(tempfile.gettempdir()), "auto_layout.png")
-                raw = self._bridge_call(
-                    "exportPrintLayout", title, out, "png", best["template"] or "")
-                try:
-                    play = json.loads(raw) if raw else {}
-                except (ValueError, TypeError):
-                    play = {}
-                if not play.get("ok") or not os.path.exists(out):
+
+                iterations = []
+                final_payload = None
+                for i in range(max_iters):
+                    sc = score_elements(elements)
+                    iterations.append({"iter": i, "score": sc["score"], "missing": sc["missing"]})
+                    spec = {"page_size": page_size, "orientation": orientation,
+                            "elements": elements}
+                    raw = self._bridge_call(
+                        "exportLayoutSpec", title, out, "png", json.dumps(spec))
+                    try:
+                        final_payload = json.loads(raw) if raw else None
+                    except (ValueError, TypeError):
+                        final_payload = None
+                    if sc["score"] >= target:
+                        break
+                    elements = augment_to_complete(elements)
+
+                if final_payload is None or not os.path.exists(out):
                     self._send_json(handler, 500, {
-                        "ok": False, "error": "export_failed", "chosen_template": best})
+                        "ok": False, "error": "export_failed", "iterations": iterations})
                     return True
 
-                layout_meta = play.get("layout_meta") or {}
-                import base64
-                with open(out, "rb") as fh:
-                    b64 = base64.b64encode(fh.read()).decode("ascii")
-                prompt = build_critique_prompt(intent, layout_meta)
-                resp = llm_gateway.chat(
-                    model, llm_gateway.build_vision_messages(prompt, b64),
-                    api_keys=api_keys, max_tokens=int(body.get("max_tokens", 400)))
-                msg = (resp.get("choices") or [{}])[0].get("message", {})
-                critique = msg.get("content") or msg.get("reasoning_content") or ""
-                score = completeness_score(layout_meta)
+                layout_meta = final_payload.get("layout_meta") or {}
+                final_score = score_elements(elements)
+                critique, model_used = "", None
+                if with_vlm:
+                    import base64
+                    with open(out, "rb") as fh:
+                        b64 = base64.b64encode(fh.read()).decode("ascii")
+                    prompt = build_critique_prompt(intent, layout_meta)
+                    try:
+                        resp = llm_gateway.chat(
+                            model, llm_gateway.build_vision_messages(prompt, b64),
+                            api_keys=api_keys, max_tokens=int(body.get("max_tokens", 400)))
+                        msg = (resp.get("choices") or [{}])[0].get("message", {})
+                        critique = msg.get("content") or msg.get("reasoning_content") or ""
+                        model_used = resp.get("_gateway", {}).get("model_used")
+                    except Exception as exc:  # noqa: BLE001
+                        critique = f"(VLM indisponible: {exc})"
+
                 self._send_json(handler, 200, {
                     "ok": True,
                     "chosen_template": best["template"],
-                    "score": score["score"],
-                    "missing": score["missing"],
+                    "iterations": iterations,
+                    "turns": len(iterations),
+                    "final_score": final_score["score"],
+                    "final_missing": final_score["missing"],
                     "fixes": suggest_fixes(layout_meta),
                     "critique": critique,
-                    "model_used": resp.get("_gateway", {}).get("model_used"),
+                    "model_used": model_used,
                     "render_path": out,
                     "layout_meta": layout_meta,
                 })

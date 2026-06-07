@@ -26,6 +26,35 @@ def layout_meta_from_template(template: dict) -> dict:
     }
 
 
+# Elements requis pour une mise en page complete + positions par defaut (mm, A4-ish)
+_REQUIRED = ["title", "map", "legend", "scalebar", "north"]
+_DEFAULTS = {
+    "title": {"type": "title", "x": 10, "y": 8, "width": 180, "height": 12},
+    "map": {"type": "map", "x": 10, "y": 24, "width": 180, "height": 160},
+    "legend": {"type": "legend", "x": 150, "y": 188, "width": 50, "height": 55},
+    "scalebar": {"type": "scalebar", "x": 10, "y": 196, "width": 80, "height": 12},
+    "north": {"type": "north", "x": 175, "y": 26, "width": 16, "height": 16},
+}
+
+
+def score_elements(elements: list) -> dict:
+    """Score de completude d'une liste d'elements (via vision_critique)."""
+    from vision_critique import completeness_score
+    return completeness_score(layout_meta_from_template({"elements": elements}))
+
+
+def augment_to_complete(elements: list) -> list:
+    """Retourne une nouvelle liste d'elements complétée des elements requis manquants."""
+    types = {e.get("type") for e in elements}
+    out = [dict(e) for e in elements]
+    for etype in _REQUIRED:
+        present = etype in types or (etype == "title" and "text" in types)
+        if not present:
+            out.append(dict(_DEFAULTS[etype]))
+            types.add(etype)
+    return out
+
+
 def pick_best_template(prefer: Optional[str] = None) -> dict:
     """Choisit le gabarit le plus complet. Renvoie {template, score}.
 
