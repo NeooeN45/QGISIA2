@@ -4335,6 +4335,124 @@ class ThreadedAssetServer:
                 })
                 return True
 
+            if route == "/api/llm/autoStudy":
+                # ETUDE TERRITORIALE AUTONOME : deroule un plan (study_plan) en enchainant
+                # les outils QGIS, puis produit une planche + un rapport + une critique vision.
+                api_keys = body.get("api_keys", {}) or {}
+                theme = (body.get("theme") or "vegetation").strip()
+                context = body.get("context") or {}
+                bbox = body.get("bbox") or context.get("bbox") or ""
+                try:
+                    from study_plan import build_plan
+                    from study_actions import REPORT_TEMPLATE_BY_THEME
+                    from report_templates import render_report
+                except ImportError:
+                    from .study_plan import build_plan
+                    from .study_actions import REPORT_TEMPLATE_BY_THEME
+                    from .report_templates import render_report
+
+                plan = build_plan(theme, context)
+                if not plan:
+                    self._send_json(handler, 400, {"ok": False, "error": f"theme inconnu: {theme}"})
+                    return True
+
+                st = {"bands": {}, "indices": [], "last_raster": None,
+                      "layout": None, "layout_meta": None, "report": ""}
+                steps_report = []
+                for step in plan:
+                    action = step.get("action")
+                    p = step.get("params", {}) or {}
+                    ok, detail = False, ""
+                    try:
+                        if action == "add_basemap":
+                            msg = self.addDataSource(p.get("sourceId", "osm-standard"), "")
+                            ok = "ajout" in msg.lower()
+                            detail = msg
+                        elif action == "load_satellite":
+                            raw = self.loadSatelliteBands(
+                                bbox or p.get("bbox", ""), p.get("collection", "sentinel-2-l2a"),
+                                json.dumps(p.get("bands", ["RED", "NIR"])), p.get("datetime", ""))
+                            d = json.loads(raw) if raw else {}
+                            st["bands"] = d.get("bands", {}) or {}
+                            ok = d.get("ok") is True
+                            detail = f"item={d.get('item')} bands={list(st['bands'])}"
+                        elif action == "compute_index":
+                            b = st["bands"]
+                            if "NIR" in b and "RED" in b:
+                                bm = json.dumps({"NIR": b["NIR"], "RED": b["RED"]})
+                                raw = self.computeSpectralIndex("scene", p.get("index", "ndvi"), bm, "")
+                                d = json.loads(raw) if raw else {}
+                                if d.get("ok"):
+                                    st["last_raster"] = d.get("outputLayerName")
+                                    st["indices"].append(d.get("outputLayerName"))
+                                ok = d.get("ok") is True
+                                detail = d.get("outputLayerName", "")
+                            else:
+                                detail = "bandes NIR/RED indisponibles (skip)"
+                        elif action == "detect_change":
+                            if len(st["indices"]) >= 2:
+                                raw = self.computeRasterDifference(
+                                    st["indices"][-1], st["indices"][-2], "")
+                                d = json.loads(raw) if raw else {}
+                                ok = d.get("ok") is True
+                                detail = d.get("outputLayerName", "")
+                            else:
+                                detail = "2 dates requises (skip)"
+                        elif action == "classify":
+                            if st["last_raster"]:
+                                raw = self.classifyRaster(st["last_raster"], "ndvi_vegetation")
+                                ok = bool(raw)
+                                detail = st["last_raster"]
+                            else:
+                                detail = "aucun raster a classer (skip)"
+                        elif action == "zonal_stats":
+                            detail = "necessite une couche de polygones (skip)"
+                        elif action == "layout":
+                            out = os.path.join(os.path.realpath(tempfile.gettempdir()), "study_layout.png")
+                            raw = self.exportPrintLayout(f"Etude {theme}", out, "png", "a4_paysage_pro")
+                            d = json.loads(raw) if raw else {}
+                            ok = d.get("ok") is True
+                            st["layout"] = out if ok else None
+                            st["layout_meta"] = d.get("layout_meta")
+                            detail = out
+                        elif action == "report":
+                            tpl = REPORT_TEMPLATE_BY_THEME.get(theme, "diagnostic_vegetation")
+                            md = render_report(tpl, context)
+                            st["report"] = md
+                            ok = bool(md)
+                            detail = f"{len(md)} caracteres"
+                        else:
+                            detail = "action inconnue"
+                    except Exception as exc:  # noqa: BLE001
+                        detail = str(exc)[:200]
+                    steps_report.append({"action": action, "ok": ok, "detail": detail})
+
+                critique = ""
+                if bool(body.get("with_vlm", True)) and st["layout"] and os.path.exists(st["layout"]):
+                    try:
+                        import base64
+                        from vision_critique import build_critique_prompt
+                        with open(st["layout"], "rb") as fh:
+                            b64 = base64.b64encode(fh.read()).decode("ascii")
+                        prompt = build_critique_prompt(f"etude {theme}", st["layout_meta"] or {})
+                        resp = llm_gateway.chat(
+                            body.get("model") or "nvidia_nim/meta/llama-3.2-90b-vision-instruct",
+                            llm_gateway.build_vision_messages(prompt, b64),
+                            api_keys=api_keys, max_tokens=300)
+                        m = (resp.get("choices") or [{}])[0].get("message", {})
+                        critique = m.get("content") or m.get("reasoning_content") or ""
+                    except Exception as exc:  # noqa: BLE001
+                        critique = f"(VLM indisponible: {exc})"
+
+                done = sum(1 for s in steps_report if s["ok"])
+                self._send_json(handler, 200, {
+                    "ok": True, "theme": theme, "steps": steps_report,
+                    "completed": done, "total": len(steps_report),
+                    "layout": st["layout"], "report_markdown": st["report"],
+                    "critique": critique,
+                })
+                return True
+
             return False
         except Exception as exc:
             self._send_json(handler, 500, {
