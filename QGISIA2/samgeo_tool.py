@@ -159,11 +159,9 @@ class SAMGeoSegmenter:
         # SamGeo API : generate(image_path, output, ...) puis raster_to_vector
         mask_tif = out_path.with_suffix(".mask.tif")
         sam.generate(str(in_path), output=str(mask_tif))
-        sam.raster_to_vector(
-            str(mask_tif),
-            str(out_path),
-            min_area=min_area_px,
-        )
+        # samgeo v3 : raster_to_vector ne supporte plus le kwarg min_area (transmis au
+        # driver GeoJSON qui le rejette). On vectorise toutes les formes detectees.
+        sam.raster_to_vector(str(mask_tif), str(out_path))
         # mask_tif laissé en place : utile pour QA visuelle, gérable côté
         # appelant si nettoyage souhaité.
         duration = time.time() - start
