@@ -192,9 +192,11 @@ export default function Chat(props: ChatProps) {
     // Détecter la transition de loading=true à loading=false (réponse reçue)
     if (prevIsLoadingRef.current && !isLoading) {
       // Petit délai pour laisser l'animation de transition se faire
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         useSmartSuggestionsStore.getState().completeProcessing();
       }, 500);
+      prevIsLoadingRef.current = isLoading;
+      return () => clearTimeout(timeoutId);
     }
     prevIsLoadingRef.current = isLoading;
   }, [isLoading]);

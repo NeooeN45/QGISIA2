@@ -118,6 +118,12 @@ export default function InlineMap({
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
+
+    // Cleanup si le composant se démonte pendant le drag
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
   }
 
   // ── Commande QGIS zoom ───────────────────────────────────────────────────────

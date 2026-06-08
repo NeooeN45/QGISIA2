@@ -83,6 +83,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   createNew: (firstMessage) => {
+    // Guard contre les créations concurrentes (double-clic, etc.)
+    const existing = get().conversations;
+    const alreadyCreating = existing.some(
+      (c) => c.messages.length === 1 && c.messages[0]?.id === firstMessage.id,
+    );
+    if (alreadyCreating) return;
+
     const conv = createConversation(firstMessage);
     set((state) => ({
       conversations: [conv, ...state.conversations],

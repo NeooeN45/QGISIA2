@@ -71,8 +71,11 @@ function parseMapDataBlock(raw: string): InlineMapProps | null {
     const height = typeof obj.height === "number" && obj.height > 0 ? obj.height : undefined;
 
     return { center, zoom, bbox, geojson, title, address, height };
-  } catch {
-    // JSON invalide — on ignore silencieusement
+  } catch (err) {
+    // JSON invalide — log en dev pour faciliter le débogage
+    if (import.meta.env.DEV) {
+      console.warn("[useMapData] Bloc <map-data> invalide :", err);
+    }
     return null;
   }
 }

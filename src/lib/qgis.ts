@@ -8,6 +8,11 @@ import {
 const QGIS_RESULT_TIMEOUT_MS = 5000;
 const QGIS_SCRIPT_TIMEOUT_MS = 120_000;
 
+/** Timeout pour les routes de script/processing lourdes (runScript, render…) */
+const HTTP_SCRIPT_TIMEOUT_MS = 60_000;
+/** Timeout pour les routes de lecture rapide (listLayers, getProjectInfo…) */
+const HTTP_FAST_TIMEOUT_MS = 10_000;
+
 type QgisCallback<T> = (value: T) => void;
 
 export interface LayerStatistics {
@@ -256,9 +261,15 @@ function isHttpBridgeEnabled(): boolean {
 async function readHttpBridgeResult<T>(
   input: RequestInfo | URL,
   init?: RequestInit,
+  timeoutMs: number = HTTP_FAST_TIMEOUT_MS,
 ): Promise<T | undefined> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(input, init);
+    const response = await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
     if (!response.ok) {
       return undefined;
     }
@@ -267,6 +278,8 @@ async function readHttpBridgeResult<T>(
     return payload.ok ? payload.result : undefined;
   } catch {
     return undefined;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -290,14 +303,26 @@ function getHttpBridge(): RawQgisBridge | undefined {
     return url;
   };
 
-  const postJson = <T>(path: string, body?: Record<string, unknown>) =>
-    readHttpBridgeResult<T>(makeUrl(path), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+  const postJson = <T>(
+    path: string,
+    body?: Record<string, unknown>,
+    timeoutMs: number = HTTP_FAST_TIMEOUT_MS,
+  ) =>
+    readHttpBridgeResult<T>(
+      makeUrl(path),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body ?? {}),
       },
-      body: JSON.stringify(body ?? {}),
-    });
+      timeoutMs,
+    );
+
+  /** POST avec timeout long pour les routes de script/processing */
+  const postJsonSlow = <T>(path: string, body?: Record<string, unknown>) =>
+    postJson<T>(path, body, HTTP_SCRIPT_TIMEOUT_MS);
 
   httpBridge = {
     openLayers: () => {
@@ -335,21 +360,21 @@ function getHttpBridge(): RawQgisBridge | undefined {
       });
     },
     runScript: (script, callback) => {
-      void postJson<string>("/api/qgis/runScript", { script }).then((result) => {
+      void postJsonSlow<string>("/api/qgis/runScript", { script }).then((result) => {
         if (callback) {
           callback(typeof result === "string" ? result : "");
         }
       });
     },
     runScriptDirect: (script, callback) => {
-      void postJson<string>("/api/qgis/runScriptDirect", { script }).then((result) => {
+      void postJsonSlow<string>("/api/qgis/runScriptDirect", { script }).then((result) => {
         if (callback) {
           callback(typeof result === "string" ? result : "");
         }
       });
     },
     runScriptDetailed: (script, requireConfirmation, callback) => {
-      void postJson<string>("/api/qgis/runScriptDetailed", {
+      void postJsonSlow<string>("/api/qgis/runScriptDetailed", {
         script,
         requireConfirmation,
       }).then((result) => {
@@ -425,7 +450,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       });
     },
     reprojectLayer: (layerId, targetCrs, callback) => {
-      void postJson<string>("/api/qgis/reprojectLayer", {
+      void postJsonSlow<string>("/api/qgis/reprojectLayer", {
         layerId,
         targetCrs,
       }).then((result) => {
@@ -454,7 +479,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       });
     },
     segmentRasterWithSAM: (optionsJson, callback) => {
-      void postJson<string>("/api/qgis/segmentRasterWithSAM", {
+      void postJsonSlow<string>("/api/qgis/segmentRasterWithSAM", {
         options: optionsJson,
       }).then((result) => {
         if (callback) {
@@ -463,7 +488,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       });
     },
     forecastWeatherWithEarth2: (optionsJson, callback) => {
-      void postJson<string>("/api/qgis/forecastWeatherWithEarth2", {
+      void postJsonSlow<string>("/api/qgis/forecastWeatherWithEarth2", {
         options: optionsJson,
       }).then((result) => {
         if (callback) {
@@ -472,7 +497,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       });
     },
     exportProjectReport: (optionsJson, callback) => {
-      void postJson<string>("/api/qgis/exportProjectReport", {
+      void postJsonSlow<string>("/api/qgis/exportProjectReport", {
         options: optionsJson,
       }).then((result) => {
         if (callback) {
@@ -497,7 +522,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       outputPath,
       callback,
     ) => {
-      void postJson<string>("/api/qgis/calculateRasterFormula", {
+      void postJsonSlow<string>("/api/qgis/calculateRasterFormula", {
         layerIds: layerIdsJson,
         formula,
         outputName,
@@ -509,7 +534,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       });
     },
     mergeRasterBands: (layerIdsJson, outputName, outputPath, callback) => {
-      void postJson<string>("/api/qgis/mergeRasterBands", {
+      void postJsonSlow<string>("/api/qgis/mergeRasterBands", {
         layerIds: layerIdsJson,
         outputName,
         outputPath,
@@ -528,7 +553,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       clipToSource,
       callback,
     ) => {
-      void postJson<string>("/api/qgis/createInventoryGrid", {
+      void postJsonSlow<string>("/api/qgis/createInventoryGrid", {
         layerRef,
         layerId: layerRef,
         cellWidth,
@@ -550,7 +575,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       clampNegative,
       callback,
     ) => {
-      void postJson<string>("/api/qgis/calculateMnh", {
+      void postJsonSlow<string>("/api/qgis/calculateMnh", {
         mnsLayerId,
         mntLayerId,
         outputName,
@@ -584,7 +609,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       });
     },
     splitSelectedLayerByLine: (layerId, lineWkt, outputName, callback) => {
-      void postJson<string>("/api/qgis/splitSelectedLayerByLine", {
+      void postJsonSlow<string>("/api/qgis/splitSelectedLayerByLine", {
         layerId,
         lineWkt,
         outputName,
@@ -597,6 +622,8 @@ function getHttpBridge(): RawQgisBridge | undefined {
     captureMapSnapshot: (callback) => {
       void readHttpBridgeResult<string>(
         makeUrl("/api/qgis/captureMapSnapshot"),
+        undefined,
+        HTTP_SCRIPT_TIMEOUT_MS,
       ).then((result) => {
         if (callback) {
           callback(typeof result === "string" ? result : "");
@@ -611,7 +638,7 @@ function getHttpBridge(): RawQgisBridge | undefined {
       });
     },
     installNvidiaDeps: (force, callback) => {
-      void postJson<string>("/api/qgis/installNvidiaDeps", { force }).then((result) => {
+      void postJsonSlow<string>("/api/qgis/installNvidiaDeps", { force }).then((result) => {
         if (callback) {
           callback(result ?? "{}");
         }

@@ -65,11 +65,12 @@ from qgis.core import (
     QgsFillSymbol,
     QgsGeometry,
     QgsLineSymbol,
-    QgsRasterLayer,
     QgsMapLayerType,
     QgsMessageLog,
     QgsPalLayerSettings,
+    QgsProcessingFeedback,
     QgsProject,
+    QgsRasterLayer,
     QgsSingleSymbolRenderer,
     QgsTextBufferSettings,
     QgsTextFormat,
@@ -743,7 +744,7 @@ class QgisBridge(BridgeQObject):
             params[f"INPUT_{letter}"] = layer.source()
             params[f"BAND_{letter}"] = 1
 
-        result = processing.run("gdal:rastercalculator", params)
+        result = processing.run("gdal:rastercalculator", params, feedback=QgsProcessingFeedback())
         output = result.get("OUTPUT")
         output_value = str(output)
         raster_layer = QgsRasterLayer(output_value, output_name)
@@ -773,7 +774,7 @@ class QgisBridge(BridgeQObject):
             "OUTPUT": self._resolve_output_destination(output_path),
         }
 
-        result = processing.run("gdal:merge", params)
+        result = processing.run("gdal:merge", params, feedback=QgsProcessingFeedback())
         output = result.get("OUTPUT")
         output_value = str(output)
         raster_layer = QgsRasterLayer(output_value, output_name)
@@ -817,6 +818,7 @@ class QgisBridge(BridgeQObject):
                 "CRS": source_layer.crs(),
                 "OUTPUT": "memory:",
             },
+            feedback=QgsProcessingFeedback(),
         )
         grid_layer = grid_result.get("OUTPUT")
         if grid_layer is None:
@@ -835,6 +837,7 @@ class QgisBridge(BridgeQObject):
                     "OVERLAY": source_layer,
                     "OUTPUT": "memory:",
                 },
+                feedback=QgsProcessingFeedback(),
             )
             grid_layer = clip_result.get("OUTPUT")
             clipped = True
@@ -853,6 +856,7 @@ class QgisBridge(BridgeQObject):
                 "ALL_PARTS": False,
                 "OUTPUT": "memory:",
             },
+            feedback=QgsProcessingFeedback(),
         )
         centroid_layer = centroids_result.get("OUTPUT")
         if centroid_layer is None:
@@ -1072,6 +1076,7 @@ class QgisBridge(BridgeQObject):
                     "TARGET_CRS": target_crs,
                     "OUTPUT": "memory:",
                 },
+                feedback=QgsProcessingFeedback(),
             )
         except Exception:
             QgsMessageLog.logMessage(
@@ -1668,12 +1673,12 @@ class QgisBridge(BridgeQObject):
         return message
 
     def _capture_map_snapshot(self):
-        """Capture l'etendue de la carte courante en PNG temporaire."""
+        """Capture la carte en PNG — utilise un job parallele pour ne pas bloquer l'UI."""
         try:
             from qgis.utils import iface
-            from qgis.core import QgsMapSettings
-            from qgis.PyQt.QtCore import QSize
-            from qgis.PyQt.QtGui import QImage, QPainter, QColor
+            from qgis.core import QgsMapSettings, QgsMapRendererParallelJob
+            from qgis.PyQt.QtCore import QSize, QEventLoop
+            from qgis.PyQt.QtGui import QColor
 
             canvas = iface.mapCanvas()
             settings = QgsMapSettings()
@@ -1683,14 +1688,15 @@ class QgisBridge(BridgeQObject):
             settings.setDestinationCrs(canvas.mapSettings().destinationCrs())
             settings.setBackgroundColor(QColor(255, 255, 255))
 
-            from qgis.core import QgsMapRendererCustomPainterJob
-            img = QImage(settings.outputSize(), QImage.Format_ARGB32_Premultiplied)
-            img.fill(QColor(255, 255, 255).rgb())
-            painter = QPainter(img)
-            job = QgsMapRendererCustomPainterJob(settings, painter)
+            job = QgsMapRendererParallelJob(settings)
+            loop = QEventLoop()
+            job.finished.connect(loop.quit)
             job.start()
-            job.waitForFinished()
-            painter.end()
+            loop.exec()
+
+            img = job.renderedImage()
+            if img.isNull():
+                return None
 
             tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
             tmp.close()
@@ -1913,6 +1919,7 @@ class QgisBridge(BridgeQObject):
                     "INPUT": layer,
                     "OUTPUT": "memory:",
                 },
+                feedback=QgsProcessingFeedback(),
             )
             selected_layer = selected_result.get("OUTPUT")
             split_result = processing.run(
@@ -1922,6 +1929,7 @@ class QgisBridge(BridgeQObject):
                     "LINES": split_layer,
                     "OUTPUT": "memory:",
                 },
+                feedback=QgsProcessingFeedback(),
             )
         except Exception:
             QgsMessageLog.logMessage(
