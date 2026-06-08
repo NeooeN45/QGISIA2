@@ -166,18 +166,29 @@ def _build_completion_kwargs(
     provider = _extract_provider(model)
     api_key = api_keys.get(provider)
 
-    # NVIDIA NIM : LiteLLM ne connait pas le provider 'nvidia_nim' natif.
-    # L'API NVIDIA NIM etant 100% OpenAI-compatible, on route TOUJOURS via
-    # le provider 'openai/' avec l'api_base NVIDIA. Cela marche aussi bien
-    # pour le chat simple que pour le tool calling.
-    if provider == "nvidia_nim":
-        rest = model.split("/", 1)[1] if "/" in model else model
-        kwargs["model"] = f"openai/{rest}"
+    # ── NVIDIA NIM ─────────────────────────────────────────────────────────────
+    # Si api_keys contient 'nvidia_nim', on route TOUJOURS vers NVIDIA NIM
+    # quelle que soit la forme du modele (nvidia/..., mistralai/..., meta/...).
+    # L'API NVIDIA NIM est 100 % OpenAI-compatible ; on prefixe avec 'openai/'.
+    nvidia_key = api_keys.get("nvidia_nim")
+    if nvidia_key:
+        kwargs["model"] = f"openai/{model}"
         kwargs["api_base"] = "https://integrate.api.nvidia.com/v1"
+        kwargs["api_key"] = nvidia_key
         if tools:
             kwargs["tool_choice"] = "auto"
-        if api_key:
-            kwargs["api_key"] = api_key
+        return kwargs
+
+    # ── OpenRouter (fallback) ─────────────────────────────────────────────────
+    # Providers non natifs routes via openrouter/...
+    _OPENROUTER_PROVIDERS = {"mistralai", "anthropic", "meta-llama", "perplexity", "deepseek", "qwen", "google"}
+    if provider in _OPENROUTER_PROVIDERS:
+        kwargs["model"] = f"openrouter/{model}"
+        openrouter_key = api_keys.get("openrouter")
+        if openrouter_key:
+            kwargs["api_key"] = openrouter_key
+        if tools:
+            kwargs["tool_choice"] = "auto"
         return kwargs
 
     if api_key:
