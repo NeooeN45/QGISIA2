@@ -1,4 +1,4 @@
-import { Database, Image as ImageIcon, Leaf, Map, Plus, Sparkles, TreePine, Waves, Layers as LayersIcon, BarChart3, ChevronDown } from "lucide-react";
+import { Database, Image as ImageIcon, Leaf, Map, Plus, Sparkles, TreePine, Waves, Layers as LayersIcon, BarChart3, ChevronDown, TrendingUp, Mic, Wrench } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useState, useMemo } from "react";
 import QuickPromptsPanel from "./QuickPromptsPanel";
@@ -80,6 +80,25 @@ const baseSuggestions = [
     icon: <Sparkles size={18} className="text-pink-400" />,
     text: "Améliorer automatiquement la carte : rendu critiqué par l'IA vision jusqu'à la perfection",
     accent: "group-hover:border-pink-500/30",
+  },
+  // ── Nouveaux outils natifs MCP (Devin CLI 2026-06-08) ──────────────────────
+  {
+    id: "predict-trend",
+    icon: <TrendingUp size={18} className="text-violet-400" />,
+    text: "Projeter la tendance NDVI des 5 dernières années et anticiper l'état de la végétation à t+3",
+    accent: "group-hover:border-violet-500/30",
+  },
+  {
+    id: "voice-intent",
+    icon: <Mic size={18} className="text-fuchsia-400" />,
+    text: "Décris ce que tu veux faire en langage naturel — je le traduis en actions cartographiques QGIS",
+    accent: "group-hover:border-fuchsia-500/30",
+  },
+  {
+    id: "tools-panel",
+    icon: <Wrench size={18} className="text-amber-400" />,
+    text: "Ouvre le panneau Outils → Données pour charger Sentinel-2 réel et lancer un diagnostic satellite complet",
+    accent: "group-hover:border-amber-500/30",
   },
 ];
 

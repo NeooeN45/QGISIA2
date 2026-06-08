@@ -234,14 +234,16 @@ export default function Chat(props: ChatProps) {
     setLocalSettings(settings);
   };
 
-  const handlePasteApiKey = async (target: "google" | "openrouter") => {
+  const handlePasteApiKey = async (target: "google" | "openrouter" | "nvidia") => {
     try {
       const pasted = await navigator.clipboard.readText();
       setLocalSettings((current) => ({
         ...current,
         ...(target === "google"
           ? { googleApiKey: pasted.trim() }
-          : { openrouterApiKey: pasted.trim() }),
+          : target === "nvidia"
+            ? { nvidiaApiKey: pasted.trim() }
+            : { openrouterApiKey: pasted.trim() }),
       }));
       toast.success("Clé collée");
     } catch {
@@ -539,6 +541,7 @@ export default function Chat(props: ChatProps) {
           onToggleLayerSelection={onToggleLayerSelection}
           onToggleOpen={toggleSidebar}
           onZoomToLayer={onZoomToLayer}
+          onSendMessage={(msg) => void onSendMessage(msg)}
         />
       </Suspense>
 

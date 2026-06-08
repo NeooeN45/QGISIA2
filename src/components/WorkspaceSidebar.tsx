@@ -1,4 +1,10 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState, lazy, Suspense } from "react";
+
+// Panneaux Devin — chargés en lazy pour ne pas alourdir le bundle initial
+// IMPLÉMENTÉ PAR DEVIN CLI (Cognition AI) — Superviseur : Claude Code 4.8 — 2026-06-08
+const DataPanel = lazy(() => import("./DataPanel"));
+const DiagnosticPanel = lazy(() => import("./DiagnosticPanel"));
+const DossierPanel = lazy(() => import("./DossierPanel"));
 import {
   ChevronLeft,
   ChevronRight,
@@ -42,6 +48,8 @@ import {
   FileText,
   BookOpen,
   ShieldCheck,
+  Activity,
+  FolderOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -147,9 +155,10 @@ interface WorkspaceSidebarProps {
   onToggleLayerSelection: (layerId: string) => void;
   onToggleOpen: () => void;
   onZoomToLayer: (layerId: string) => void | Promise<void>;
+  onSendMessage?: (message: string) => void;
 }
 
-type SidebarTab = "history" | "layers" | "services";
+type SidebarTab = "history" | "layers" | "services" | "tools";
 
 interface CustomServiceDraft {
   name: string;
@@ -354,6 +363,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     onToggleLayerSelection,
     onToggleOpen,
     onZoomToLayer,
+    onSendMessage,
   } = props;
 
   const [activeTab, setActiveTab] = useState<SidebarTab>("history");
@@ -410,6 +420,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
 
   // Services tab — sub-tabs, filters, favorites
   const [servicesSubTab, setServicesSubTab] = useState<ServicesSubTab>("catalog");
+  const [toolsSubTab, setToolsSubTab] = useState<"data" | "diagnostic" | "dossiers">("data");
   const [serviceTypeFilter, setServiceTypeFilter] = useState<ServiceTypeFilter>("all");
   const [reliableOnly, setReliableOnly] = useState(true);
   const [favoriteServiceIds, setFavoriteServiceIds] = useState<string[]>(() => loadFavoriteServiceIds());
@@ -1704,6 +1715,76 @@ out geom;" />
     </div>
   );
 
+  // ── Onglet Outils (panneaux Devin) ──────────────────────────────────────────
+  // IMPLÉMENTÉ PAR DEVIN CLI (Cognition AI) — Superviseur : Claude Code 4.8 — 2026-06-08
+  function renderToolsTab() {
+    return (
+      <div className="flex flex-col gap-3">
+        {/* Sous-onglets */}
+        <div className="flex gap-1.5">
+          {(["data", "diagnostic", "dossiers"] as const).map((tab) => {
+            const meta = {
+              data: { label: "Données", icon: <Globe size={12} />, active: "border-cyan-500/40 bg-cyan-500/12 text-cyan-600 dark:text-cyan-300" },
+              diagnostic: { label: "Diagnostic", icon: <Activity size={12} />, active: "border-emerald-500/40 bg-emerald-500/12 text-emerald-600 dark:text-emerald-300" },
+              dossiers: { label: "Dossiers", icon: <FolderOpen size={12} />, active: "border-amber-500/40 bg-amber-500/12 text-amber-600 dark:text-amber-300" },
+            }[tab];
+            return (
+              <button
+                key={tab}
+                onClick={() => setToolsSubTab(tab)}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition-all",
+                  toolsSubTab === tab
+                    ? meta.active
+                    : "border-gray-200 dark:border-white/[0.06] bg-gray-100/60 dark:bg-white/[0.03] text-gray-500 dark:text-white/35 hover:bg-gray-100 dark:hover:bg-white/[0.06]",
+                )}
+              >
+                {meta.icon}
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Panneau actif */}
+        <div className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50/80 dark:bg-white/[0.02] overflow-hidden min-h-[400px]">
+          <Suspense fallback={<div className="flex items-center justify-center h-32 text-xs text-gray-400 dark:text-white/30 gap-2"><Loader2 size={14} className="animate-spin" />Chargement…</div>}>
+            {toolsSubTab === "data" && (
+              <DataPanel
+                onSourceLoaded={(sourceId) => {
+                  void onRefreshLayers();
+                  if (onSendMessage) {
+                    onSendMessage(`La source "${sourceId}" vient d'être chargée. Analyse les nouvelles couches disponibles et propose une étude adaptée.`);
+                  }
+                }}
+              />
+            )}
+            {toolsSubTab === "diagnostic" && (
+              <DiagnosticPanel
+                onResult={(type, detail) => {
+                  if (onSendMessage) {
+                    onSendMessage(`Calcul ${type.toUpperCase()} terminé sur "${detail}". Analyse le résultat et propose une interprétation cartographique.`);
+                  }
+                }}
+              />
+            )}
+            {toolsSubTab === "dossiers" && (
+              <DossierPanel
+                onDossierRun={(dossierId, result) => {
+                  void onRefreshLayers();
+                  if (onSendMessage) {
+                    const layers = result.layers?.join(", ") || "couches chargées";
+                    onSendMessage(`Dossier "${dossierId}" déroulé : ${result.steps_done ?? "?"}/${result.total ?? "?"} étapes. Couches : ${layers}. Lance une analyse territoriale sur ces données.`);
+                  }
+                }}
+              />
+            )}
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <aside
       className={cn(
@@ -1748,6 +1829,8 @@ out geom;" />
             active: "border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 to-emerald-600/8 text-emerald-600 dark:text-emerald-300 shadow-md shadow-emerald-500/10" },
           { id: "services" as SidebarTab, label: "Services", Icon: Network, badge: null,
             active: "border-cyan-500/40 bg-gradient-to-br from-cyan-500/15 to-cyan-600/8 text-cyan-600 dark:text-cyan-300 shadow-md shadow-cyan-500/10" },
+          { id: "tools" as SidebarTab, label: "Outils", Icon: Wrench, badge: null,
+            active: "border-violet-500/40 bg-gradient-to-br from-violet-500/15 to-violet-600/8 text-violet-600 dark:text-violet-300 shadow-md shadow-violet-500/10" },
         ].map(({ id, label, Icon, badge, active }) => (
           <button
             key={id}
@@ -1798,7 +1881,7 @@ out geom;" />
             <RefreshCw size={isOpen ? 15 : 20} className={cn(isRefreshingLayers && "animate-spin")} />
             {isOpen && "Rafraîchir les couches"}
           </button>
-        ) : (
+        ) : activeTab === "services" ? (
           <div
             className={cn(
               "flex items-center justify-center rounded-2xl border",
@@ -1808,6 +1891,17 @@ out geom;" />
           >
             <Link2 size={isOpen ? 15 : 20} />
             {isOpen && "Sources connectées"}
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "flex items-center justify-center rounded-2xl border",
+              "border-violet-500/30 bg-gradient-to-r from-violet-600/12 to-violet-500/8 text-violet-600 dark:text-violet-300",
+              !isOpen ? "h-12 w-full" : "w-full gap-2 px-4 py-2.5 text-[13px] font-bold",
+            )}
+          >
+            <Wrench size={isOpen ? 15 : 20} />
+            {isOpen && "Données · Diagnostic · Dossiers"}
           </div>
         )}
       </div>
@@ -1862,7 +1956,9 @@ out geom;" />
             ? renderHistoryTab()
             : activeTab === "layers"
               ? renderLayersTab()
-              : renderServicesTab()}
+              : activeTab === "services"
+                ? renderServicesTab()
+                : renderToolsTab()}
         </div>
       )}
     </aside>
