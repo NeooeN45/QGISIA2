@@ -678,3 +678,93 @@ body {
     background: var(--background-elevated) !important;
   }
 }
+
+/* ─────────────────────────────────────────────
+   12. MODE CLAIR — Lisibilité renforcée
+   Corriger les textes trop pâles, bordures trop fines,
+   et surfaces qui se fondent dans le blanc.
+   ─────────────────────────────────────────────*/
+
+/* Fond général plus chaud en mode clair */
+:not(.dark) body {
+  background-color: #f5f7fa;
+}
+
+/* Zone principale du chat en mode clair */
+:not(.dark) .bg-gray-50 {
+  background-color: #f0f4f8 !important;
+}
+
+/* Sidebar : fond blanc opaque + ombre visible */
+:not(.dark) .sidebar-bg {
+  background-color: rgba(255, 255, 255, 0.99) !important;
+  box-shadow: 2px 0 24px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Textes gris atténués → plus lisibles en clair */
+:not(.dark) .text-gray-400  { color: #64748b !important; }
+:not(.dark) .text-gray-500  { color: #475569 !important; }
+:not(.dark) .text-white\/30 { color: #6b7280 !important; }
+:not(.dark) .text-white\/40 { color: #6b7280 !important; }
+:not(.dark) .text-white\/50 { color: #4b5563 !important; }
+:not(.dark) .text-white\/60 { color: #374151 !important; }
+:not(.dark) .text-white\/70 { color: #1f2937 !important; }
+
+/* Bordures trop transparentes → visibles en clair */
+:not(.dark) .border-white\/\[0\.05\]  { border-color: #e5e7eb !important; }
+:not(.dark) .border-white\/\[0\.06\]  { border-color: #e5e7eb !important; }
+:not(.dark) .border-white\/\[0\.08\]  { border-color: #d1d5db !important; }
+:not(.dark) .border-white\/10         { border-color: #d1d5db !important; }
+:not(.dark) .border-white\/\[0\.08\]  { border-color: #d1d5db !important; }
+
+/* Bulles de messages assistant en mode clair */
+:not(.dark) .bg-white\/\[0\.03\]  { background-color: #f8fafc !important; }
+:not(.dark) .bg-white\/\[0\.04\]  { background-color: #f8fafc !important; }
+:not(.dark) .bg-white\/\[0\.05\]  { background-color: #f1f5f9 !important; }
+:not(.dark) .bg-white\/\[0\.06\]  { background-color: #f1f5f9 !important; }
+:not(.dark) .bg-white\/\[0\.08\]  { background-color: #e2e8f0 !important; }
+
+/* ChatInput zone en mode clair */
+:not(.dark) .bg-\[\#0e0f11\],
+:not(.dark) .bg-\[\#111315\],
+:not(.dark) .bg-\[\#1a1a1b\],
+:not(.dark) .bg-\[\#131314\] {
+  background-color: #ffffff !important;
+}
+
+/* Header du chat en clair */
+:not(.dark) .bg-\[\#0c0d0f\] {
+  background-color: #f8fafc !important;
+}
+
+/* Blocs prose en mode clair — meilleur contraste */
+:not(.dark) .prose p,
+:not(.dark) .prose li,
+:not(.dark) .prose h1,
+:not(.dark) .prose h2,
+:not(.dark) .prose h3 {
+  color: #1e293b;
+}
+
+:not(.dark) .prose strong { color: #0f172a; }
+:not(.dark) .prose a      { color: #2563eb; }
+
+/* Onglets sidebar actifs en mode clair */
+:not(.dark) .border-blue-500\/30 { border-color: rgba(59, 130, 246, 0.4) !important; }
+:not(.dark) .bg-blue-500\/10     { background-color: rgba(59, 130, 246, 0.08) !important; }
+
+/* Fond des onglets inactifs en clair */
+:not(.dark) .bg-gray-100\/60 { background-color: rgba(248, 250, 252, 0.9) !important; }
+:not(.dark) .hover\:bg-gray-100:hover { background-color: #f1f5f9 !important; }
+
+/* Inputs en mode clair */
+:not(.dark) input,
+:not(.dark) textarea {
+  background-color: #ffffff;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+:not(.dark) input::placeholder,
+:not(.dark) textarea::placeholder {
+  color: #94a3b8;
+}

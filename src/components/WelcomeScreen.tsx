@@ -507,8 +507,8 @@ export default function WelcomeScreen({
         className="flex flex-col items-start"
       >
         {/* Logo + title row */}
-        <div className="flex items-center gap-4">
-          <OctagonLogo />
+        <div className="flex flex-col gap-0.5">
+          
           <div>
             <h1
               className="bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 bg-[length:200%_auto] bg-clip-text text-3xl font-bold tracking-tight text-transparent md:text-4xl"
