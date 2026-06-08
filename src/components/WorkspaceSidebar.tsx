@@ -1829,39 +1829,38 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   return (
     <motion.div
       className="relative flex h-full shrink-0 flex-col border-r border-gray-200 dark:border-white/[0.05] sidebar-bg backdrop-blur-2xl shadow-[2px_0_32px_rgba(0,0,0,0.18)] overflow-visible"
-      animate={{ width: isOpen ? "22rem" : "0rem" }}
+      animate={{ width: isOpen ? "22rem" : "4rem" }}
       transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
       style={{ minWidth: 0 }}
     >
-      {/* Bouton toggle — collé au bord droit, toujours visible */}
+      {/* Bouton toggle flottant en bordure droite */}
       <motion.button
         onClick={onToggleOpen}
-        className="absolute top-1/2 -translate-y-1/2 z-50 flex h-8 w-5 items-center justify-center rounded-r-lg border border-l-0 border-gray-200 dark:border-white/[0.08] bg-white/90 dark:bg-[#1c1c1e]/90 shadow-md backdrop-blur-sm"
-        style={{ left: "100%" }}
-        whileHover={{ x: 1, scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        className="absolute right-0 top-1/2 z-50 flex h-6 w-6 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-white/[0.08] bg-[#1a1a1b] shadow-lg shadow-black/40"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
         aria-label={isOpen ? "Fermer la sidebar" : "Ouvrir la sidebar"}
       >
         <motion.svg
-          width="8"
-          height="12"
-          viewBox="0 0 8 12"
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
           fill="none"
           animate={{ rotate: isOpen ? 0 : 180 }}
           transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         >
           <path
-            d="M5 1L2 6L5 11"
-            stroke="currentColor"
+            d="M6.5 2L3.5 5L6.5 8"
+            stroke="rgba(255,255,255,0.6)"
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-gray-400 dark:text-white/50"
           />
         </motion.svg>
       </motion.button>
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.05] bg-gradient-to-r from-transparent via-transparent to-transparent px-4 py-4">
-        <div>
+        {isOpen ? (
+          <div>
             <p className="text-[9px] font-black uppercase tracking-[0.35em] bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
               QGISAI+
             </p>
@@ -1869,9 +1868,14 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
               Workspace QGIS
             </h2>
           </div>
+        ) : (
+          <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/15 border border-emerald-500/25">
+            <Sparkles size={16} className="text-emerald-400" />
+          </div>
+        )}
       </div>
 
-      <div className={cn("flex gap-1.5 px-3 py-2.5")}>
+      <div className={cn("flex gap-1.5 px-3 py-2.5", !isOpen && "flex-col px-2 gap-2")}>
         {[
           { id: "history" as SidebarTab, label: "Historique", Icon: MessageSquare, badge: conversations.length,
             accent: "blue" },
@@ -1887,7 +1891,7 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             onClick={() => setActiveTab(id)}
             className={cn(
               "relative flex items-center gap-2 rounded-2xl border px-3 py-2 text-[12px] font-semibold transition-all duration-200",
-              "flex-1",
+              isOpen ? "flex-1" : "w-full justify-center py-3",
               activeTab === id
                 ? "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300 shadow-sm"
                 : "border-gray-200 dark:border-white/[0.06] bg-gray-100/60 dark:bg-white/[0.03] text-gray-500 dark:text-white/35 hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-700 dark:hover:text-white/60",
