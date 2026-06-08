@@ -172,7 +172,10 @@ def _build_completion_kwargs(
     # L'API NVIDIA NIM est 100 % OpenAI-compatible ; on prefixe avec 'openai/'.
     nvidia_key = api_keys.get("nvidia_nim")
     if nvidia_key:
-        kwargs["model"] = f"openai/{model}"
+        # Retire le prefixe nvidia_nim/ si present (ex: alias smart-default
+        # resout vers "nvidia_nim/nvidia/..." -> on veut "openai/nvidia/...")
+        model_for_nvidia = model.removeprefix("nvidia_nim/") if model.startswith("nvidia_nim/") else model
+        kwargs["model"] = f"openai/{model_for_nvidia}"
         kwargs["api_base"] = "https://integrate.api.nvidia.com/v1"
         kwargs["api_key"] = nvidia_key
         if tools:

@@ -884,19 +884,21 @@ async function generateViaNvidia(
   try {
     thinkingStore.setPhase("ANALYZING_INTENT", {
       message: "Connexion a NVIDIA NIM...",
-      subMessage: `Modele : ${settings.nvidiaModel}`,
+      subMessage: "Routage intelligent vers le meilleur modele",
     });
     streamingStore.startStreaming(createMessageId());
-    thinkingStore.setPhase("STREAMING_RESPONSE", { modelName: settings.nvidiaModel });
+    thinkingStore.setPhase("STREAMING_RESPONSE", { modelName: "smart-default" });
 
     const messages: ChatMessage[] = [
       { role: "system", content: DEFAULT_LOCAL_SYSTEM_PROMPT },
       { role: "user", content: input.prompt },
     ];
 
+    // Mode Smart : utilise l'alias "smart-default" du backend
+    // (resout vers nemotron-3-super-120b avec fallbacks automatiques)
     const full = await gatewayStreamToText(
       {
-        model: settings.nvidiaModel,
+        model: "smart-default",
         messages,
         api_keys: { nvidia_nim: apiKey },
         signal: input.signal,
