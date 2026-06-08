@@ -421,6 +421,9 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   // Services tab — sub-tabs, filters, favorites
   const [servicesSubTab, setServicesSubTab] = useState<ServicesSubTab>("catalog");
   const [toolsSubTab, setToolsSubTab] = useState<"data" | "diagnostic" | "dossiers">("data");
+  const [overpassAdvanced, setOverpassAdvanced] = useState(false);
+  const [nasaBboxLoading, setNasaBboxLoading] = useState(false);
+  const [copBboxLoading, setCopBboxLoading] = useState(false);
   const [serviceTypeFilter, setServiceTypeFilter] = useState<ServiceTypeFilter>("all");
   const [reliableOnly, setReliableOnly] = useState(true);
   const [favoriteServiceIds, setFavoriteServiceIds] = useState<string[]>(() => loadFavoriteServiceIds());
@@ -1519,11 +1522,8 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300/70">Copernicus Sentinel-2</p>
             <p className="text-[10px] text-gray-700 dark:text-gray-300/35">Images haute résolution (10m) pour l'Europe et le monde</p>
-            <input value={copernicusCollection} onChange={(e) => setCopernicusCollection(e.target.value)} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-sky-500/40" placeholder="Collection (ex: SENTINEL-2)" />
-            <div className="grid grid-cols-2 gap-2">
-              <input value={copernicusLimit} onChange={(e) => setCopernicusLimit(e.target.value)} className="rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-sky-500/40" placeholder="Résultats (5)" />
-              <input value={copernicusNameContains} onChange={(e) => setCopernicusNameContains(e.target.value)} className="rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-sky-500/40" placeholder="Filtre nom" />
-            </div>
+            {/* Collection masquée — valeur par défaut SENTINEL-2 */}
+            <input value={copernicusNameContains} onChange={(e) => setCopernicusNameContains(e.target.value)} className="w-full rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-gray-100/80 dark:bg-white/[0.03] px-3 py-2 text-[12px] text-gray-700 dark:text-white/70 outline-none placeholder:text-gray-400 dark:placeholder:text-white/25 focus:border-sky-500/40 transition-colors" placeholder="Filtrer par nom (optionnel)" />
             <button onClick={() => void submitCopernicusSearch()} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-sky-500/25 bg-sky-500/12 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-sky-500/18"><Search size={15} /> Chercher Sentinel-2</button>
             {copernicusResults.length > 0 && (
               <div className="space-y-2">{copernicusResults.map((item) => (<div key={item.id} className="rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 text-xs text-gray-700 dark:text-gray-300/55"><p className="truncate font-medium text-gray-700 dark:text-gray-300">{item.name || item.id}</p><p className="text-gray-700 dark:text-gray-300/35">{item.online ? "En ligne" : "Hors ligne"} · {item.publicationDate || "n/a"}</p></div>))}</div>
@@ -1534,11 +1534,30 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
           <div className="border-t border-gray-300 dark:border-gray-700 pt-3 space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300/70">NASA Landsat</p>
             <p className="text-[10px] text-gray-700 dark:text-gray-300/35">Images Landsat 8/9 pour le monde entier</p>
-            <input value={nasaCollection} onChange={(e) => setNasaCollection(e.target.value)} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-indigo-500/40" placeholder="Collection (ex: HLSS30.v2.0)" />
-            <div className="grid grid-cols-2 gap-2">
-              <input value={nasaLimit} onChange={(e) => setNasaLimit(e.target.value)} className="rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-indigo-500/40" placeholder="Résultats (5)" />
-              <input value={nasaBbox} onChange={(e) => setNasaBbox(e.target.value)} className="rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-indigo-500/40" placeholder="BBOX WGS84" />
-            </div>
+            {/* Bouton emprise — remplace la saisie BBOX manuelle */}
+            <button
+              onClick={async () => {
+                setNasaBboxLoading(true);
+                try {
+                  const res = await fetch("http://localhost:8157/api/qgis/projectExtent");
+                  if (res.ok) {
+                    const data = await res.json() as { bbox?: string };
+                    if (data.bbox) { setNasaBbox(data.bbox); toast.success("Emprise récupérée"); }
+                    else toast.warning("Pas de projet QGIS ouvert");
+                  }
+                } catch { toast.error("Erreur réseau"); }
+                finally { setNasaBboxLoading(false); }
+              }}
+              disabled={nasaBboxLoading}
+              className={cn(
+                "flex w-full items-center justify-center gap-1.5 rounded-xl border py-2 text-[12px] font-semibold transition-all disabled:opacity-50",
+                nasaBbox
+                  ? "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-600 dark:text-emerald-400"
+                  : "border-indigo-500/35 bg-gradient-to-r from-indigo-600/15 to-indigo-500/10 text-indigo-600 dark:text-indigo-300 hover:from-indigo-600/22"
+              )}
+            >
+              {nasaBboxLoading ? <><Loader2 size={11} className="animate-spin" />Récupération…</> : nasaBbox ? <><CheckCircle2 size={11} />Emprise définie ✓</> : <><MapPin size={11} />Utiliser l'emprise du projet</>}
+            </button>
             <button onClick={() => void submitNasaSearch()} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-indigo-500/25 bg-indigo-500/12 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-indigo-500/18"><Search size={15} /> Chercher Landsat</button>
             {nasaResults.length > 0 && (
               <div className="space-y-2">{nasaResults.map((item) => (<div key={item.id} className="rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 text-xs text-gray-700 dark:text-gray-300/55"><p className="truncate font-medium text-gray-700 dark:text-gray-300">{item.id}</p><p className="text-gray-700 dark:text-gray-300/35">{item.datetime || "n/a"}</p></div>))}</div>
@@ -1639,16 +1658,39 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
               ))}
             </div>
           </div>
-          <select value={overpassEndpoint} onChange={(e) => setOverpassEndpoint(e.target.value)} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-orange-500/40">
-            {OVERPASS_ENDPOINTS.map((ep) => (<option key={ep} value={ep}>{ep}</option>))}
-          </select>
-          <textarea value={overpassQuery} onChange={(e) => setOverpassQuery(e.target.value)} rows={4} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 font-mono text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-orange-500/40" placeholder="[out:json];
-area[name='Rennes']->.searchArea;
-(
-  way[highway](area.searchArea);
-);
-out geom;" />
-          <input value={overpassLayerName} onChange={(e) => setOverpassLayerName(e.target.value)} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 outline-none placeholder:text-gray-700 dark:text-gray-300/20 focus:border-orange-500/40" placeholder="Nom de la couche (ex: Routes_Rennes)" />
+          {/* Nom de couche — auto-rempli par les templates */}
+          <div className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-white/[0.06] bg-gray-50/80 dark:bg-white/[0.02] px-3 py-2">
+            <span className="text-[10px] text-gray-400 dark:text-white/30 shrink-0">Couche :</span>
+            <input
+              value={overpassLayerName}
+              onChange={(e) => setOverpassLayerName(e.target.value)}
+              className="flex-1 min-w-0 bg-transparent text-[12px] text-gray-700 dark:text-white/70 outline-none placeholder:text-gray-400 dark:placeholder:text-white/25"
+              placeholder="Nom de la couche"
+            />
+          </div>
+
+          {/* Mode avancé — toggle */}
+          <button
+            onClick={() => setOverpassAdvanced((v) => !v)}
+            className="flex items-center gap-1.5 self-start text-[10px] text-orange-600 dark:text-orange-400/70 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+          >
+            <ChevronDown size={11} className={cn("transition-transform", overpassAdvanced && "rotate-180")} />
+            {overpassAdvanced ? "Masquer la requête" : "Mode avancé (éditer la requête)"}
+          </button>
+
+          {overpassAdvanced && (
+            <div className="flex flex-col gap-2">
+              <select value={overpassEndpoint} onChange={(e) => setOverpassEndpoint(e.target.value)} className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-orange-500/40">
+                {OVERPASS_ENDPOINTS.map((ep) => (<option key={ep} value={ep}>{ep}</option>))}
+              </select>
+              <textarea
+                value={overpassQuery}
+                onChange={(e) => setOverpassQuery(e.target.value)}
+                rows={5}
+                className="w-full rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 font-mono text-xs text-gray-700 dark:text-gray-300 outline-none focus:border-orange-500/40"
+              />
+            </div>
+          )}
           <button onClick={() => void submitOverpassSearch()} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-orange-500/25 bg-orange-500/12 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 transition-all hover:bg-orange-500/18"><Plus size={15} /> Extraire données OSM</button>
         </div>
       </CollapsibleSection>
@@ -1715,72 +1757,63 @@ out geom;" />
     </div>
   );
 
-  // ── Onglet Outils (panneaux Devin) ──────────────────────────────────────────
+  // ── Onglet Outils (panneaux Devin) — scroll unique ────────────────────────
   // IMPLÉMENTÉ PAR DEVIN CLI (Cognition AI) — Superviseur : Claude Code 4.8 — 2026-06-08
+  // Redesign UX 2026-06-08 : scroll unique, layers passées en prop pour selects auto
   function renderToolsTab() {
+    const layerOptions = layers.map((l) => ({ id: l.id, name: l.name, type: l.type }));
     return (
-      <div className="flex flex-col gap-3">
-        {/* Sous-onglets */}
-        <div className="flex gap-1.5">
-          {(["data", "diagnostic", "dossiers"] as const).map((tab) => {
-            const meta = {
-              data: { label: "Données", icon: <Globe size={12} />, active: "border-cyan-500/40 bg-cyan-500/12 text-cyan-600 dark:text-cyan-300" },
-              diagnostic: { label: "Diagnostic", icon: <Activity size={12} />, active: "border-emerald-500/40 bg-emerald-500/12 text-emerald-600 dark:text-emerald-300" },
-              dossiers: { label: "Dossiers", icon: <FolderOpen size={12} />, active: "border-amber-500/40 bg-amber-500/12 text-amber-600 dark:text-amber-300" },
-            }[tab];
-            return (
-              <button
-                key={tab}
-                onClick={() => setToolsSubTab(tab)}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition-all",
-                  toolsSubTab === tab
-                    ? meta.active
-                    : "border-gray-200 dark:border-white/[0.06] bg-gray-100/60 dark:bg-white/[0.03] text-gray-500 dark:text-white/35 hover:bg-gray-100 dark:hover:bg-white/[0.06]",
-                )}
-              >
-                {meta.icon}
-                {meta.label}
-              </button>
-            );
-          })}
+      <div className="flex flex-col gap-4">
+        {/* Label section Données */}
+        <div className="flex items-center gap-2">
+          <Globe size={13} className="text-cyan-500 dark:text-cyan-400" />
+          <span className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-400">Sources de données</span>
         </div>
+        <Suspense fallback={<div className="flex items-center justify-center h-24 text-xs text-gray-400 dark:text-white/30 gap-2"><Loader2 size={14} className="animate-spin" />Chargement…</div>}>
+          <DataPanel
+            onSourceLoaded={(sourceId) => {
+              void onRefreshLayers();
+              if (onSendMessage) onSendMessage(`La source "${sourceId}" vient d'être chargée. Analyse les nouvelles couches et propose une étude adaptée.`);
+            }}
+          />
+        </Suspense>
 
-        {/* Panneau actif */}
-        <div className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50/80 dark:bg-white/[0.02] overflow-hidden min-h-[400px]">
-          <Suspense fallback={<div className="flex items-center justify-center h-32 text-xs text-gray-400 dark:text-white/30 gap-2"><Loader2 size={14} className="animate-spin" />Chargement…</div>}>
-            {toolsSubTab === "data" && (
-              <DataPanel
-                onSourceLoaded={(sourceId) => {
-                  void onRefreshLayers();
-                  if (onSendMessage) {
-                    onSendMessage(`La source "${sourceId}" vient d'être chargée. Analyse les nouvelles couches disponibles et propose une étude adaptée.`);
-                  }
-                }}
-              />
-            )}
-            {toolsSubTab === "diagnostic" && (
-              <DiagnosticPanel
-                onResult={(type, detail) => {
-                  if (onSendMessage) {
-                    onSendMessage(`Calcul ${type.toUpperCase()} terminé sur "${detail}". Analyse le résultat et propose une interprétation cartographique.`);
-                  }
-                }}
-              />
-            )}
-            {toolsSubTab === "dossiers" && (
-              <DossierPanel
-                onDossierRun={(dossierId, result) => {
-                  void onRefreshLayers();
-                  if (onSendMessage) {
-                    const layers = result.layers?.join(", ") || "couches chargées";
-                    onSendMessage(`Dossier "${dossierId}" déroulé : ${result.steps_done ?? "?"}/${result.total ?? "?"} étapes. Couches : ${layers}. Lance une analyse territoriale sur ces données.`);
-                  }
-                }}
-              />
-            )}
-          </Suspense>
+        {/* Séparateur */}
+        <div className="h-px bg-gray-200 dark:bg-white/[0.06]" />
+
+        {/* Label section Analyse */}
+        <div className="flex items-center gap-2">
+          <Activity size={13} className="text-emerald-500 dark:text-emerald-400" />
+          <span className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400">Analyse satellite</span>
         </div>
+        <Suspense fallback={<div className="flex items-center justify-center h-24 text-xs text-gray-400 dark:text-white/30 gap-2"><Loader2 size={14} className="animate-spin" />Chargement…</div>}>
+          <DiagnosticPanel
+            layers={layerOptions}
+            onResult={(type, detail) => {
+              if (onSendMessage) onSendMessage(`Calcul ${type.toUpperCase()} terminé sur "${detail}". Analyse le résultat et propose une interprétation cartographique.`);
+            }}
+          />
+        </Suspense>
+
+        {/* Séparateur */}
+        <div className="h-px bg-gray-200 dark:bg-white/[0.06]" />
+
+        {/* Label section Dossiers */}
+        <div className="flex items-center gap-2">
+          <FolderOpen size={13} className="text-amber-500 dark:text-amber-400" />
+          <span className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-600 dark:text-amber-400">Dossiers territoriaux</span>
+        </div>
+        <Suspense fallback={<div className="flex items-center justify-center h-24 text-xs text-gray-400 dark:text-white/30 gap-2"><Loader2 size={14} className="animate-spin" />Chargement…</div>}>
+          <DossierPanel
+            onDossierRun={(dossierId, result) => {
+              void onRefreshLayers();
+              if (onSendMessage) {
+                const layerNames = result.layers?.join(", ") || "couches chargées";
+                onSendMessage(`Dossier "${dossierId}" déroulé : ${result.steps_done ?? "?"}/${result.total ?? "?"} étapes. Couches : ${layerNames}. Lance une analyse territoriale.`);
+              }
+            }}
+          />
+        </Suspense>
       </div>
     );
   }
