@@ -22,7 +22,6 @@ import { useUIStore } from "../stores/useUIStore";
 import { useGatewayStore } from "../stores/useGatewayStore";
 import { appendDebugEvent } from "../lib/debug-log";
 import { toast } from "sonner";
-import ThemeToggle from "./ThemeToggle";
 import { useState, useEffect, useRef } from "react";
 
 function formatLayerBadge(layer: LayerSummary): string {
@@ -204,7 +203,6 @@ export default function ChatHeader({
         </div>
 
         <div className="flex items-center gap-2">
-          <ThemeToggle />
           <motion.button
             onClick={() => setShowSettings(true)}
             whileHover={{ scale: 1.05 }}

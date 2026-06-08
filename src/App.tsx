@@ -656,47 +656,11 @@ export default function App() {
 
   const activeConversation = convStore.getState().activeConversation();
 
-  // Apply theme to document
+  // Dark mode permanent — l'interface est dark-only
   useEffect(() => {
-    const applyTheme = () => {
-      const theme = settings.theme;
-
-      appendDebugEvent({
-        level: "info",
-        source: "app",
-        title: "Theme Applied",
-        message: `Applying theme: ${theme}`,
-      });
-
-      if (theme === "dark") {
-        document.documentElement.classList.add("dark");
-        document.documentElement.classList.remove("light");
-      } else if (theme === "light") {
-        document.documentElement.classList.add("light");
-        document.documentElement.classList.remove("dark");
-      } else {
-        // auto mode
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        if (prefersDark) {
-          document.documentElement.classList.add("dark");
-          document.documentElement.classList.remove("light");
-        } else {
-          document.documentElement.classList.add("light");
-          document.documentElement.classList.remove("dark");
-        }
-      }
-    };
-
-    applyTheme();
-
-    // Listen for system preference changes when in auto mode
-    if (settings.theme === "auto") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handler = () => applyTheme();
-      mediaQuery.addEventListener("change", handler);
-      return () => mediaQuery.removeEventListener("change", handler);
-    }
-  }, [settings.theme]);
+    document.documentElement.classList.add("dark");
+    document.documentElement.classList.remove("light");
+  }, []);
 
   const createNewConversation = useCallback(async () => {
     const nextMessage = await buildAssistantMessage(
