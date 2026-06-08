@@ -121,7 +121,9 @@ def resolve_alias(alias_or_model: str) -> Dict[str, Any]:
 def _extract_provider(model_name: str) -> str:
     """'openrouter/anthropic/claude-...' -> 'openrouter'."""
     if "/" in model_name:
-        return model_name.split("/", 1)[0]
+        raw = model_name.split("/", 1)[0]
+        # Alias nvidia -> nvidia_nim (NVIDIA NIM endpoint)
+        return "nvidia_nim" if raw == "nvidia" else raw
     return ""
 
 
@@ -164,14 +166,16 @@ def _build_completion_kwargs(
     provider = _extract_provider(model)
     api_key = api_keys.get(provider)
 
-    # Tool calling : le provider 'nvidia_nim' de LiteLLM rejette le parametre
-    # 'tools'. L'API NVIDIA NIM etant OpenAI-compatible, on route alors via le
-    # provider 'openai/' (qui supporte le function calling) avec l'api_base NVIDIA.
-    if provider == "nvidia_nim" and tools:
+    # NVIDIA NIM : LiteLLM ne connait pas le provider 'nvidia_nim' natif.
+    # L'API NVIDIA NIM etant 100% OpenAI-compatible, on route TOUJOURS via
+    # le provider 'openai/' avec l'api_base NVIDIA. Cela marche aussi bien
+    # pour le chat simple que pour le tool calling.
+    if provider == "nvidia_nim":
         rest = model.split("/", 1)[1] if "/" in model else model
         kwargs["model"] = f"openai/{rest}"
         kwargs["api_base"] = "https://integrate.api.nvidia.com/v1"
-        kwargs["tool_choice"] = "auto"
+        if tools:
+            kwargs["tool_choice"] = "auto"
         if api_key:
             kwargs["api_key"] = api_key
         return kwargs
@@ -181,9 +185,6 @@ def _build_completion_kwargs(
     # Ollama : URL par defaut, surchargeable
     if provider == "ollama":
         kwargs["api_base"] = api_keys.get("ollama_base_url", "http://localhost:11434")
-    # NVIDIA NIM : URL OpenAI-compatible requise
-    if provider == "nvidia_nim":
-        kwargs["api_base"] = "https://integrate.api.nvidia.com/v1"
     if tools:
         kwargs["tool_choice"] = "auto"
     return kwargs
