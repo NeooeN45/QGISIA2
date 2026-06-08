@@ -226,6 +226,8 @@ interface RawQgisBridge {
     outputName: string,
     callback?: QgisCallback<string>,
   ) => string | void;
+  /** Capture la carte courante et retourne une data-URL base64 PNG */
+  captureMapSnapshot?: (callback?: QgisCallback<string>) => string | void;
   /** Status des dépendances NVIDIA (torch CUDA + earth2studio) */
   getNvidiaDepsStatus?: (callback?: QgisCallback<string>) => string | void;
   /** Installation des dépendances NVIDIA */
@@ -589,6 +591,15 @@ function getHttpBridge(): RawQgisBridge | undefined {
       }).then((result) => {
         if (callback) {
           callback(result ?? "");
+        }
+      });
+    },
+    captureMapSnapshot: (callback) => {
+      void readHttpBridgeResult<string>(
+        makeUrl("/api/qgis/captureMapSnapshot"),
+      ).then((result) => {
+        if (callback) {
+          callback(typeof result === "string" ? result : "");
         }
       });
     },
@@ -1688,6 +1699,35 @@ export async function installNvidiaDeps(force = false): Promise<{
       already_installed?: boolean;
     };
   } catch {
+    return null;
+  }
+}
+
+const CAPTURE_TIMEOUT_MS = 8000;
+
+export async function captureMapSnapshot(): Promise<string | null> {
+  const bridge = getBridge();
+  if (!bridge?.captureMapSnapshot) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), CAPTURE_TIMEOUT_MS);
+
+  try {
+    const result = await callQgisWithResult<string>(
+      (callback) => bridge.captureMapSnapshot?.(callback),
+      "",
+    );
+    clearTimeout(timeoutId);
+
+    if (typeof result !== "string" || result.length === 0) {
+      return null;
+    }
+
+    return result;
+  } catch {
+    clearTimeout(timeoutId);
     return null;
   }
 }

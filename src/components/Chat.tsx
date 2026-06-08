@@ -469,7 +469,7 @@ export default function Chat(props: ChatProps) {
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-gray-50 dark:bg-[#131314] text-gray-800 dark:text-white">
+    <div className="flex h-full w-full overflow-clip bg-gray-50 dark:bg-[#131314] text-gray-800 dark:text-white">
       <div className="bg-mesh" />
       <Suspense fallback={null}>
         <GeoParticlesBackground isDark={true} />

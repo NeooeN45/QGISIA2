@@ -1030,6 +1030,29 @@ class QgisBridge(BridgeQObject):
 
         return json.dumps(payload)
 
+    @BridgeSlot(result=str)
+    def captureMapSnapshot(self):
+        """
+        Capture la carte courante et retourne une data-URL base64 PNG.
+        Utilisé après chaque modification pour montrer le résultat dans le chat.
+        """
+        try:
+            import base64
+
+            temp_path = self._capture_map_snapshot()
+            if not temp_path or not os.path.exists(temp_path):
+                return ""
+
+            with open(temp_path, "rb") as f:
+                png_bytes = f.read()
+
+            os.unlink(temp_path)
+
+            b64 = base64.b64encode(png_bytes).decode("utf-8")
+            return f"data:image/png;base64,{b64}"
+        except Exception:
+            return ""
+
     @BridgeSlot(str, str, result=str)
     def reprojectLayer(self, layer_ref, target_crs_authid):
         layer = self._find_layer(layer_ref)
@@ -3944,6 +3967,10 @@ class ThreadedAssetServer:
                 return True
             elif route == "/api/qgis/clearLayerImportLogs":
                 result = self._bridge_call("clearLayerImportLogs")
+                self._send_json(handler, 200, {"ok": True, "result": result})
+                return True
+            elif route == "/api/qgis/captureMapSnapshot":
+                result = self._bridge_call("captureMapSnapshot")
                 self._send_json(handler, 200, {"ok": True, "result": result})
                 return True
             else:

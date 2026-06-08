@@ -17,6 +17,7 @@ import {
   createMessage,
 } from "./lib/chat-history";
 import {
+  captureMapSnapshot,
   getLayerDiagnostics,
   getLayerFields,
   getLayersList,
@@ -556,9 +557,18 @@ async function maybeAutoExecuteAssistantPythonScript(input: {
           : "Script PyQGIS exécuté automatiquement.",
       );
 
-      return [currentContent, "", buildAutoExecutionReport(attempts, "success")].join(
-        "\n\n",
-      );
+      // Capturer la carte après exécution réussie
+      const capture = await captureMapSnapshot();
+      const report = buildAutoExecutionReport(attempts, "success");
+
+      if (capture) {
+        // Ajouter la capture comme image markdown à la fin du message
+        return [currentContent, "", report, "", `![capture](${capture})`].join(
+          "\n\n",
+        );
+      }
+
+      return [currentContent, "", report].join("\n\n");
     }
 
     if (repairAttempt >= maxRepairs) {

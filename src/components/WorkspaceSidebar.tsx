@@ -1827,12 +1827,37 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   }
 
   return (
-    <aside
-      className={cn(
-        "flex h-full shrink-0 flex-col border-r border-gray-200 dark:border-white/[0.05] sidebar-bg backdrop-blur-2xl transition-[width] duration-300 shadow-[2px_0_32px_rgba(0,0,0,0.18)]",
-        isOpen ? "w-[396px]" : "w-[100px]",
-      )}
+    <motion.div
+      className="relative flex h-full shrink-0 flex-col border-r border-gray-200 dark:border-white/[0.05] sidebar-bg backdrop-blur-2xl shadow-[2px_0_32px_rgba(0,0,0,0.18)] overflow-visible"
+      animate={{ width: isOpen ? "22rem" : "4rem" }}
+      transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+      style={{ minWidth: 0 }}
     >
+      {/* Bouton toggle flottant en bordure droite */}
+      <motion.button
+        onClick={onToggleOpen}
+        className="absolute right-0 top-1/2 z-50 flex h-6 w-6 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-white/[0.08] bg-[#1a1a1b] shadow-lg shadow-black/40"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        aria-label={isOpen ? "Fermer la sidebar" : "Ouvrir la sidebar"}
+      >
+        <motion.svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          animate={{ rotate: isOpen ? 0 : 180 }}
+          transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+        >
+          <path
+            d="M6.5 2L3.5 5L6.5 8"
+            stroke="rgba(255,255,255,0.6)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </motion.svg>
+      </motion.button>
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.05] bg-gradient-to-r from-transparent via-transparent to-transparent px-4 py-4">
         {isOpen ? (
           <div>
@@ -1848,18 +1873,6 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             <Sparkles size={16} className="text-emerald-400" />
           </div>
         )}
-        {/* Sidebar toggle button désactivé */}
-        {/* <button
-          onClick={onToggleOpen}
-          className={cn(
-            "rounded-2xl border p-2.5 transition-all duration-300",
-            isOpen
-              ? "border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300/50 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-white hover:scale-105"
-              : "border-white/15 bg-gradient-to-br from-white/[0.08] to-white/[0.02] text-gray-700 dark:text-gray-300/70 hover:from-white/[0.12] hover:to-white/[0.04] hover:text-white hover:shadow-lg hover:shadow-white/10"
-          )}
-        >
-          {isOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
-        </button> */}
       </div>
 
       <div className={cn("flex gap-1.5 px-3 py-2.5", !isOpen && "flex-col px-2 gap-2")}>
@@ -1886,13 +1899,37 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             title={label}
           >
             <Icon size={isOpen ? 14 : 20} />
-            {isOpen && <span>{label}</span>}
-            {isOpen && badge !== null && badge > 0 && (
-              <span className={cn(
-                "ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-                activeTab === id ? "bg-white/20" : "bg-gray-200 dark:bg-white/10 text-gray-500 dark:text-white/40"
-              )}>{badge}</span>
-            )}
+            <AnimatePresence initial={false}>
+              {isOpen && (
+                <motion.span
+                  key="label"
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                  className="overflow-hidden whitespace-nowrap"
+                >
+                  {label}
+                </motion.span>
+              )}
+            </AnimatePresence>
+            <AnimatePresence initial={false}>
+              {isOpen && badge !== null && badge > 0 && (
+                <motion.span
+                  key="badge"
+                  initial={{ opacity: 0, scale: 0.7 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.7 }}
+                  transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                  className={cn(
+                    "ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                    activeTab === id ? "bg-white/20" : "bg-gray-200 dark:bg-white/10 text-gray-500 dark:text-white/40"
+                  )}
+                >
+                  {badge}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </button>
         ))}
       </div>
@@ -2002,6 +2039,6 @@ export default function WorkspaceSidebar(props: WorkspaceSidebarProps) {
                 : renderToolsTab()}
         </div>
       )}
-    </aside>
+    </motion.div>
   );
 }
