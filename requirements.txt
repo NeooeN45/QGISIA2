@@ -1,0 +1,13 @@
+# Dépendances runtime du gateway LLM (installées dans QGISIA2/vendor/ par
+# llm_installer.py). Versions ÉPINGLÉES pour reproductibilité et sécurité
+# supply-chain. Doit rester aligné avec QGISIA2/llm_installer.REQUIRED_PACKAGES.
+#
+# Recommandé en production : régénérer un lock avec hashes via
+#   pip-compile --generate-hashes requirements.txt -o requirements.lock
+# puis installer avec `pip install --require-hashes -r requirements.lock`.
+
+litellm==1.52.0
+pyyaml==6.0.2
+httpx==0.27.2
+tiktoken==0.8.0
+certifi==2024.8.30

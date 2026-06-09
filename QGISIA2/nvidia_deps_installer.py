@@ -128,7 +128,9 @@ def _pip_install_nvidia_deps(progress_cb: Optional[Callable[[str], None]] = None
     _log("init", f"PyTorch index: {torch_index}")
     
     # Packages à installer
-    # Note: torch torchvision torchaudio avec index CUDA
+    # Note: torch torchvision torchaudio avec index CUDA.
+    # Sécurité supply-chain : épingler ces versions (ex: torch==2.4.1) une fois
+    # la matrice CUDA/driver figée, puis envisager --require-hashes.
     nvidia_packages = [
         "torch",
         "torchvision", 

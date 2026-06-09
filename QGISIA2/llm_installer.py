@@ -37,11 +37,13 @@ MARKER_FILE = VENDOR_DIR / ".installed"
 
 # Dependances minimales. Versions epinglees pour reproductibilite commerciale.
 REQUIRED_PACKAGES = [
+    # Versions épinglées (reproductibilité + supply chain). Aligné sur
+    # requirements.txt à la racine du dépôt.
     "litellm==1.52.0",
-    "pyyaml>=6.0",
-    "httpx>=0.27",
-    "tiktoken>=0.7",
-    "certifi>=2024.0",  # Certificats SSL pour HTTPS
+    "pyyaml==6.0.2",
+    "httpx==0.27.2",
+    "tiktoken==0.8.0",
+    "certifi==2024.8.30",  # Certificats SSL pour HTTPS
 ]
 
 # Version minimale de pip requise
