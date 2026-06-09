@@ -23,34 +23,17 @@ try:
 except Exception:  # pragma: no cover - fallback standalone / import partiel
     SecurityMiddleware = None  # type: ignore[assignment]
 
-# Validation de sécurité des scripts PyQGIS (module pur, testable sans QGIS).
+# Modules purs (sans Qt) extraits du monolithe — testables en CI sans QGIS.
 try:
     from . import script_validation
+    from . import bridge_http
 except ImportError:  # pragma: no cover - fallback import absolu (standalone)
     import script_validation  # type: ignore[no-redef]
+    import bridge_http  # type: ignore[no-redef]
 
-# Taille max d'un body de requête bridge. 32 Mo autorise les images base64
-# (vision) tout en bloquant les payloads de saturation mémoire (DoS).
-MAX_REQUEST_BYTES = 32 * 1024 * 1024
-
-# Le bridge n'écoute que sur 127.0.0.1 : seules les origines locales sont
-# autorisées (défense anti DNS-rebinding / CSRF local). Remplace `*`.
-_ALLOWED_ORIGIN_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$", re.I)
-
-
-def _send_cors_headers(handler):
-    """Écrit des en-têtes CORS restreints aux origines locales.
-
-    L'UI servie depuis http://127.0.0.1:<port> (same-origin) reste autorisée ;
-    toute origine distante est refusée. Remplace l'ancien
-    `Access-Control-Allow-Origin: *` qui exposait les endpoints sensibles.
-    """
-    origin = handler.headers.get("Origin", "")
-    if origin and _ALLOWED_ORIGIN_RE.match(origin):
-        handler.send_header("Access-Control-Allow-Origin", origin)
-        handler.send_header("Vary", "Origin")
-    handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    handler.send_header("Access-Control-Allow-Headers", "Content-Type")
+# Réexports pour compatibilité interne (anciens noms locaux).
+MAX_REQUEST_BYTES = bridge_http.MAX_REQUEST_BYTES
+_send_cors_headers = bridge_http.send_cors_headers
 
 # Correction des problèmes de versions multiples QGIS
 try:
@@ -3574,32 +3557,13 @@ class ThreadedAssetServer:
         handler.wfile.write(body)
 
     def _read_json_body(self, handler):
-        try:
-            length = int(handler.headers.get("Content-Length", "0"))
-        except (TypeError, ValueError):
-            return {}
-        if length <= 0:
-            return {}
-        # Borne anti-DoS : refuse les payloads démesurés sans les charger en RAM.
-        if length > MAX_REQUEST_BYTES:
+        def _log(msg):
             try:
-                QgsMessageLog.logMessage(
-                    f"Requête bridge rejetée: body {length} octets > max {MAX_REQUEST_BYTES}",
-                    "QGISAI+",
-                    level=Qgis.Warning,
-                )
+                QgsMessageLog.logMessage(msg, "QGISAI+", level=Qgis.Warning)
             except Exception:
                 pass
-            return {}
 
-        raw_body = handler.rfile.read(length)
-        if not raw_body:
-            return {}
-
-        try:
-            return json.loads(raw_body.decode("utf-8"))
-        except json.JSONDecodeError:
-            return {}
+        return bridge_http.read_json_body(handler, bridge_http.MAX_REQUEST_BYTES, _log)
 
     def _bridge_call(self, method_name, *args):
         method = getattr(self.bridge, method_name)
