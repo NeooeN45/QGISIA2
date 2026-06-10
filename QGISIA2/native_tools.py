@@ -222,6 +222,63 @@ def _generate_layer_style(args: dict, get_json: Callable) -> dict:
     return {"qml": qml, "categories": len(legend), "field": field}
 
 
+def _search_symbology(args: dict, get_json: Callable) -> dict:
+    """Recherche dans la bibliotheque de symbologies institutionnelles (Kimi)."""
+    try:
+        import symbology_library as sl  # type: ignore
+    except ImportError:
+        from . import symbology_library as sl  # type: ignore
+    query = (args.get("query") or "").strip()
+    if query:
+        return {"query": query, "results": sl.search_presets(query)}
+    return {
+        "by_institution": sl.list_by_institution(),
+        "categories": sl.list_categories(),
+    }
+
+
+def _list_palettes(args: dict, get_json: Callable) -> dict:
+    """Liste les palettes de couleurs + verifie l'accessibilite d'un couple (Kimi)."""
+    try:
+        import palettes as p  # type: ignore
+    except ImportError:
+        from . import palettes as p  # type: ignore
+    palette_id = args.get("palette_id")
+    if palette_id:
+        return {"palette_id": palette_id, "colors": p.get_palette(palette_id)}
+    pair = args.get("contrast_pair")
+    if isinstance(pair, (list, tuple)) and len(pair) == 2:
+        ratio = p.contrast_ratio(pair[0], pair[1])
+        return {"pair": list(pair), "ratio": round(ratio, 2),
+                "accessible": p.is_accessible(pair[0], pair[1])}
+    return {"palettes": p.list_palettes()}
+
+
+def _normalize_legend(args: dict, get_json: Callable) -> dict:
+    """Normalise une legende heterogene (couleurs en hex #rrggbb) avant un style (Kimi)."""
+    try:
+        import legend_normalizer as ln  # type: ignore
+    except ImportError:
+        from . import legend_normalizer as ln  # type: ignore
+    raw = args.get("legend") or []
+    return {"legend": ln.normalize_legend(raw), "count": len(raw)}
+
+
+def _validate_pipeline(args: dict, get_json: Callable) -> dict:
+    """Valide un pipeline geospatial (cycles, IO, ordre, cout estime) (Kimi)."""
+    try:
+        import pipeline_engine as pe  # type: ignore
+    except ImportError:
+        from . import pipeline_engine as pe  # type: ignore
+    pipeline = args.get("pipeline") or {}
+    errors = pe.validate_pipeline(pipeline)
+    out = {"valid": not errors, "errors": errors}
+    if not errors:
+        out["order"] = pe.topological_order(pipeline)
+        out["cost"] = pe.estimate_cost(pipeline)
+    return out
+
+
 def _wikipedia(args: dict, get_json: Callable) -> dict:
     title = args.get("query") or args.get("title") or ""
     data = get_json(WIKIPEDIA_SUMMARY + urllib.parse.quote(title), {})
@@ -451,6 +508,62 @@ NATIVE_TOOLS: List[NativeTool] = [
             "required": ["legend"],
         },
         executor=_generate_layer_style,
+    ),
+    NativeTool(
+        name="search_symbology",
+        description=(
+            "Rechercher dans la bibliotheque etendue de symbologies institutionnelles "
+            "(>40 presets ONF, IGN, PLU, Cadastre...). Sans 'query' renvoie le catalogue "
+            "groupe par institution + categories. A enchainer avec applySymbologyPreset."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "mot-cle, ex: 'foret', 'risque', 'plu'"}},
+        },
+        executor=_search_symbology,
+    ),
+    NativeTool(
+        name="list_palettes",
+        description=(
+            "Lister les palettes de couleurs cartographiques. Avec 'palette_id' renvoie "
+            "les couleurs hex. Avec 'contrast_pair' [hex1,hex2] verifie le ratio de "
+            "contraste WCAG (accessibilite des cartes)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "palette_id": {"type": "string"},
+                "contrast_pair": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+        executor=_list_palettes,
+    ),
+    NativeTool(
+        name="normalize_legend",
+        description=(
+            "Normaliser une legende heterogene (noms de couleurs, rgb(), #abc) en hex "
+            "#rrggbb propres. A utiliser AVANT generate_layer_style pour fiabiliser le style."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"legend": {"type": "array", "items": {"type": "object"}}},
+            "required": ["legend"],
+        },
+        executor=_normalize_legend,
+    ),
+    NativeTool(
+        name="validate_pipeline",
+        description=(
+            "Valider un pipeline geospatial (detecte cycles, entrees/sorties manquantes), "
+            "calculer l'ordre topologique d'execution et estimer le cout. pipeline = "
+            "{steps: [{id, op, inputs, outputs}, ...]}."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"pipeline": {"type": "object"}},
+            "required": ["pipeline"],
+        },
+        executor=_validate_pipeline,
     ),
     NativeTool(
         name="wikipedia",
