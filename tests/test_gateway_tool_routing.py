@@ -34,9 +34,9 @@ def test_nvidia_with_tools_routes_via_openai_provider():
     assert kw["tools"] == TOOLS
 
 
-def test_nvidia_without_tools_keeps_native_provider():
+def test_nvidia_without_tools_routes_via_openai_provider():
     kw = _build("nvidia_nim/meta/llama-3.3-70b-instruct", None)
-    assert kw["model"] == "nvidia_nim/meta/llama-3.3-70b-instruct"
+    assert kw["model"] == "openai/meta/llama-3.3-70b-instruct"
     assert kw["api_base"] == "https://integrate.api.nvidia.com/v1"
     assert "tool_choice" not in kw
 

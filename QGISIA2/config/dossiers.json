@@ -41,6 +41,26 @@
         {"action": "applySymbologyPreset", "presetId": "clc-occupation-sol", "field": "clc"},
         {"action": "applySymbologyPreset", "presetId": "natura2000", "field": "type_zonage"}
       ]
+    },
+    {
+      "id": "agricole",
+      "name": "Dossier agricole (parcelles + cultures)",
+      "description": "Fond plan IGN + RPG parcelles agricoles + symbologie cultures.",
+      "steps": [
+        {"action": "addDataSource", "sourceId": "ign-plan"},
+        {"action": "addDataSource", "sourceId": "ign-rpg-wfs"},
+        {"action": "applySymbologyPreset", "presetId": "rpg-cultures", "field": "culture"}
+      ]
+    },
+    {
+      "id": "littoral",
+      "name": "Dossier littoral (ortho + bathymétrie)",
+      "description": "Orthophoto IGN + occupation du sol + bathymétrie GEBCO.",
+      "steps": [
+        {"action": "addDataSource", "sourceId": "ign-ortho"},
+        {"action": "addDataSource", "sourceId": "gebco-bathymetry"},
+        {"action": "applySymbologyPreset", "presetId": "bathymetrie-profondeur", "field": "profondeur"}
+      ]
     }
   ]
 }

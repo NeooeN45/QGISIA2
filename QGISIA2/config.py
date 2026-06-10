@@ -6,7 +6,7 @@ Configuration du plugin QGISIA+ pour QGIS
 # Configuration de l'interface
 PLUGIN_CONFIG = {
     "name": "QGISIA+",
-    "version": "2.0.0",
+    "version": "3.4",
     "description": "Assistant IA pour QGIS - BYOK multi-provider",
     "author": "QGISIA+",
     

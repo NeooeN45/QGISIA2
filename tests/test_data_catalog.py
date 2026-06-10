@@ -13,7 +13,7 @@ REQUIRED = {"id", "name", "category", "provider", "service_type", "url"}
 
 def test_load_sources_non_empty():
     sources = dc.load_sources()
-    assert len(sources) >= 15
+    assert len(sources) >= 70
 
 
 def test_every_source_has_valid_schema():
