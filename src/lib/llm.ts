@@ -22,7 +22,10 @@ import {
   streamToText as gatewayStreamToText,
   smartProcess as gatewaySmartProcess,
   runAgent as gatewayRunAgent,
+  runAgentStream,
+  smartProcessStream,
   type ChatMessage,
+  type AgentStreamEvent,
 } from "./litellm-client";
 
 interface GenerateAssistantReplyInput {
@@ -720,21 +723,25 @@ async function generateViaFederation(
   const streamingStore = useStreamingStore.getState();
   const gateway = useGatewayStore.getState().config;
 
-  try {
-    thinkingStore.setPhase("ANALYZING_INTENT", {
-      message: "Fédération multi-agents : routage de votre demande...",
-      subMessage: "Sélection du meilleur agent NVIDIA selon la tâche",
-    });
-    streamingStore.startStreaming(createMessageId());
+  const smartReq = {
+    query: input.latestUserMessage,
+    context: input.layerContext ? { contexte_sig: input.layerContext } : undefined,
+    api_keys: gateway.apiKeys,
+  };
 
-    const result = await gatewaySmartProcess({
-      // Message clair pour le routage ; contexte couches passe a part pour l'execution.
-      query: input.latestUserMessage,
-      context: input.layerContext ? { contexte_sig: input.layerContext } : undefined,
-      api_keys: gateway.apiKeys,
-      signal: input.signal,
-    });
+  thinkingStore.setPhase("ANALYZING_INTENT", {
+    message: "Fédération multi-agents : routage de votre demande...",
+    subMessage: "Sélection du meilleur agent NVIDIA selon la tâche",
+  });
+  streamingStore.startStreaming(createMessageId());
 
+  const handleSmartEvent = (ev: AgentStreamEvent) => {
+    if (ev.type === "progress") {
+      thinkingStore.updateSubMessage(ev.message);
+    }
+  };
+
+  const buildFull = (result: { routing?: string | null; agent_results?: Array<{ model_used?: string; content?: string }>; error?: string; synthesis?: string | null }): string => {
     const agent = result.agent_results?.[0];
     const header = result.routing
       ? `🧭 Agent : **${result.routing}**`
@@ -746,22 +753,38 @@ async function generateViaFederation(
     const synthesis = result.synthesis
       ? `\n\n---\n**Synthèse :** ${result.synthesis}`
       : "";
-    const full = header + content + synthesis;
+    return header + content + synthesis;
+  };
 
-    const chunkSize = 12;
-    for (let i = 0; i < full.length; i += chunkSize) {
-      streamingStore.addChunk(full.slice(i, i + chunkSize));
-      await new Promise((r) => setTimeout(r, 2));
-    }
+  try {
+    // Tentative streaming SSE réel
+    const { result } = await smartProcessStream(smartReq, handleSmartEvent, input.signal);
+    const full = buildFull(result);
+    streamingStore.addChunk(full);
     setTimeout(() => {
       thinkingStore.reset();
       streamingStore.completeStreaming();
     }, 300);
     return full;
-  } catch (error) {
-    thinkingStore.reset();
-    streamingStore.completeStreaming();
-    throw error;
+  } catch (_streamErr) {
+    // Fallback : appel bloquant si le backend ne supporte pas encore le streaming
+    try {
+      const result = await gatewaySmartProcess({
+        ...smartReq,
+        signal: input.signal,
+      });
+      const full = buildFull(result);
+      streamingStore.addChunk(full);
+      setTimeout(() => {
+        thinkingStore.reset();
+        streamingStore.completeStreaming();
+      }, 300);
+      return full;
+    } catch (error) {
+      thinkingStore.reset();
+      streamingStore.completeStreaming();
+      throw error;
+    }
   }
 }
 
@@ -777,43 +800,85 @@ async function generateViaAgent(
   const streamingStore = useStreamingStore.getState();
   const gateway = useGatewayStore.getState().config;
 
-  try {
-    thinkingStore.setPhase("EXECUTING_TOOLS", {
-      message: "Agent SIG : exécution d'outils QGIS...",
-      subMessage: "Le modèle appelle les actions nécessaires",
-      modelName: gateway.defaultAlias,
-    });
-    streamingStore.startStreaming(createMessageId());
+  const agentReq = {
+    query: input.prompt,
+    model: gateway.defaultAlias,
+    max_iters: 40,
+    auto_mode: gateway.autoMode,
+    api_keys: gateway.apiKeys,
+  };
 
-    const result = await gatewayRunAgent({
-      // Prompt complet : message utilisateur + contexte couches + documents joints.
-      query: input.prompt,
-      model: gateway.defaultAlias,
-      max_iters: 40,
-      auto_mode: gateway.autoMode,
-      api_keys: gateway.apiKeys,
-      signal: input.signal,
-    });
+  thinkingStore.setPhase("EXECUTING_TOOLS", {
+    message: "Agent SIG : exécution d'outils QGIS...",
+    subMessage: "Le modèle appelle les actions nécessaires",
+    modelName: gateway.defaultAlias,
+  });
+  streamingStore.startStreaming(createMessageId());
 
-    const toolsLine = result.trace.length
-      ? `🔧 Outils exécutés : ${result.trace.map((t) => t.tool).join(", ")}\n\n`
-      : "";
-    const full = toolsLine + (result.content || "Aucune réponse produite.");
-
-    const chunkSize = 12;
-    for (let i = 0; i < full.length; i += chunkSize) {
-      streamingStore.addChunk(full.slice(i, i + chunkSize));
-      await new Promise((r) => setTimeout(r, 2));
+  /**
+   * Traduit les événements SSE de la boucle agent en mises à jour du store
+   * de raisonnement (ThinkingStore). Libellés en français.
+   */
+  const handleAgentEvent = (ev: AgentStreamEvent) => {
+    switch (ev.type) {
+      case "iteration":
+        thinkingStore.updateSubMessage(`Itération ${ev.i} en cours…`);
+        break;
+      case "tool_start":
+        thinkingStore.setPhase("EXECUTING_TOOLS", {
+          message: `🔧 ${ev.tool} en cours…`,
+          subMessage: "Exécution de l'outil QGIS",
+        });
+        break;
+      case "tool_result":
+        thinkingStore.updateSubMessage(
+          ev.blocked
+            ? `⛔ ${ev.tool} bloqué par la sécurité`
+            : `✓ ${ev.tool} terminé`,
+        );
+        break;
+      default:
+        break;
     }
+  };
+
+  try {
+    // Tentative streaming SSE réel
+    const final = await runAgentStream(agentReq, handleAgentEvent, input.signal);
+    const toolsLine = final.trace_len
+      ? `🔧 ${final.trace_len} outil(s) exécuté(s)\n\n`
+      : "";
+    const full = toolsLine + (final.content || "Aucune réponse produite.");
+
+    // Streaming du contenu final dans le store (pas de chunks fictifs)
+    streamingStore.addChunk(full);
     setTimeout(() => {
       thinkingStore.reset();
       streamingStore.completeStreaming();
     }, 300);
     return full;
-  } catch (error) {
-    thinkingStore.reset();
-    streamingStore.completeStreaming();
-    throw error;
+  } catch (_streamErr) {
+    // Fallback : appel bloquant si le backend ne supporte pas encore le streaming
+    try {
+      const result = await gatewayRunAgent({
+        ...agentReq,
+        signal: input.signal,
+      });
+      const toolsLine = result.trace.length
+        ? `🔧 Outils exécutés : ${result.trace.map((t) => t.tool).join(", ")}\n\n`
+        : "";
+      const full = toolsLine + (result.content || "Aucune réponse produite.");
+      streamingStore.addChunk(full);
+      setTimeout(() => {
+        thinkingStore.reset();
+        streamingStore.completeStreaming();
+      }, 300);
+      return full;
+    } catch (error) {
+      thinkingStore.reset();
+      streamingStore.completeStreaming();
+      throw error;
+    }
   }
 }
 

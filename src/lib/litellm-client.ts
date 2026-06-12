@@ -79,7 +79,7 @@ export interface ChatResponse {
 export interface ChatChunk {
   id?: string;
   choices: Array<{
-    delta: { content?: string; role?: ChatRole; tool_calls?: unknown };
+    delta: { content?: string; reasoning_content?: string; role?: ChatRole; tool_calls?: unknown };
     index: number;
     finish_reason?: string | null;
   }>;
@@ -394,7 +394,7 @@ export async function* streamChat(req: ChatRequest): AsyncGenerator<ChatChunk, v
         while (true) {
           // Vérifier le timeout entre chunks
           if (Date.now() - lastChunkTime > STREAM_CONFIG.CHUNK_TIMEOUT_MS) {
-            throw new Error("Chunk timeout - no data received for 60s");
+            throw new Error(`Chunk timeout - no data received for ${STREAM_CONFIG.CHUNK_TIMEOUT_MS / 1000}s`);
           }
 
           // Vérifier si l'utilisateur a demandé l'annulation
@@ -508,7 +508,11 @@ function parseSSELine(line: string): ChatChunk | null {
  */
 export interface StreamResult {
   text: string;
+  /** Contenu de raisonnement (reasoning_content) accumulé, si présent. */
+  reasoning?: string;
   done: boolean;
+  /** true quand done=false et qu'un texte partiel a pu être récupéré. */
+  partial?: boolean;
   error?: string;
   retryCount: number;
   durationMs: number;
@@ -517,57 +521,61 @@ export interface StreamResult {
 /**
  * Helper robuste : concatène un stream en string complète.
  * Gère les erreurs avec callback onError pour affichage UI.
+ * onDelta accepte un 3e argument optionnel : reasoning accumulé.
  */
 export async function streamToText(
   req: ChatRequest,
-  onDelta?: (delta: string, full: string) => void,
+  onDelta?: (delta: string, full: string, reasoning?: string) => void,
   onError?: (error: string, partialText: string) => void,
 ): Promise<string> {
   let full = "";
-  let retryCount = 0;
-  const startTime = Date.now();
+  let reasoning = "";
 
   try {
     for await (const chunk of streamChat(req)) {
       const delta = chunk.choices?.[0]?.delta?.content ?? "";
+      const reasoningDelta = chunk.choices?.[0]?.delta?.reasoning_content ?? "";
+      if (reasoningDelta) reasoning += reasoningDelta;
       if (delta) {
         full += delta;
-        onDelta?.(delta, full);
+        onDelta?.(delta, full, reasoning || undefined);
       }
     }
     return full;
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    
+
     // Notifier l'erreur via callback
     onError?.(error, full);
-    
+
     // Log pour debug
     console.error("[streamToText] Streaming error:", error);
-    
+
     // Relancer pour que l'appelant puisse gérer
     throw err;
   }
 }
 
 /**
- * Streaming avec résilience maximale : retry automatique, 
+ * Streaming avec résilience maximale : retry automatique,
  * détection de déconnexion, et récupération du texte partiel.
+ * onDelta accepte un 3e argument optionnel : reasoning accumulé.
  */
 export async function streamToTextResilient(
   req: ChatRequest,
-  onDelta?: (delta: string, full: string) => void,
+  onDelta?: (delta: string, full: string, reasoning?: string) => void,
   onRetry?: (attempt: number, error: string) => void,
 ): Promise<StreamResult> {
   let full = "";
+  let reasoning = "";
   let retryCount = 0;
   const startTime = Date.now();
-  
+
   const makeRequest = async (attempt: number): Promise<string> => {
     try {
       // Créer un nouveau request avec le contexte accumulé
       const messages = [...req.messages];
-      
+
       // Si on a déjà du texte, ajouter un message système pour continuer
       if (full && attempt > 0) {
         messages.push({
@@ -575,27 +583,28 @@ export async function streamToTextResilient(
           content: full,
         });
       }
-      
+
       const result = await streamToText(
         { ...req, messages },
-        (delta, current) => {
+        (delta, current, r) => {
           full = current;
-          onDelta?.(delta, current);
+          if (r) reasoning = r;
+          onDelta?.(delta, current, r);
         },
-        undefined // Pas d'onError ici, on gère nous-mêmes
+        undefined, // Pas d'onError ici, on gère nous-mêmes
       );
-      
+
       return result;
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      
+
       if (attempt < STREAM_CONFIG.MAX_RETRIES) {
         retryCount++;
         onRetry?.(attempt + 1, error);
         await sleepWithBackoff(attempt);
         return makeRequest(attempt + 1);
       }
-      
+
       throw err;
     }
   };
@@ -604,6 +613,7 @@ export async function streamToTextResilient(
     const finalText = await makeRequest(0);
     return {
       text: finalText,
+      reasoning: reasoning || undefined,
       done: true,
       retryCount,
       durationMs: Date.now() - startTime,
@@ -612,10 +622,182 @@ export async function streamToTextResilient(
     const error = err instanceof Error ? err.message : String(err);
     return {
       text: full, // Retourner ce qu'on a pu récupérer
+      reasoning: reasoning || undefined,
       done: false,
+      partial: full.length > 0, // texte partiel disponible
       error,
       retryCount,
       durationMs: Date.now() - startTime,
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Types et fonctions pour le streaming SSE agent/smart (spec streaming-v2)
+// ---------------------------------------------------------------------------
+
+/** Événement SSE émis par /api/llm/agent ou /api/llm/smart en mode stream. */
+export type AgentStreamEvent =
+  | { type: "iteration"; i: number }
+  | { type: "tool_start"; tool: string; arguments: Record<string, unknown> }
+  | { type: "tool_result"; tool: string; result: string; blocked: boolean }
+  | { type: "progress"; message: string }
+  | { type: "error"; error: string };
+
+/** Résultat final d'une boucle agent streamée. */
+export interface AgentFinal {
+  content: string;
+  iterations: number;
+  trace_len: number;
+}
+
+/** Résultat final d'un appel smart streamé. */
+export interface SmartFinal {
+  result: SmartResult;
+}
+
+/**
+ * Parse une ligne SSE générique (agent ou smart) et retourne l'objet décodé
+ * ou null si ligne vide / [DONE] / JSON invalide.
+ */
+function parseAgentSSELine(line: string): Record<string, unknown> | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("data:")) return null;
+  const payload = trimmed.slice(5).trim();
+  if (!payload || payload === "[DONE]") return null;
+  try {
+    return JSON.parse(payload) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lance la boucle agentique en mode streaming SSE.
+ * Chaque événement intermédiaire (iteration, tool_start, tool_result) est
+ * passé à onEvent. Résout avec AgentFinal à réception de l'événement "final".
+ */
+export async function runAgentStream(
+  req: AgentRequest,
+  onEvent: (ev: AgentStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<AgentFinal> {
+  const { signal: _ignored, ...body } = req;
+  const combinedSignal = signal;
+
+  const response = await fetch(`${getBaseUrl()}/api/llm/agent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      "Cache-Control": "no-cache",
+    },
+    body: JSON.stringify({ ...body, stream: true }),
+    signal: combinedSignal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`HTTP ${response.status}: ${text}`);
+  }
+  if (!response.body) throw new Error("Response body is null");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const ev = parseAgentSSELine(line);
+        if (!ev) continue;
+
+        if (ev.type === "final") {
+          return {
+            content: (ev.content as string) ?? "",
+            iterations: (ev.iterations as number) ?? 0,
+            trace_len: (ev.trace_len as number) ?? 0,
+          };
+        }
+        if (ev.type === "error") {
+          throw new Error((ev.error as string) ?? "Agent error");
+        }
+        // Événements intermédiaires : on les passe au callback
+        onEvent(ev as unknown as AgentStreamEvent);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  throw new Error("Stream agent terminé sans événement 'final'");
+}
+
+/**
+ * Lance la fédération multi-agents en mode streaming SSE.
+ * Les événements "progress" sont passés à onEvent.
+ * Résout avec SmartFinal à réception de "final".
+ */
+export async function smartProcessStream(
+  req: SmartRequest,
+  onEvent: (ev: AgentStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<SmartFinal> {
+  const { signal: _ignored, ...body } = req;
+
+  const response = await fetch(`${getBaseUrl()}/api/llm/smart`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      "Cache-Control": "no-cache",
+    },
+    body: JSON.stringify({ ...body, stream: true }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`HTTP ${response.status}: ${text}`);
+  }
+  if (!response.body) throw new Error("Response body is null");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const ev = parseAgentSSELine(line);
+        if (!ev) continue;
+
+        if (ev.type === "final") {
+          return { result: ev.result as SmartResult };
+        }
+        if (ev.type === "error") {
+          throw new Error((ev.error as string) ?? "Smart error");
+        }
+        onEvent(ev as unknown as AgentStreamEvent);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  throw new Error("Stream smart terminé sans événement 'final'");
 }

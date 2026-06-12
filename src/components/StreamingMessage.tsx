@@ -265,13 +265,11 @@ export default function StreamingMessage({ className }: StreamingMessageProps) {
             >
               {/*
                * ReasoningPhasesView gère la mise en forme (phases, blocs code…).
-               * Le micro-fade est obtenu via une clé CSS opacity appliquée sur
-               * le texte entier lors de chaque nouveau chunk : on monte une
-               * animation flash sur le conteneur père uniquement quand un delta
-               * arrive, sans perturber la structure de ReasoningPhasesView.
+               * La clé KEY a été supprimée : elle forçait un re-mount complet du
+               * motion.div à chaque delta (coûteux). Le composant se met à jour
+               * via ses props sans jamais être démonté.
                */}
               <motion.div
-                key={_chunks.length}            // change à chaque nouveau chunk
                 initial={{ opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.12, ease: 'easeOut' }}
