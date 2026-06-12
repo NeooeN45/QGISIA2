@@ -182,6 +182,71 @@ entretien) vs complet (10 ans, + coupe)?" — user choisit → agent construit l
 ```
 
 ---
+
+## PROMPT 10 — Plugin UX/UI : améliorations interface + MCP integration (NOUVELLES IMPLÉMENTATIONS)
+
+```
+CONTEXTE PROJET (complété) :
+- Plugin QGIS geoai_assistant.py expose ThreadedAssetServer sur port dynamique
+- Frontend React + Vite exposé depuis /api/* (bridge HTTP)
+- Endpoint /api/qgis/serverInfo nouvellement créé (port, URL, timestamp, statut)
+- Composant React ServerStatusIndicator créé (affiche port + état connexion)
+- Timeout configurable : QGIS_BRIDGE_TIMEOUT env var (défaut 120s)
+- Auto-show dock au startup : QGIS_PLUGIN_SHOW_DOCK_ON_STARTUP env var (défaut on)
+
+TÂCHE (frontend React TS + minor Python tweaks) :
+Implémenter les améliorations UX/UI identifiées dans le rapport d'analyse (QGISIA/doc/ui_analysis.md).
+
+## PART 1 : Reconnexion automatique (HTTP wrapper)
+
+Créer src/lib/api-client.ts : wrapper fetch() avec retry exponential
+- Fonction fetchWithRetry(url, options) : retry 3 fois avec backoff (100ms, 500ms, 2s)
+- Toast notifications "Reconnecting..." → "Connected" ou "Failed"
+- Timeout par requête : 60s (configurable)
+- Usage : remplacer fetch() directs par fetchWithRetry() dans useLLMGateway, Chat, etc.
+
+## PART 2 : RAG failure notification
+
+Modifier src/hooks/useLLMGateway.ts :
+- Ajouter endpoint GET /api/rag/status → {available: bool, error: string}
+- Hook poll au mount : check RAG status une fois au démarrage
+- Si RAG unavailable → toast warning "RAG indexing failed: {error}. Search disabled."
+- Store la disponibilité dans RAG state (useDocumentStore)
+
+## PART 3 : Rate-limit feedback (HTTP 429)
+
+Dans api-client.ts (fetchWithRetry) :
+- Si HTTP 429 : afficher toast "Rate limit reached. Retry in {seconds}s"
+- Extraire Retry-After header
+- Bloquer les requêtes suivantes pendant la durée du retry
+- Afficher "Rate: 45/1200 req/min" dans toast
+
+## PART 4 : Health dashboard (optional panel dans dock)
+
+Créer src/components/HealthDashboard.tsx (optionnel, activé par ?debug=1 url param)
+- Panneaux : Bridge Status, RAG Status, MCP Connected, LLM Gateway Ready
+- Chaque panneau : statut (vert/orange/rouge), détails, bouton Retry/Reset
+- Polling : 10s
+- Intégrer dans Chat footer (repliable/expandable)
+
+## PART 5 : Timeout configurable UI (settings)
+
+Ajouter dans src/components/SettingsPanel.tsx :
+- Dropdown "Request Timeout" : 30s, 60s, 120s, 180s, custom
+- Sauvegarde localStorage : qgisia_request_timeout
+- Lire dans useServerHealth et fetchWithRetry
+- Tooltip : "Augmenter si vos analyses raster dépassent 60s"
+
+## TESTS :
+- Unit tests fetchWithRetry : HTTP 429, timeout, 3 retries OK
+- Integration test : Chat avec RAG unavailable → warning toast OK
+- E2E test (vitest) : sendMessage → 429 → retry → success OK
+
+LIVRAISON : branche kimi/plugin-ux-improvements-v1
+Gate : npm run test + npm run build vert, pas de ts errors
+```
+
+---
 10. `psg_blueprint.py` : structure d'un PSG conforme CNPF (parcellaire, peuplements, programme coupes/travaux) + gabarit de rapport dédié.
 11. `burned_area.py` : vectorisation du contour de zone brûlée depuis un raster dNBR classé (raster→polygones, lissage, surface par classe de sévérité).
 12. `forest_classes.py` : nomenclature IGN BD Forêt v2 + schémas de classification de massifs (résineux/feuillus/mixte) + symbologie associée.

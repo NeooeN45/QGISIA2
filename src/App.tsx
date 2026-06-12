@@ -6,6 +6,7 @@ import { Toaster, toast } from "sonner";
 
 import Chat from "./components/Chat";
 import AgentStatusBar from "./components/AgentStatusBar";
+import ServerStatusIndicator from "./components/ServerStatusIndicator";
 import TaskStatusPanel from "./components/TaskStatusPanel";
 import { InstallationWizard } from "./components/InstallationWizard";
 import OllamaSetupWizard from "./components/OllamaSetupWizard";
@@ -1221,7 +1222,10 @@ Détail : ${message}`;
                 selectedLayerIds={activeConversation?.selectedLayerIds || []}
                 settings={settings}
               />
-              <AgentStatusBar />
+              <div className="flex items-center gap-2 px-3 py-2 border-t border-border">
+                <ServerStatusIndicator compact showUrl={false} />
+                <AgentStatusBar />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
