@@ -247,8 +247,126 @@ Gate : npm run test + npm run build vert, pas de ts errors
 ```
 
 ---
-10. `psg_blueprint.py` : structure d'un PSG conforme CNPF (parcellaire, peuplements, programme coupes/travaux) + gabarit de rapport dédié.
-11. `burned_area.py` : vectorisation du contour de zone brûlée depuis un raster dNBR classé (raster→polygones, lissage, surface par classe de sévérité).
-12. `forest_classes.py` : nomenclature IGN BD Forêt v2 + schémas de classification de massifs (résineux/feuillus/mixte) + symbologie associée.
-13. `path_classifier.py` : classification de pistes/dessertes forestières (praticabilité DFCI) depuis attributs OSM + géométrie.
+---
+
+## PROMPT 11 — Pack Foresterie (Part 1) : PSG Blueprint (CNPF)
+
+```
+CONTEXTE PROJET (stable) :
+Plugin QGIS "GeoSylva AI" avec ask_user + agent federation. Vision métiers en docs/VISION_METIERS.md
+(voir section Pack 1 : Gestion Forestière pour spécification complète).
+
+TÂCHE (module pur Python) :
+Créer QGISIA2/psg_blueprint.py : générateur PSG (Plans Simples de Gestion) conforme CNPF 2024.
+
+API attendue :
+- build_psg_blueprint(project_bbox: [x1,y1,x2,y2], depth: str, forest_type: str) -> dict
+  depth in {"simplifie", "standard", "complet"} → 2ans/5ans/10ans
+  forest_type in {"feuillus", "resineux", "mixte"}
+  Retour : {metadata, parcellaire, peuplements, operations, restrictions, recommandations}
+- validate_psg(psg: dict) -> {valid: bool, errors: List[str], warnings: List[str]}
+  Vérifier : opérations cohérentes (années), surfaces paddent bbox, densités raisonnables
+
+SYMBOLOGIES QML :
+- QGISIA2/symbologies/foresterie/peuplements_essence.qml (Feuillus=vert, Résineux=bleu, Mixte=cyan)
+
+TESTS : tests/test_psg_blueprint.py (>= 10 tests)
+- Zones Pays de la Loire, Limousin, Aquitaine (tailles réelles)
+- Depths : simplifié (3-5 opérations) vs complet (15+ opérations)
+- Recommandations générées (essences, risques, opportunités)
+
+LIVRAISON : branche kimi/psg-blueprint
+Gate : pytest OK, <400 lignes, aucun import qgis/PyQt
+```
+
+---
+
+## PROMPT 12 — Pack Foresterie (Part 2) : Burned Area Vectorization
+
+```
+CONTEXTE :
+dNBR raster classé (1=unburned, 2=low, 3=moderate, 4=high) → polygones contours brûlés.
+Utilise scipy (convex_hull, smoothing), rasterio, fiona pour géométries.
+
+TÂCHE (module pur Python) :
+Créer QGISIA2/burned_area.py : vectorisation robuste raster classé → shapes avec sévérité.
+
+API attendue :
+- vectorize_burned_area(dnbr_raster: str, smoothing: str, min_polygon_ha: float) -> list[dict]
+  Retour : [{geometry: Polygon, severity: "high|moderate|low", surface_ha, perimeter_m}]
+- smooth_polygon(poly: Polygon, kernel_size: int) -> Polygon (Douglas-Peucker)
+- calculate_metrics(polygons: List[Polygon], crs: str) -> list[dict]
+
+TESTS : tests/test_burned_area.py (>= 8 tests)
+- Incendies réels Méditerranée 2023-2024 (MODIS crosscheck <5% erreur)
+- Smoothing : none/light/heavy
+- Min surface filter (1ha vs 50cm²)
+
+LIVRAISON : branche kimi/burned-area
+Gate : pytest OK, <350 lignes
+```
+
+---
+
+## PROMPT 13 — Pack Foresterie (Part 3) : Forest Classification
+
+```
+CONTEXTE :
+Classifier massifs forestiers : NDVI + NDMI → 6 classes (IGN BD Forêt v2).
+Classes : vide (0), taillis (1), feuillus (2), résineux (3), mixte (4), jachère (5).
+
+TÂCHE (module pur Python) :
+Créer QGISIA2/forest_classes.py : classification multi-indices + QML symbologie.
+
+API attendue :
+- classify_forest(ndvi_raster: str, ndmi_raster: str, legend: Optional[dict]) -> dict
+  Retour : {raster_classes: str, symbology_qml: str, confidence_raster: str}
+- apply_symbology_qml(layer_id: str, qml_path: str) → via bridge call (async)
+- validate_classification(raster: str) -> {accuracy, confusion_matrix, warnings}
+
+SYMBOLOGIES QML :
+- QGISIA2/symbologies/foresterie/forest_classes.qml (couleurs IGN standard)
+
+TESTS : tests/test_forest_classes.py (>= 12 tests)
+- Couches IGN BD Forêt réelles (crosscheck 90%+ accuracy)
+- OSM highways pour validation pistes
+- Confidence raster vérification (%) 
+
+LIVRAISON : branche kimi/forest-classes
+Gate : pytest OK, <380 lignes, symbologies validées
+```
+
+---
+
+## PROMPT 14 — Pack Foresterie (Part 4) : Path Classifier
+
+```
+CONTEXTE :
+Classifier pistes/dessertes forestières : OSM + MNT → praticabilité DFCI.
+DFCI_large, DFCI_normal, restreinte, impraticable (basé pente + surface + largeur).
+
+TÂCHE (module pur Python) :
+Créer QGISIA2/path_classifier.py : classification voies + priorité maintenance.
+
+API attendue :
+- classify_paths(ways_vector: str, dem_raster: str, proximity_to_water: bool) -> list[dict]
+  Retour : [{way_id, name, surface, width, praticabilite, slope_pct, maintenance_priority}]
+- calculate_slope_from_dem(way_geom: LineString, dem_raster) -> float (% moyenne)
+- infer_width_from_osm(tags: dict) -> float (m, défaut 3.5)
+
+TESTS : tests/test_path_classifier.py (>= 8 tests)
+- Chaînes massifs réels (Vosges, Massif Central, Alpes)
+- Pentes : 0% (plat) → 80% (très raide) → impraticable
+- Maintenance priority : calcul sur pente + état infrastructure
+
+LIVRAISON : branche kimi/path-classifier
+Gate : pytest OK, <320 lignes, no qgis/PyQt imports
+```
+
+---
+
+## Backlog Métiers (Futur)
+
 14. Connecteur foncier : DVF/cadastre/data.gouv (+ spec Pappers) pour propriétaires et parcelles.
+15-17. Pack Incendie : dNBR pipeline, severity classes, restoration planner (Q3 2026)
+18-20. Pack Urbanisme : parcel analysis, zoning rules, urban report (Q4 2026)
