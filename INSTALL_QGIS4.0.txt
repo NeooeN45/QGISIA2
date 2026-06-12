@@ -1,0 +1,123 @@
+═══════════════════════════════════════════════════════════════════════════════
+  INSTALLATION PLUGIN QGISIA+ SUR QGIS 4.0
+═══════════════════════════════════════════════════════════════════════════════
+
+VERSION: cab6de4 (5 bug fixes: iterator, escape key, memory leak, polling backoff)
+BUILD: OK (11.33s) | TESTS: 7/7 passed
+
+───────────────────────────────────────────────────────────────────────────────
+ OPTION 1 : INSTALLATION DIRECTE (Recommandé dev)
+───────────────────────────────────────────────────────────────────────────────
+
+1. TROUVER LE DOSSIER PLUGINS QGIS
+
+   Chemin standard Windows :
+   C:\Users\<YourUsername>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins
+
+   Ou dans QGIS : Settings → User Profiles → Open Profile Folder
+   → puis : python\plugins
+
+
+2. COPIER LE PLUGIN
+
+   Option A : Copie directe (simple)
+   ─────────────────────────────────
+   - Copier le dossier :
+     c:\Users\camil\Desktop\...\QGISIA\QGISIA2
+
+   - Vers :
+     C:\Users\<YourUsername>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\QGISIA2
+
+   Option B : Symlink (meilleur pour dev)
+   ──────────────────────────────────────
+   PowerShell (Admin) :
+   ```
+   New-Item -ItemType SymbolicLink `
+     -Path "C:\Users\$env:USERNAME\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\QGISIA2" `
+     -Target "c:\Users\camil\Desktop\Micro Entreprise\04_PROJETS_EN_COURS\Projet\QGISIA\QGISIA2"
+   ```
+
+   Avantage : modifications en live sans recopy
+
+
+3. REDÉMARRER QGIS
+
+   - Fermer QGIS complètement
+   - Rouvrir QGIS 4.0
+   - Plugin → QGISAI+ doit apparaître dans la toolbar
+
+
+───────────────────────────────────────────────────────────────────────────────
+ VÉRIFIER L'INSTALLATION
+───────────────────────────────────────────────────────────────────────────────
+
+✓ Plugin → QGISAI+ visible dans Plugins menu
+✓ Toolbar icon QGISAI+ visible (coin gauche barre d'outils)
+✓ Raccourci Ctrl+Shift+G fonctionne
+✓ Dock QGISAI+ apparaît automatiquement (auto-show enabled)
+✓ Port indicator visible en bas du dock (ex: "Port 8157")
+✓ Network tab → /api/qgis/serverInfo returns {ok: true, port: ...}
+
+
+───────────────────────────────────────────────────────────────────────────────
+ TESTER ASK_USER (Checklist Simple)
+───────────────────────────────────────────────────────────────────────────────
+
+1. Chat ouvert (Plugins → QGISAI+)
+2. Saisis prompt qui demande à choisir :
+   "Dois-je charger Sentinel-2 ou Landsat? Demande-moi."
+3. Observe :
+   ✓ Modal QCM apparaît (2-3 secondes)
+   ✓ Options affichées (Sentinel-2, Landsat)
+   ✓ Bouton "Valider" grisé au départ
+   ✓ Clique option → bouton s'active
+   ✓ Clique "Valider" → modal ferme
+   ✓ Chat affiche : "Vous avez choisi : ..."
+   ✓ Agent continue (outil suivant exécuté)
+4. Escape key :
+   ✓ Ouvre nouvelle demande ask_user
+   ✓ Appuie Escape → modal ferme gracefully
+   ✓ Chat : "Pas de réponse reçue"
+
+
+───────────────────────────────────────────────────────────────────────────────
+ DÉPANNAGE
+───────────────────────────────────────────────────────────────────────────────
+
+❌ Plugin n'apparaît pas après redémarrage
+   → Vérifier le chemin plugins (Settings → User Profiles)
+   → Logs : Help → View → Python Console (rechercher erreurs)
+   → Réinstaller en copie simple (pas symlink)
+
+❌ "Erreur de port déjà utilisé"
+   → Env var QGIS_BRIDGE_TIMEOUT → change port dynamique
+   → Ou relancer QGIS
+
+❌ Modal n'apparaît pas
+   → F12 (DevTools) → Network tab
+   → Chercher /api/llm/agent dans Network
+   → Vérifier status 200
+
+❌ Agent s'arrête après ask_user
+   → Bug fixé (commit 69a17db)
+   → Si persiste: Help → View → Log Messages (chercher erreurs Python)
+
+
+───────────────────────────────────────────────────────────────────────────────
+ QUICK CHECKLIST POUR RAPPORT DE TEST
+───────────────────────────────────────────────────────────────────────────────
+
+[ ] Plugin installe et visible
+[ ] Auto-dock appears au startup
+[ ] Port indicator affiche (ex: "Port 8157")
+[ ] ask_user basic : modal apparition OK
+[ ] ask_user basic : sélection option OK
+[ ] ask_user basic : submit OK
+[ ] ask_user basic : agent continue OK
+[ ] Escape key closes modal
+[ ] Pas de crash ou freeze
+[ ] Logs propres (pas d'erreur rouge)
+
+Status global : PASS / FAIL
+
+═══════════════════════════════════════════════════════════════════════════════
