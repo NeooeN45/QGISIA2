@@ -13,6 +13,11 @@ import asyncio
 import json
 from typing import Any, List, Optional
 
+import uuid
+
+# Sessions d'agent en pause (ask_user) : {session_id -> state}
+_AGENT_SESSIONS: dict[str, dict] = {}
+
 try:
     from mcp_server import (
         TOOL_CATALOG,
@@ -254,6 +259,44 @@ def run_tool_loop(
                     "result": result[:500],
                 })
                 _emit({"type": "tool_result", "tool": call["name"], "result": result[:300], "blocked": False})
+
+                # Detection pause ask_user
+                if call["name"] == "ask_user":
+                    try:
+                        parsed = json.loads(result) if isinstance(result, str) else result
+                        if isinstance(parsed, dict) and parsed.get("_ask_user_pause"):
+                            session_id = str(uuid.uuid4())
+                            _AGENT_SESSIONS[session_id] = {
+                                "messages": list(msgs),
+                                "iteration": iteration,
+                                "max_iters": max_iters,
+                                "model": model,
+                                "api_keys": api_keys,
+                                "system": system,
+                                "bridge_url": bridge_url,
+                                "trace": list(trace),
+                                "chat_fn": chat_fn,
+                                "native_get_json": native_get_json,
+                                "http_client": http_client,
+                                "auto_mode": auto_mode,
+                                "on_event": on_event,
+                                "pending_tool_call_id": call["id"],
+                                "pending_tool_name": call["name"],
+                            }
+                            _emit({"type": "ask_user", "session_id": session_id,
+                                   "question": parsed["question"], "options": parsed["options"]})
+                            return {
+                                "content": "",
+                                "trace": trace,
+                                "paused": True,
+                                "session_id": session_id,
+                                "question": parsed["question"],
+                                "options": parsed["options"],
+                                "iterations": iteration,
+                            }
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
             msgs.append({
                 "role": "tool",
                 "tool_call_id": call["id"],
@@ -266,3 +309,59 @@ def run_tool_loop(
         "trace": trace,
         "iterations": max_iters,
     }
+
+
+
+def resume_tool_loop(session_id: str, selected_option: str) -> dict:
+    """Reprend une boucle agentique interrompue par ask_user.
+
+    Args:
+        session_id: ID de session stockee lors de la pause.
+        selected_option: Option choisie par l'utilisateur.
+
+    Returns:
+        {content, trace, iterations} ou {error} si session inconnue.
+    """
+    state = _AGENT_SESSIONS.pop(session_id, None)
+    if state is None:
+        return {"error": f"Session inconnue ou expiree: {session_id}"}
+
+    msgs = state["messages"]
+    trace = state["trace"]
+
+    # Injecte la reponse de l'utilisateur comme resultat d'outil
+    msgs.append({
+        "role": "tool",
+        "tool_call_id": state["pending_tool_call_id"],
+        "name": state["pending_tool_name"],
+        "content": json.dumps({"selected_option": selected_option}),
+    })
+    trace.append({
+        "tool": state["pending_tool_name"],
+        "result": f"Utilisateur a choisi: {selected_option}",
+    })
+
+    def _emit(event: dict) -> None:
+        on_event = state.get("on_event")
+        if on_event is not None:
+            try:
+                on_event(event)
+            except Exception:  # noqa: BLE001
+                pass
+
+    _emit({"type": "tool_result", "tool": state["pending_tool_name"],
+           "result": f"Utilisateur a choisi: {selected_option}", "blocked": False})
+
+    return run_tool_loop(
+        msgs,
+        state["api_keys"],
+        model=state["model"],
+        max_iters=state["max_iters"],
+        auto_mode=state["auto_mode"],
+        system=state["system"],
+        bridge_url=state["bridge_url"],
+        chat_fn=state["chat_fn"],
+        http_client=state["http_client"],
+        native_get_json=state.get("native_get_json"),
+        on_event=state.get("on_event"),
+    )

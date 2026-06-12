@@ -1,9 +1,17 @@
 import { create } from "zustand";
 
+interface QuestionModalData {
+  sessionId: string;
+  question: string;
+  options: string[];
+}
+
 interface UIState {
   sidebarOpen: boolean;
   showSettings: boolean;
   showPluginSetup: boolean;
+  showQuestionModal: boolean;
+  questionModalData: QuestionModalData | null;
   isLoading: boolean;
   isQgisConnected: boolean;
 
@@ -12,6 +20,8 @@ interface UIState {
   setSidebarOpen: (open: boolean) => void;
   setShowSettings: (show: boolean) => void;
   setShowPluginSetup: (show: boolean) => void;
+  setShowQuestionModal: (show: boolean) => void;
+  setQuestionModalData: (data: QuestionModalData | null) => void;
   setIsLoading: (loading: boolean) => void;
   setIsQgisConnected: (connected: boolean) => void;
 }
@@ -36,6 +46,8 @@ export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: loadSidebarState(),
   showSettings: false,
   showPluginSetup: false,
+  showQuestionModal: false,
+  questionModalData: null,
   isLoading: false,
   isQgisConnected: false,
 
@@ -53,6 +65,8 @@ export const useUIStore = create<UIState>((set) => ({
 
   setShowSettings: (show) => set({ showSettings: show }),
   setShowPluginSetup: (show) => set({ showPluginSetup: show }),
+  setShowQuestionModal: (show) => set({ showQuestionModal: show }),
+  setQuestionModalData: (data) => set({ questionModalData: data }),
   setIsLoading: (loading) => set({ isLoading: loading }),
   setIsQgisConnected: (connected) => set({ isQgisConnected: connected }),
 }));

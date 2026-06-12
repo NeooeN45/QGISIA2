@@ -130,7 +130,8 @@ def test_to_openai_tools_and_names():
         "list_data_sources", "list_dossiers",
         "list_report_templates", "generate_report", "critique_layout",
         "predict_trend", "parse_voice_intent", "list_suitability_presets",
-        "search_symbology", "list_palettes", "normalize_legend", "validate_pipeline"}
+        "search_symbology", "list_palettes", "normalize_legend", "validate_pipeline",
+        "ask_user"}
     for t in tools:
         assert t["type"] == "function"
         assert t["function"]["parameters"]["type"] == "object"

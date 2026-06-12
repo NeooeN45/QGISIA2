@@ -144,7 +144,7 @@ export const useThinkingStore = create<ThinkingState>((set, get) => ({
           clearInterval(interval);
           set({ progressInterval: null });
         }
-      }, 100);
+      }, 250);  // Réduit de 100ms à 250ms → 4 updates/sec au lieu de 10/sec
       set({ progressInterval: interval });
     }
   },

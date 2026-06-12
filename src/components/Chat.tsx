@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
 import { ChevronDown, Sparkles } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
@@ -16,11 +16,48 @@ const LayerDiagnosticsModalComponent = lazy(() => import("./LayerDiagnosticsModa
 const WorkspaceSidebar = lazy(() => import("./WorkspaceSidebar"));
 const GeoParticlesBackground = lazy(() => import("./GeoParticlesBackground"));
 import ChatHeader from "./ChatHeader";
+import QuestionModal from "./QuestionModal";
 import ChatInputArea from "./ChatInput";
 import WelcomeScreen from "./WelcomeScreen";
 import MessageBubble from "./MessageBubble";
 import ThinkingIndicator from "./ThinkingIndicator";
 import StreamingMessage from "./StreamingMessage";
+
+// Composant memoïsé pour éviter cascade re-renders lors du toggle isLoading/isStreaming
+const StreamingTransitionZone = memo(({ isLoading, isStreaming, onStop }: {
+  isLoading: boolean;
+  isStreaming: boolean;
+  onStop?: () => void;
+}) => (
+  <div className="relative">
+    <div
+      style={{
+        opacity: isLoading && !isStreaming ? 1 : 0,
+        pointerEvents: isLoading && !isStreaming ? "auto" : "none",
+        position: isLoading && !isStreaming ? "relative" : "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        transition: "none",
+      }}
+    >
+      <ThinkingIndicator isLoading={isLoading} onStop={onStop} />
+    </div>
+    <div
+      style={{
+        opacity: isStreaming ? 1 : 0,
+        pointerEvents: isStreaming ? "auto" : "none",
+        position: isStreaming ? "relative" : "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        transition: "none",
+      }}
+    >
+      <StreamingMessage />
+    </div>
+  </div>
+));
 import {
   addRasterFile,
   addRemoteService,
@@ -137,9 +174,38 @@ export default function Chat(props: ChatProps) {
   const setShowPluginSetup = useUIStore((s) => s.setShowPluginSetup);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  
+  const showQuestionModal = useUIStore((s) => s.showQuestionModal);
+  const setShowQuestionModal = useUIStore((s) => s.setShowQuestionModal);
+  const questionModalData = useUIStore((s) => s.questionModalData);
+  const setQuestionModalData = useUIStore((s) => s.setQuestionModalData);
+
   // Subscription réactive au streaming pour transition fluide
   const isStreaming = useStreamingStore((s) => s.isStreaming);
+
+  const handleQuestionAnswer = useCallback(
+    async (selectedOption: string) => {
+      if (!questionModalData) return;
+      setShowQuestionModal(false);
+      try {
+        const res = await fetch(`${window.location.origin}/api/llm/agent/respond`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: questionModalData.sessionId,
+            selected_option: selectedOption,
+          }),
+        });
+        const json = await res.json();
+        if (json.ok && json.result?.content) {
+          toast.info(`Agent: ${json.result.content}`);
+        }
+      } catch (err) {
+        toast.error("Erreur lors de la reprise de l'agent");
+      }
+      setQuestionModalData(null);
+    },
+    [questionModalData, setShowQuestionModal, setQuestionModalData],
+  );
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -608,38 +674,8 @@ export default function Chat(props: ChatProps) {
                   ))}
                 </AnimatePresence>
 
-                {/* Transition instantanée: Thinking → Streaming */}
-                <div className="relative">
-                  {/* ThinkingIndicator : visible seulement pendant le chargement initial */}
-                  <div
-                    style={{ 
-                      opacity: isLoading && !isStreaming ? 1 : 0,
-                      pointerEvents: isLoading && !isStreaming ? "auto" : "none",
-                      position: isLoading && !isStreaming ? "relative" : "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      transition: "none",
-                    }}
-                  >
-                    <ThinkingIndicator isLoading={isLoading} onStop={onStopGeneration} />
-                  </div>
-
-                  {/* StreamingMessage : visible seulement pendant le streaming */}
-                  <div
-                    style={{ 
-                      opacity: isStreaming ? 1 : 0,
-                      pointerEvents: isStreaming ? "auto" : "none",
-                      position: isStreaming ? "relative" : "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      transition: "none",
-                    }}
-                  >
-                    <StreamingMessage />
-                  </div>
-                </div>
+                {/* Memoized transition zone: évite cascade re-renders sur isLoading/isStreaming toggle */}
+                <StreamingTransitionZone isLoading={isLoading} isStreaming={isStreaming} onStop={onStopGeneration} />
               </div>
             )}
           </div>
@@ -700,6 +736,20 @@ export default function Chat(props: ChatProps) {
               setLocalSettings={setLocalSettings}
             />
           </Suspense>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showQuestionModal && questionModalData && (
+          <QuestionModal
+            question={questionModalData.question}
+            options={questionModalData.options}
+            onSelect={handleQuestionAnswer}
+            onCancel={() => {
+              setShowQuestionModal(false);
+              setQuestionModalData(null);
+            }}
+          />
         )}
       </AnimatePresence>
 

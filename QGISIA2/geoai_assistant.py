@@ -12,6 +12,7 @@ import statistics
 import sys
 import tempfile
 import threading
+import time
 import traceback
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
@@ -3412,13 +3413,14 @@ class MainThreadExecutor(QObject):
 
 
 class ThreadedAssetServer:
-    def __init__(self, directory, bridge, executor):
+    def __init__(self, directory, bridge, executor, request_timeout=120):
         self.directory = directory
         self.bridge = bridge
         self.executor = executor
         self.httpd = None
         self.thread = None
         self.port = None
+        self.request_timeout = request_timeout  # Configurable timeout (défaut 120s pour raster)
         # Rate-limiter anti boucle d'agent runaway / abus local. Limite haute
         # pour ne pas pénaliser le tool-calling légitime (nombreux appels rapides).
         self.security = (
@@ -3469,6 +3471,16 @@ class ThreadedAssetServer:
         try:
             if route == "/api/qgis/health":
                 self._send_json(handler, 200, {"ok": True})
+                return True
+
+            if route == "/api/qgis/serverInfo":
+                self._send_json(handler, 200, {
+                    "ok": True,
+                    "port": self.port,
+                    "url": f"http://127.0.0.1:{self.port}",
+                    "bridge_status": "connected",
+                    "timestamp": time.time(),
+                })
                 return True
 
             if route == "/api/qgis/getLayersList":
@@ -4221,6 +4233,24 @@ class ThreadedAssetServer:
                 self._send_json(handler, 200, {"ok": True, "result": result})
                 return True
 
+            if route == "/api/llm/agent/respond":
+                # Reprise d'une boucle agentique interrompue par ask_user.
+                session_id = body.get("session_id", "")
+                selected_option = body.get("selected_option", "")
+                if not session_id or not selected_option:
+                    self._send_json(handler, 400, {"ok": False, "error": "session_id et selected_option requis"})
+                    return True
+                try:
+                    from agent_tools import resume_tool_loop
+                except ImportError:
+                    from .agent_tools import resume_tool_loop
+                result = resume_tool_loop(session_id, selected_option)
+                if "error" in result:
+                    self._send_json(handler, 404, {"ok": False, "error": result["error"]})
+                    return True
+                self._send_json(handler, 200, {"ok": True, "result": result})
+                return True
+
             if route == "/api/llm/critiqueView":
                 # BOUCLE VISION fermee : rend la vue carte -> envoie l'image au VLM
                 # (modele vision NVIDIA) -> critique + score + correctifs.
@@ -4714,8 +4744,10 @@ class ThreadedAssetServer:
         class QuietThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
             daemon_threads = True
             allow_reuse_address = True
+            timeout = None  # Set per-request
 
         self.httpd = QuietThreadingServer(("127.0.0.1", 0), AssetRequestHandler)
+        self.httpd.timeout = self.request_timeout
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
@@ -4770,10 +4802,12 @@ class GeoAIAssistant:
 
         if self.asset_server is None:
             self._ensure_bridge()
+            request_timeout = float(os.environ.get("QGIS_BRIDGE_TIMEOUT", "120"))
             self.asset_server = ThreadedAssetServer(
                 web_dir,
                 self.bridge,
                 self.main_thread_executor,
+                request_timeout=request_timeout,
             )
 
         return self.asset_server.start()
@@ -5174,7 +5208,20 @@ class GeoAIAssistant:
                     processing_menu.addAction(self.action)
             except Exception:
                 pass
-        
+
+        # Auto-show dock au démarrage QGIS (configurable)
+        show_dock_on_startup = os.environ.get("QGIS_PLUGIN_SHOW_DOCK_ON_STARTUP", "1") == "1"
+        if show_dock_on_startup:
+            try:
+                if self.dock is None:
+                    self._create_dock()
+                # Délai pour que QGIS se stabilise avant d'afficher le dock
+                from qgis.PyQt.QtCore import QTimer
+                QTimer.singleShot(500, lambda: self.dock.show() if self.dock else None)
+                self._debug("initGui:dock_scheduled_for_display")
+            except Exception as e:
+                self._debug(f"initGui:dock_show_error {e}")
+
         self._debug("initGui:end")
 
     def run(self):

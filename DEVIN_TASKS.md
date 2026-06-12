@@ -131,6 +131,57 @@ LIVRAISON : branche kimi/agent-status-bar, npm run test + npm run build verts.
 ### Pack Gestion Forestière (voir docs/VISION_METIERS.md — qualité > rapidité)
 
 9. Outil `ask_user` (QCM agent) : spec pure du protocole pause/reprise de run_tool_loop + composant frontend de choix multiple. **La capacité transverse la plus importante.**
+
+---
+
+## PROMPT 9 — `ask_user` : outil QCM d'agent (PRIORITAIRE PACKS MÉTIER)
+
+```
+CONTEXTE PROJET (vérifié, stable, complet) :
+Plugin QGIS GeoSylva AI. Boucle tool-calling dans QGISIA2/agent_tools.py:run_tool_loop 
+(max 100 itérations, guardrails BLOCK/CONFIRM/SAFE). Actuellement, l'agent exécute les 
+outils automatiquement. BESOIN : pauser la boucle quand l'agent est incertain (→ Q/R).
+
+Exemple : Agent analyse une zone → doute sur le PSG (format simple vs complet ?) → 
+appelle ask_user(question, options) → boucle se pause → frontend affiche QCM → 
+user choisit → réponse réinjectée → agent reprend.
+
+TÂCHE (2 modules, purs Python + React TS) :
+1. BACKEND : QGISIA2/tools/ask_user.py (~80 L)
+   - NativeToolFunction ask_user(question: str, options: List[str], context: dict = None) -> dict
+     Retour : {selected_option: str, selected_index: int, timestamp: ISO8601}
+   - Insérer dans NATIVE_TOOLS et TOOL_CATALOG (mcp_server.py)
+   - Intégration dans run_tool_loop : si agent appelle ask_user, bloquer les tool_calls 
+     suivantes jusqu'à la réponse, injecter réponse dans message agent
+   - JAMAIS de timeout côté backend (la pause peut durer longtemps)
+
+2. FRONTEND : src/components/QuestionModal.tsx (~120 L)
+   - Modal React avec : titre, question, boutons pour chaque option
+   - Affichage quand task.awaiting_user_input === true
+   - POST /api/llm/agent/respond avec {question_id, selected_index}
+   - Animation d'apparition (Framer Motion)
+   - Tailwind, dark mode, couleur accent QGISIA
+
+3. INTÉGRATION dans Chat.tsx
+   - Si réponse contient ask_user call pending → afficher <QuestionModal>
+   - Bloquer user input jusqu'à réponse
+   - Sur réponse → POST /api/llm/agent/respond → continuer boucle agent
+
+TESTS : 
+- Backend (pytest, tests/test_ask_user.py, >= 5 tests) : format réponse OK, timeout pas appliqué, 
+  catalogue contient ask_user
+- Frontend (vitest, src/test/QuestionModal.test.tsx, >= 6 tests) : rendu modal, click option, 
+  POST au backend, blocage input, dark mode
+
+LIVRAISON : branche kimi/ask-user (ou kimi/ask-user-qcm)
+Gate : pytest vert, vitest vert, npm build vert, npm lint vert
+
+MOTIVATION : Tous les packs métier (foresterie, incendie, urbanisme) dépendent de cette capacité.
+L'agent DOIT pouvoir demander, pas deviner. Exemple foresterie : "PSG simplifié (2 ans, 
+entretien) vs complet (10 ans, + coupe)?" — user choisit → agent construit le plan qui va.
+```
+
+---
 10. `psg_blueprint.py` : structure d'un PSG conforme CNPF (parcellaire, peuplements, programme coupes/travaux) + gabarit de rapport dédié.
 11. `burned_area.py` : vectorisation du contour de zone brûlée depuis un raster dNBR classé (raster→polygones, lissage, surface par classe de sévérité).
 12. `forest_classes.py` : nomenclature IGN BD Forêt v2 + schémas de classification de massifs (résineux/feuillus/mixte) + symbologie associée.

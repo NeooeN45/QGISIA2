@@ -290,6 +290,27 @@ def _wikipedia(args: dict, get_json: Callable) -> dict:
     }
 
 
+
+
+def _ask_user(args: dict, get_json: Callable) -> dict:
+    """Outil natif : pose une question a l'utilisateur avec des options.
+
+    Retourne un dict avec le flag `_ask_user_pause` pour que la boucle agentique
+    s'interrompe et affiche un modal QCM au frontend.
+    """
+    question = str(args.get("question", "")).strip()
+    options_raw = args.get("options", [])
+    options = [str(o).strip() for o in options_raw if str(o).strip()]
+    if not question:
+        return {"error": "question manquante"}
+    if not options or len(options) < 2:
+        return {"error": "options doit contenir au moins 2 choix"}
+    return {
+        "_ask_user_pause": True,
+        "question": question,
+        "options": options,
+    }
+
 NATIVE_TOOLS: List[NativeTool] = [
     NativeTool(
         name="geocode",
@@ -564,6 +585,28 @@ NATIVE_TOOLS: List[NativeTool] = [
             "required": ["pipeline"],
         },
         executor=_validate_pipeline,
+    ),
+    NativeTool(
+        name="ask_user",
+        description=(
+            "Poser une question a l'utilisateur avec plusieurs options de reponse. "
+            "Le systeme affiche un modal QCM et attend le choix. Utile pour clarifier "
+            "une intention (ex: PSG simple vs complet) ou confirmer une action. "
+            'question="..." options=["A", "B", "C"].'
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "description": "Question a poser a l'utilisateur"},
+                "options": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Liste des options de reponse (min 2)",
+                },
+            },
+            "required": ["question", "options"],
+        },
+        executor=_ask_user,
     ),
     NativeTool(
         name="wikipedia",
