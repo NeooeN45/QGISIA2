@@ -9,7 +9,7 @@
  * affichage texte brut pour la retrocompatibilite.
  */
 
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   Brain,
   CheckCircle2,
@@ -189,12 +189,18 @@ function PhaseCard({ phase, content, isLast, isStreaming, index, isComplete }: P
   );
 }
 
-export default function ReasoningPhasesView({
+/**
+ * Composant mémoïsé : ne se re-render que si text, isStreaming ou className changent.
+ * Le parsing (parseReasoning) est mémoïsé sur `text` pour éviter de re-parser à chaque
+ * render parent indépendant du contenu.
+ */
+const ReasoningPhasesView = memo(function ReasoningPhasesView({
   text,
   isStreaming = false,
   className,
 }: ReasoningPhasesViewProps) {
-  const parsed = parseReasoning(text);
+  // Mémoïsation du parsing coûteux : ne se recalcule que quand text change
+  const parsed = useMemo(() => parseReasoning(text), [text]);
 
   // Pas de marqueurs : fallback affichage brut (retrocompatibilite)
   if (!parsed.hasStructuredReasoning) {
@@ -236,4 +242,6 @@ export default function ReasoningPhasesView({
       ))}
     </div>
   );
-}
+});
+
+export default ReasoningPhasesView;
