@@ -821,6 +821,7 @@ async function generateViaFederation(
  */
 async function generateViaAgent(
   input: GenerateAssistantReplyInput,
+  opts?: { model?: string; maxIters?: number; autoMode?: boolean },
 ): Promise<string> {
   const thinkingStore = useThinkingStore.getState();
   const streamingStore = useStreamingStore.getState();
@@ -828,16 +829,16 @@ async function generateViaAgent(
 
   const agentReq = {
     query: input.prompt,
-    model: gateway.defaultAlias,
-    max_iters: 40,
-    auto_mode: gateway.autoMode,
+    model: opts?.model ?? gateway.defaultAlias,
+    max_iters: opts?.maxIters ?? 40,
+    auto_mode: opts?.autoMode ?? gateway.autoMode,
     api_keys: resolveApiKeys(input),
   };
 
   thinkingStore.setPhase("EXECUTING_TOOLS", {
-    message: "Agent SIG : exécution d'outils QGIS...",
-    subMessage: "Le modèle appelle les actions nécessaires",
-    modelName: gateway.defaultAlias,
+    message: "Agent SIG autonome : analyse et action...",
+    subMessage: "Planification puis exécution d'outils QGIS",
+    modelName: agentReq.model,
   });
   streamingStore.startStreaming(createMessageId());
 
@@ -975,12 +976,13 @@ async function generateViaNvidia(
   }
   const keyOverride = apiKey ? { nvidia_nim: apiKey } : undefined;
 
-  // Mode Auto (défaut) : on délègue à la fédération multi-agents. L'intent-router
-  // backend analyse la demande et choisit le meilleur modèle par tâche
-  // (généraliste / raisonnement / vision / code PyQGIS), avec fallbacks.
+  // Mode Auto (défaut) = AGENT AUTONOME : l'agent planifie puis AGIT réellement
+  // sur QGIS (géocode les lieux, ajoute des fonds/données, calcule, style, rend,
+  // s'auto-corrige) via la boucle de tool-calling. C'est le mode le plus compétent :
+  // il répond ET fait. auto_mode + budget d'itérations élevé pour les tâches riches.
   const chosenModel = (settings.nvidiaModel || "").trim();
   if (!chosenModel || chosenModel === NVIDIA_AUTO_MODEL) {
-    return generateViaFederation(input, keyOverride);
+    return generateViaAgent(input, { autoMode: true, maxIters: 60 });
   }
 
   // Override explicite : l'utilisateur a forcé un modèle précis dans les Paramètres.
