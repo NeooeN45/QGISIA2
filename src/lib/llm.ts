@@ -11,6 +11,7 @@ import {
   getConfiguredGeminiApiKey,
   getConfiguredNvidiaApiKey,
   getConfiguredOpenRouterApiKey,
+  NVIDIA_AUTO_MODEL,
 } from "./settings";
 import { orchestrateResponse } from "./multi-model-orchestrator";
 import { useThinkingStore } from "../stores/useThinkingStore";
@@ -942,17 +943,57 @@ async function generateViaNvidia(
   input: GenerateAssistantReplyInput,
 ): Promise<string> {
   const { settings } = input;
+  const thinkingStore = useThinkingStore.getState();
+  const streamingStore = useStreamingStore.getState();
 
   const apiKey = settings.nvidiaApiKey.trim() || getConfiguredNvidiaApiKey();
   if (!apiKey) {
     throw new Error("Aucune cle API NVIDIA NIM n'est configuree.");
   }
 
-  // Mode Auto par défaut : on délègue à la fédération multi-agents. L'intent-router
+  // Mode Auto (défaut) : on délègue à la fédération multi-agents. L'intent-router
   // backend analyse la demande et choisit le meilleur modèle par tâche
   // (généraliste / raisonnement / vision / code PyQGIS), avec fallbacks.
-  // La clé saisie dans la page Paramètres est transmise en override.
-  return generateViaFederation(input, { nvidia_nim: apiKey });
+  const chosenModel = (settings.nvidiaModel || "").trim();
+  if (!chosenModel || chosenModel === NVIDIA_AUTO_MODEL) {
+    return generateViaFederation(input, { nvidia_nim: apiKey });
+  }
+
+  // Override explicite : l'utilisateur a forcé un modèle précis dans les Paramètres.
+  try {
+    thinkingStore.setPhase("ANALYZING_INTENT", {
+      message: "Connexion a NVIDIA NIM...",
+      subMessage: `Modèle forcé : ${chosenModel}`,
+    });
+    streamingStore.startStreaming(createMessageId());
+    thinkingStore.setPhase("STREAMING_RESPONSE", { modelName: chosenModel });
+
+    const messages: ChatMessage[] = [
+      { role: "system", content: DEFAULT_LOCAL_SYSTEM_PROMPT },
+      { role: "user", content: input.prompt },
+    ];
+
+    const full = await gatewayStreamToText(
+      {
+        model: chosenModel,
+        messages,
+        api_keys: { nvidia_nim: apiKey },
+        signal: input.signal,
+      },
+      (delta) => streamingStore.addChunk(delta),
+    );
+
+    setTimeout(() => {
+      thinkingStore.reset();
+      streamingStore.completeStreaming();
+    }, 300);
+
+    return full || "Operation terminee, sans message complementaire.";
+  } catch (error) {
+    thinkingStore.reset();
+    streamingStore.completeStreaming();
+    throw error;
+  }
 }
 
 export async function generateAssistantReply(

@@ -4,6 +4,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Copy,
   Cpu,
   Download,
@@ -50,6 +51,7 @@ import {
   hasConfiguredOpenRouterApiKey,
   LOCAL_MODEL_PRESETS,
   NVIDIA_MODEL_PRESETS,
+  NVIDIA_AUTO_MODEL,
   normalizeSettings,
   OPENROUTER_ROLE_PRESETS,
   OPENROUTER_STACK_PRESETS,
@@ -959,7 +961,44 @@ export default function SettingsModal({
         <label className="mb-2 block text-xs font-medium text-white/70">
           Modèle NVIDIA NIM
         </label>
-        <div className="mt-2 grid gap-3 md:grid-cols-2">
+
+        {/* Carte Auto : l'app choisit le modèle par tâche (intent-router). */}
+        <button
+          type="button"
+          onClick={() =>
+            setLocalSettings((current) => ({
+              ...current,
+              nvidiaModel: NVIDIA_AUTO_MODEL,
+            }))
+          }
+          className={cn(
+            "w-full rounded-2xl border p-4 text-left transition-all",
+            (normalizedLocalSettings.nvidiaModel === NVIDIA_AUTO_MODEL ||
+              !normalizedLocalSettings.nvidiaModel)
+              ? "border-emerald-500/40 bg-emerald-500/12 text-white"
+              : "border-white/10 bg-black/15 text-white/60 hover:bg-white/8",
+          )}
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold">🧭 Auto — l'app choisit</p>
+            <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300 uppercase tracking-wide">
+              recommandé
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-white/45">
+            L'intent-router sélectionne le meilleur modèle pour chaque tâche
+            (raisonnement, vision, code PyQGIS, généraliste). Aucun choix nécessaire.
+          </p>
+        </button>
+
+        <details className="mt-3 group">
+          <summary className="cursor-pointer list-none text-xs font-medium text-white/45 hover:text-white/70 transition-colors">
+            <span className="inline-flex items-center gap-1.5">
+              <ChevronRight size={13} className="transition-transform group-open:rotate-90" />
+              Avancé — forcer un modèle précis (override optionnel)
+            </span>
+          </summary>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
           {NVIDIA_MODEL_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -993,7 +1032,8 @@ export default function SettingsModal({
               <p className="mt-1 text-xs text-white/45">{preset.description}</p>
             </button>
           ))}
-        </div>
+          </div>
+        </details>
       </div>
     </div>
   );

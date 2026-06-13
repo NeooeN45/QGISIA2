@@ -99,6 +99,9 @@ export const DEFAULT_OPENROUTER_FREE_COMPAT_EXECUTOR_MODEL =
 export const DEFAULT_NVIDIA_ENDPOINT = "https://integrate.api.nvidia.com/v1";
 export const DEFAULT_NVIDIA_MODEL =
   "nvidia/nemotron-3-super-120b-a12b";
+// Sentinel "auto" : l'app choisit le modèle par tâche (intent-router). Valeur par
+// défaut de nvidiaModel ; un preset concret la remplace = override manuel explicite.
+export const NVIDIA_AUTO_MODEL = "auto";
 
 const LEGACY_DEFAULT_GOOGLE_MODEL = DEFAULT_GOOGLE_MODEL;
 
@@ -894,7 +897,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   systemPromptOverride: "",
   nvidiaApiKey: "",
   nvidiaEndpoint: DEFAULT_NVIDIA_ENDPOINT,
-  nvidiaModel: DEFAULT_NVIDIA_MODEL,
+  nvidiaModel: NVIDIA_AUTO_MODEL,
 };
 
 function toProvider(value: string | null): AiProvider | undefined {
@@ -921,7 +924,11 @@ function selectModelForProvider(
   }
 
   if (provider === "nvidia") {
-    return settings.nvidiaModel;
+    // "auto" => modèle concret pour l'affichage et les diagnostics (le routage
+    // par tâche est géré dans generateViaNvidia qui lit nvidiaModel brut).
+    return settings.nvidiaModel === NVIDIA_AUTO_MODEL
+      ? DEFAULT_NVIDIA_MODEL
+      : settings.nvidiaModel;
   }
 
   return settings.localModel;
@@ -1316,7 +1323,7 @@ export function loadStoredSettings(storageKey = "geoai-settings"): AppSettings {
       nvidiaModel:
         urlOverrides.nvidiaModel ||
         safeParsed.nvidiaModel ||
-        (provider === "nvidia" ? safeParsed.model || DEFAULT_NVIDIA_MODEL : DEFAULT_NVIDIA_MODEL),
+        NVIDIA_AUTO_MODEL,
       nvidiaEndpoint:
         urlOverrides.nvidiaEndpoint ||
         safeParsed.nvidiaEndpoint ||
