@@ -26,6 +26,7 @@ import {
   smartProcessStream,
   type ChatMessage,
   type AgentStreamEvent,
+  type ApiKeys,
 } from "./litellm-client";
 
 interface GenerateAssistantReplyInput {
@@ -718,6 +719,7 @@ export async function repairPythonScriptWithProvider(
  */
 async function generateViaFederation(
   input: GenerateAssistantReplyInput,
+  apiKeysOverride?: Partial<ApiKeys>,
 ): Promise<string> {
   const thinkingStore = useThinkingStore.getState();
   const streamingStore = useStreamingStore.getState();
@@ -726,7 +728,9 @@ async function generateViaFederation(
   const smartReq = {
     query: input.latestUserMessage,
     context: input.layerContext ? { contexte_sig: input.layerContext } : undefined,
-    api_keys: gateway.apiKeys,
+    // Override éventuel (ex: clé saisie dans la page Paramètres du provider NVIDIA)
+    // fusionné par-dessus les clés du gateway (conserve ollama_base_url, etc.).
+    api_keys: { ...gateway.apiKeys, ...apiKeysOverride },
   };
 
   thinkingStore.setPhase("ANALYZING_INTENT", {
@@ -937,8 +941,6 @@ async function generateViaGateway(
 async function generateViaNvidia(
   input: GenerateAssistantReplyInput,
 ): Promise<string> {
-  const thinkingStore = useThinkingStore.getState();
-  const streamingStore = useStreamingStore.getState();
   const { settings } = input;
 
   const apiKey = settings.nvidiaApiKey.trim() || getConfiguredNvidiaApiKey();
@@ -946,42 +948,11 @@ async function generateViaNvidia(
     throw new Error("Aucune cle API NVIDIA NIM n'est configuree.");
   }
 
-  try {
-    thinkingStore.setPhase("ANALYZING_INTENT", {
-      message: "Connexion a NVIDIA NIM...",
-      subMessage: "Routage intelligent vers le meilleur modele",
-    });
-    streamingStore.startStreaming(createMessageId());
-    thinkingStore.setPhase("STREAMING_RESPONSE", { modelName: "smart-default" });
-
-    const messages: ChatMessage[] = [
-      { role: "system", content: DEFAULT_LOCAL_SYSTEM_PROMPT },
-      { role: "user", content: input.prompt },
-    ];
-
-    // Mode Smart : utilise l'alias "smart-default" du backend
-    // (resout vers nemotron-3-super-120b avec fallbacks automatiques)
-    const full = await gatewayStreamToText(
-      {
-        model: "smart-default",
-        messages,
-        api_keys: { nvidia_nim: apiKey },
-        signal: input.signal,
-      },
-      (delta) => streamingStore.addChunk(delta),
-    );
-
-    setTimeout(() => {
-      thinkingStore.reset();
-      streamingStore.completeStreaming();
-    }, 300);
-
-    return full || "Operation terminee, sans message complementaire.";
-  } catch (error) {
-    thinkingStore.reset();
-    streamingStore.completeStreaming();
-    throw error;
-  }
+  // Mode Auto par défaut : on délègue à la fédération multi-agents. L'intent-router
+  // backend analyse la demande et choisit le meilleur modèle par tâche
+  // (généraliste / raisonnement / vision / code PyQGIS), avec fallbacks.
+  // La clé saisie dans la page Paramètres est transmise en override.
+  return generateViaFederation(input, { nvidia_nim: apiKey });
 }
 
 export async function generateAssistantReply(
