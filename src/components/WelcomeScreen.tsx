@@ -510,21 +510,14 @@ export default function WelcomeScreen({
         <div>
           <div>
             <h1
-              className="flex items-center gap-3 bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 bg-[length:200%_auto] bg-clip-text text-3xl font-bold tracking-tight text-transparent md:text-4xl"
+              className="bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 bg-[length:200%_auto] bg-clip-text text-5xl font-extrabold leading-[1.05] tracking-tight text-transparent md:text-6xl lg:text-7xl"
               style={{
                 animation: "gradient-shift 6s ease-in-out infinite",
               }}
             >
-              {/* Etoile verte SVG */}
-              <svg width="36" height="36" viewBox="0 0 64 64" fill="none" className="shrink-0">
-                <path
-                  d="M32 6 L37.5 24.5 H56 L41 35.5 L46.5 53.5 L32 43 L17.5 53.5 L23 35.5 L8 24.5 H26.5 Z"
-                  fill="#22c55e"
-                />
-              </svg>
               QGIS AI+
             </h1>
-            <p className="mt-3 text-[18px] font-semibold tracking-wide text-white/72">
+            <p className="mt-4 text-[19px] font-semibold tracking-wide text-white/72">
               Votre co-pilote géospatial intelligent
             </p>
           </div>
