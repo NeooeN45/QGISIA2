@@ -1107,38 +1107,33 @@ Détail : ${message}`;
               aria-label="Chargement de l'application"
             >
               <motion.div
-                className="flex flex-col items-center gap-6"
+                className="flex flex-col items-center gap-7"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1, duration: 0.4 }}
               >
-                {/* Animated logo */}
-                <motion.div
-                  className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 border border-emerald-500/25"
-                  animate={{ scale: [1, 1.06, 1], opacity: [0.7, 1, 0.7] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <Sparkles size={28} className="text-emerald-400" />
-                </motion.div>
-
-                {/* Spinner dots */}
-                <div className="flex items-center gap-1.5">
-                  {[0, 1, 2].map((i) => (
-                    <motion.div
-                      key={i}
-                      className="h-1.5 w-1.5 rounded-full bg-emerald-500/60"
-                      animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.2, 0.8] }}
-                      transition={{
-                        duration: 1.2,
-                        repeat: Infinity,
-                        delay: i * 0.2,
-                        ease: "easeInOut",
-                      }}
-                    />
-                  ))}
+                {/* Logo + anneau de progression rotatif (net, sans clignotement) */}
+                <div className="relative flex h-16 w-16 items-center justify-center">
+                  <motion.span
+                    className="absolute inset-0 rounded-full border-2 border-transparent border-t-emerald-400 border-r-emerald-400/40"
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/12 border border-emerald-500/20">
+                    <Sparkles size={24} className="text-emerald-400" />
+                  </div>
                 </div>
 
-                <p className="text-xs text-white/25 font-mono tracking-widest uppercase">
+                {/* Barre de progression indéterminée (glisse, ne clignote pas) */}
+                <div className="h-0.5 w-40 overflow-hidden rounded-full bg-white/[0.06]">
+                  <motion.div
+                    className="h-full w-1/3 rounded-full bg-gradient-to-r from-transparent via-emerald-400 to-transparent"
+                    animate={{ x: ["-140%", "440%"] }}
+                    transition={{ duration: 1.3, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                </div>
+
+                <p className="text-xs text-white/30 font-mono tracking-widest uppercase">
                   Initialisation…
                 </p>
               </motion.div>

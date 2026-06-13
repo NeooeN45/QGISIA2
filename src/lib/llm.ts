@@ -982,7 +982,7 @@ async function generateViaNvidia(
   // il répond ET fait. auto_mode + budget d'itérations élevé pour les tâches riches.
   const chosenModel = (settings.nvidiaModel || "").trim();
   if (!chosenModel || chosenModel === NVIDIA_AUTO_MODEL) {
-    return generateViaAgent(input, { autoMode: true, maxIters: 60 });
+    return generateViaAgent(input, { autoMode: true, maxIters: 18 });
   }
 
   // Override explicite : l'utilisateur a forcé un modèle précis dans les Paramètres.

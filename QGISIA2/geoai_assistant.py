@@ -4672,16 +4672,10 @@ class ThreadedAssetServer:
             return True
 
     def _sse_start(self, handler) -> None:
-        """Envoie les headers SSE communs (text/event-stream, no-cache, CORS).
-
-        `Connection: close` est essentiel : sans lui, le keep-alive HTTP fait que
-        le navigateur bufferise toute la reponse et n'affiche les evenements (outils,
-        progression) qu'a la fin. Avec close, chaque flush arrive immediatement.
-        """
+        """Envoie les headers SSE communs (text/event-stream, no-cache, CORS)."""
         handler.send_response(200)
         handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
         handler.send_header("Cache-Control", "no-cache")
-        handler.send_header("Connection", "close")
         _send_cors_headers(handler)
         handler.send_header("X-Accel-Buffering", "no")
         handler.end_headers()
