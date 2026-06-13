@@ -855,7 +855,7 @@ export const DEFAULT_OPENROUTER_STACK_PRESET_ID: OpenRouterStackPreset["id"] = "
 export const DEFAULT_SETTINGS: AppSettings = {
   apiKey: "",
   model: DEFAULT_LOCAL_MODEL,
-  provider: "local",
+  provider: "nvidia",
   localEndpoint: DEFAULT_LOCAL_ENDPOINT,
   localModel: DEFAULT_LOCAL_MODEL,
   googleApiKey: "",
