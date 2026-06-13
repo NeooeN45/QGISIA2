@@ -715,6 +715,20 @@ export async function repairPythonScriptWithProvider(
  * donc 100% additif : le comportement actuel reste inchange tant qu'on ne l'active pas.
  */
 /**
+ * Source de vérité unique pour la clé NVIDIA : la clé saisie dans l'onglet
+ * Provider (settings.nvidiaApiKey) doit fonctionner dans TOUTES les voies
+ * (chat, fédération, agent), pas seulement dans l'onglet Gateway. On la fusionne
+ * donc par-dessus les clés du store gateway (qui peuvent contenir d'autres
+ * providers : openrouter, gemini...).
+ */
+function resolveApiKeys(input: GenerateAssistantReplyInput): ApiKeys {
+  const gwKeys = useGatewayStore.getState().config.apiKeys;
+  const settingsKey =
+    input.settings.nvidiaApiKey?.trim() || getConfiguredNvidiaApiKey();
+  return settingsKey ? { ...gwKeys, nvidia_nim: settingsKey } : gwKeys;
+}
+
+/**
  * Mode "SIG Intelligent" : la federation multi-agents route la requete vers le
  * meilleur agent NVIDIA selon la tache (code / vision / raisonnement...).
  */
@@ -810,7 +824,7 @@ async function generateViaAgent(
     model: gateway.defaultAlias,
     max_iters: 40,
     auto_mode: gateway.autoMode,
-    api_keys: gateway.apiKeys,
+    api_keys: resolveApiKeys(input),
   };
 
   thinkingStore.setPhase("EXECUTING_TOOLS", {
@@ -900,7 +914,7 @@ async function generateViaGateway(
   }
   // Mode SIG Intelligent : on delegue a la federation multi-agents.
   if (gateway.federationMode) {
-    return generateViaFederation(input);
+    return generateViaFederation(input, resolveApiKeys(input));
   }
 
   try {
@@ -920,7 +934,7 @@ async function generateViaGateway(
       {
         model: gateway.defaultAlias,
         messages,
-        api_keys: gateway.apiKeys,
+        api_keys: resolveApiKeys(input),
         signal: input.signal,
       },
       (delta) => streamingStore.addChunk(delta),
